@@ -3,7 +3,6 @@
 Prompt queue and task tracker. Check things off as they're done.
 
 ## Completed
-
 - [x] Fix staircase transitions (underground entrance matches surface exit)
 - [x] Underground grids match surface size (112x112)
 - [x] Fix playableRadius for larger grid
@@ -21,18 +20,15 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Remove scattered trees tile type, use regular forest cover with probability gradient
 
 ## Up Next
-
 - [ ] Re-establish biome layout (tune target map and atmosphere thresholds)
 
 ## Queued
-
 - [ ] Make world size fully configurable (audit all hardcoded positions/distances)
 - [ ] Save system (localStorage, auto-save after every action, version number in save data)
 - [ ] Underground biome leakage mirrors surface (sample surface atmosphere at each coordinate, proportional bleed)
 - [ ] Fix surface stone/cave terrain visual in northeast (should look like rocky ground not dungeon walls)
 
 ## Ideas (not yet scoped)
-
 - [ ] Creature taxonomy (design lineage-based tags, replace or reskin enemy roster)
 - [ ] Stealth visual rework (desaturation instead of dimming, coexists with night tint)
 - [ ] Compass UI for day/night time display
@@ -49,7 +45,6 @@ Prompt queue and task tracker. Check things off as they're done.
 - [ ] Custom domain for GitHub Pages
 
 ## Prompt Reference
-
 Prompts for queued items are in the Claude chat history. For new chats, include:
 - Only the files that touch the system being changed
 - Key utility signatures (worldDims returns array, getFeature returns by reference, etc.)
