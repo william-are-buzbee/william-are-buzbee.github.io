@@ -198,56 +198,25 @@ function showScreen(id) {
 }
 
 // ---- Save-aware title screen ----
-const titleStartEl = document.getElementById('title-start');
-const titleEl      = document.getElementById('title');
-
-// Create a "Continue" button (inserted before the start button)
-const continueEl = document.createElement('div');
-continueEl.className = 'flash';
-continueEl.id = 'title-continue';
-continueEl.textContent = '▶ CONTINUE ◀';
-continueEl.style.marginBottom = '8px';
-continueEl.style.display = 'none';
-titleStartEl.parentNode.insertBefore(continueEl, titleStartEl);
+const titleEl = document.getElementById('title');
 
 function updateTitleButtons() {
-  if (hasSave()) {
-    continueEl.style.display = '';
-    titleStartEl.textContent = '▶ NEW GAME ◀';
-  } else {
-    continueEl.style.display = 'none';
-    titleStartEl.textContent = '▶ CLICK TO BEGIN ◀';
-  }
+  // No dynamic elements to update — title screen is just the name.
+  // Kept as a no-op so callers don't break.
 }
 
-// Continue: resume saved game
-continueEl.addEventListener('click', (ev) => {
-  ev.stopPropagation();
-  if (tryResume()) {
-    titleEl.style.display = 'none';
-    state.gameState = 'play';
-    // Update UI after resuming
-    try { updateUI(); } catch(e) { console.error(e); }
+// Click anywhere on title: resume save if one exists, otherwise new game.
+titleEl.addEventListener('click', () => {
+  if (hasSave()) {
+    if (tryResume()) {
+      titleEl.style.display = 'none';
+      state.gameState = 'play';
+      try { updateUI(); } catch(e) { console.error(e); }
+    } else {
+      deleteSave();
+      openCharGen();
+    }
   } else {
-    // Save was corrupt — fall through to new game
-    deleteSave();
-    updateTitleButtons();
-  }
-});
-
-// New game: ignore save, open char gen
-titleStartEl.addEventListener('click', (ev) => {
-  ev.stopPropagation();
-  deleteSave();
-  openCharGen();
-});
-
-// Clicking title background (not on buttons) does nothing if a save exists;
-// otherwise starts new game.
-titleEl.addEventListener('click', (ev) => {
-  // If clicked directly on the title backdrop (not a child button)
-  if (ev.target === titleEl) {
-    if (hasSave()) return; // Don't auto-start if there's a save to resume
     openCharGen();
   }
 });
