@@ -282,6 +282,29 @@ export function makeSurface(seed){
     }
   }
 
+  // ---- Rock scatter on stone ground ----
+  // Boulders and outcrops break up large stone expanses and add cover variety.
+  // Density is modulated by elevation — higher elevation = denser rock scatter.
+  for (let y = 0; y < H_SURF; y++){
+    for (let x = 0; x < W_SURF; x++){
+      if (grid[y][x] !== T.STONE) continue;
+      if (coverGrid[y][x] !== 0) continue;
+
+      const idx = y * W_SURF + x;
+      const e = fields.elevation[idx];
+
+      // Elevation-scaled probability: base + boost at high elevation
+      const eMul = 0.6 + 0.4 * Math.min(1, (e - 0.55) / 0.35);
+
+      const r = rand();
+      if (r < 0.12 * eMul){
+        coverGrid[y][x] = T.BOULDER;
+      } else if (r < 0.22 * eMul){
+        coverGrid[y][x] = T.ROCK_OUTCROP;
+      }
+    }
+  }
+
   // ---- Beach: adjacency pass (tiles next to water) ----
   for (let y = 0; y < H_SURF; y++){
     for (let x = 0; x < W_SURF; x++){
