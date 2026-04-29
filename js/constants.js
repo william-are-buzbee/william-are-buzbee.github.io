@@ -43,7 +43,7 @@ export const BIOME = {
   plains:    {bg:'#2a3020', fg:'#d4d8b8', mid:'#8a9270', tint:null},
   forest:    {bg:'#1a2618', fg:'#a8c088', mid:'#607848', tint:'#a8c088'},
   desert:    {bg:'#3a2e1a', fg:'#e0c890', mid:'#b09868', tint:'#d8b878'},
-  mountain:  {bg:'#262420', fg:'#c8c0b0', mid:'#807868', tint:'#c8c8d0'},
+  rock:      {bg:'#2a2620', fg:'#c8c0a8', mid:'#807060', tint:'#b0a890'},
   water:     {bg:'#18202e', fg:'#88a0c8', mid:'#485878', tint:null},
   deep:      {bg:'#0a0e18', fg:'#506078', mid:'#283040', tint:null},
   lava:      {bg:'#2a100a', fg:'#e08060', mid:'#a04020', tint:'#d06040'},
@@ -58,12 +58,15 @@ export const BIOME = {
   wheat:     {bg:'#2e2a18', fg:'#d4b860', mid:'#a08830', tint:null},
   wood_floor:{bg:'#1a1410', fg:'#8a6840', mid:'#584028', tint:null},
 
-  // --- New palettes ---
+  // --- New / updated palettes ---
   beach:     {bg:'#3a3422', fg:'#e8d8a0', mid:'#b0a068', tint:'#d0c078'},
   dirt_road: {bg:'#2a2218', fg:'#a08860', mid:'#6e5a3a', tint:null},
   ruin:      {bg:'#1a1818', fg:'#706860', mid:'#484440', tint:'#585050'},
   void:      {bg:'#000000', fg:'#000000', mid:'#000000', tint:null},
-  rock:      {bg:'#0a0a0a', fg:'#1a1a1a', mid:'#101010', tint:null},
+  cave_rock: {bg:'#0a0a0a', fg:'#1a1a1a', mid:'#101010', tint:null},
+  mud:       {bg:'#1a1c12', fg:'#5a6038', mid:'#3a4020', tint:'#4a5028'},
+  fungal_grass:{bg:'#181420', fg:'#7a6898', mid:'#504060', tint:'#685880'},
+  dirt:      {bg:'#28200e', fg:'#a08050', mid:'#6a5430', tint:null},
 };
 
 // ==================== DAMAGE TYPES ====================
@@ -107,23 +110,26 @@ export function resistMult(tags, dmgType){
 // Each cell names the biome that owns that region.  Surface generation reads
 // this directly; no intermediate atmosphere fields are needed.
 // Rows run north (0) → south (15), columns west (0) → east (15).
+//
+// The "mountain" biome has been removed.  All former mountain cells are now
+// "stone", which uses walkable rock ground with boulder/outcrop cover.
 export const BIOME_TARGET = [
-  ['mountain','mountain','forest','forest','forest','forest','forest','forest','forest','forest','stone','forest','stone','plains','forest','stone'],
-  ['mountain','mountain','forest','forest','forest','forest','forest','forest','forest','stone','stone','stone','stone','stone','stone','stone'],
-  ['mountain','mountain','forest','plains','plains','plains','plains','plains','plains','stone','stone','stone','stone','stone','stone','stone'],
-  ['mountain','mountain','plains','forest','plains','plains','plains','plains','plains','plains','plains','stone','stone','stone','water','stone'],
-  ['mountain','mountain','forest','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water'],
-  ['mountain','forest','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water'],
-  ['mountain','mountain','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water'],
-  ['mountain','plains','plains','forest','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water'],
-  ['mountain','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water'],
-  ['mountain','plains','mountain','plains','plains','desert','desert','desert','desert','desert','plains','plains','plains','plains','mushroom','mushroom'],
-  ['mountain','plains','plains','plains','desert','desert','desert','desert','desert','desert','desert','plains','mushroom','mushroom','mushroom','mushroom'],
-  ['mountain','plains','plains','desert','desert','desert','desert','desert','desert','desert','desert','mushroom','mushroom','mushroom','mushroom','mushroom'],
-  ['mountain','plains','desert','desert','desert','desert','desert','desert','desert','desert','mushroom','mushroom','mushroom','mushroom','mushroom','mushroom'],
-  ['mountain','plains','desert','desert','desert','desert','desert','desert','desert','desert','desert','mushroom','mushroom','mushroom','mushroom','mushroom'],
-  ['mountain','plains','desert','desert','desert','desert','desert','desert','desert','desert','desert','mushroom','mushroom','mushroom','plains','mushroom'],
-  ['mountain','mountain','desert','desert','desert','desert','desert','desert','desert','mushroom','desert','desert','mushroom','mushroom','mushroom','mushroom'],
+  ['stone','stone','forest','forest','forest','forest','forest','forest','forest','forest','stone','forest','stone','plains','forest','stone'],
+  ['stone','stone','forest','forest','forest','forest','forest','forest','forest','stone','stone','stone','stone','stone','stone','stone'],
+  ['stone','stone','forest','plains','plains','plains','plains','plains','plains','stone','stone','stone','stone','stone','stone','stone'],
+  ['stone','stone','plains','forest','plains','plains','plains','plains','plains','plains','plains','stone','stone','stone','water','stone'],
+  ['stone','stone','forest','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water'],
+  ['stone','forest','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water'],
+  ['stone','stone','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water'],
+  ['stone','plains','plains','forest','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water'],
+  ['stone','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water'],
+  ['stone','plains','stone','plains','plains','desert','desert','desert','desert','desert','plains','plains','plains','plains','mushroom','mushroom'],
+  ['stone','plains','plains','plains','desert','desert','desert','desert','desert','desert','desert','plains','mushroom','mushroom','mushroom','mushroom'],
+  ['stone','plains','plains','desert','desert','desert','desert','desert','desert','desert','desert','mushroom','mushroom','mushroom','mushroom','mushroom'],
+  ['stone','plains','desert','desert','desert','desert','desert','desert','desert','desert','mushroom','mushroom','mushroom','mushroom','mushroom','mushroom'],
+  ['stone','plains','desert','desert','desert','desert','desert','desert','desert','desert','desert','mushroom','mushroom','mushroom','mushroom','mushroom'],
+  ['stone','plains','desert','desert','desert','desert','desert','desert','desert','desert','desert','mushroom','mushroom','mushroom','plains','mushroom'],
+  ['stone','stone','desert','desert','desert','desert','desert','desert','desert','mushroom','desert','desert','mushroom','mushroom','mushroom','mushroom'],
 ];
 
 // ==================== BIOME PROFILES ====================
@@ -135,19 +141,20 @@ export const BIOME_TARGET = [
 //   covers      — array of { type, chance } objects.  Each is rolled
 //                  independently per tile; first hit wins.
 //   lakeChance  — probability of a coherent water pocket (noise-gated)
-//   deepChance  — for 'water' biome: probability of DEEP instead of WATER
+//   deepChance  — for 'water' biome: probability of DEEP_WATER instead of WATER
 //   palette     — key into the BIOME palette table (for rendering)
 //   derived     — { moisture, elevation, fungal } values written to the
 //                  atmosphere fields so downstream systems can query them.
 //                  These do NOT drive biome selection.
 //
 // Numeric terrain IDs (from terrain.js T.*):
-//   0=PLAINS  1=FOREST  2=DESERT  3=MOUNTAIN  4=WATER  5=DEEP
-//   8=MUSHFOREST  10=STONE  11=CAVE  53=BOULDER  54=ROCK_OUTCROP
+//   0=GRASS  1=FOREST  2=SAND  3=ROCK  4=WATER  5=DEEP_WATER
+//   8=MUSHFOREST  10=CAVE_WALL  11=CAVE_FLOOR  53=BOULDER  54=ROCK_OUTCROP
+//   56=FUNGAL_GRASS
 
 export const BIOME_PROFILES = {
   plains: {
-    ground: 0,
+    ground: 0,                      // T.GRASS
     covers: [
       { type: 1, chance: 0.08 },   // sparse trees
     ],
@@ -165,46 +172,37 @@ export const BIOME_PROFILES = {
     derived: { moisture: 0.58, elevation: 0.38, fungal: 0 },
   },
   desert: {
-    ground: 2,
+    ground: 2,                      // T.SAND
     covers: [],
     lakeChance: 0,
     palette: 'desert',
     derived: { moisture: 0.10, elevation: 0.40, fungal: 0 },
   },
-  mountain: {
-    ground: 3,
-    covers: [
-      { type: 1, chance: 0.12 },   // occasional trees
-    ],
-    lakeChance: 0,
-    palette: 'mountain',
-    derived: { moisture: 0.30, elevation: 0.82, fungal: 0 },
-  },
   stone: {
-    ground: 10,
+    ground: 3,                      // T.ROCK — walkable rocky surface
     covers: [
       { type: 53, chance: 0.10 },  // boulders
       { type: 54, chance: 0.08 },  // rock outcrops
     ],
     lakeChance: 0,
-    palette: 'stone',
+    palette: 'rock',
     derived: { moisture: 0.18, elevation: 0.80, fungal: 0 },
   },
   water: {
-    ground: 4,
-    deepChance: 0.40,               // noise-driven chance of DEEP (5)
+    ground: 4,                      // T.WATER
+    deepChance: 0.40,               // noise-driven chance of DEEP_WATER (5)
     covers: [],
     lakeChance: 0,
     palette: 'water',
     derived: { moisture: 0.90, elevation: 0.15, fungal: 0 },
   },
   mushroom: {
-    ground: 11,                     // cave floor
+    ground: 56,                     // T.FUNGAL_GRASS
     covers: [
       { type: 8, chance: 0.80 },   // mushroom forest
     ],
     lakeChance: 0,
-    palette: 'mushforest',
+    palette: 'fungal_grass',
     derived: { moisture: 0.45, elevation: 0.35, fungal: 0.65 },
   },
 };

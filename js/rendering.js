@@ -49,8 +49,8 @@ function render(){
         ctx.fillRect(px, py, TILE, TILE);
         continue;
       }
-      // ROCK tiles: near-black solid wall
-      if (ground === T.ROCK){
+      // CAVE_ROCK tiles: near-black solid wall
+      if (ground === T.CAVE_ROCK){
         ctx.fillStyle = '#0a0a0a';
         ctx.fillRect(px, py, TILE, TILE);
         const rockHash = ((wx * 7919 + wy * 6271 + 1013) >>> 0) % 256;
@@ -72,14 +72,19 @@ function render(){
       const groundInfo = terrainInfo(ground);
       const rotVariant = tileHash % 4;
 
-      // Stone ground uses variant sprites for tiling variety
+      // Cave wall uses variant sprites for tiling variety
       let groundSpriteName = groundInfo.sprite;
-      if (ground === T.STONE){
-        const stoneVar = ((wx * 3571 + wy * 2909) >>> 0) % 3;
-        groundSpriteName = stoneVar === 1 ? 'STONE_V2' : stoneVar === 2 ? 'STONE_V3' : 'STONE';
+      if (ground === T.CAVE_WALL){
+        const wallVar = ((wx * 3571 + wy * 2909) >>> 0) % 3;
+        groundSpriteName = wallVar === 1 ? 'CAVE_WALL_V2' : wallVar === 2 ? 'CAVE_WALL_V3' : 'CAVE_WALL';
+      }
+      // Rock surface uses variant sprites for tiling variety
+      if (ground === T.ROCK){
+        const rockVar = ((wx * 3571 + wy * 2909) >>> 0) % 3;
+        groundSpriteName = rockVar === 1 ? 'ROCK_V2' : rockVar === 2 ? 'ROCK_V3' : 'ROCK';
       }
 
-      if (!cover && (ground === T.PLAINS || ground === T.DESERT || ground === T.CAVE || ground === T.STONE) && rotVariant > 0){
+      if (!cover && (ground === T.GRASS || ground === T.SAND || ground === T.CAVE_FLOOR || ground === T.CAVE_WALL || ground === T.ROCK) && rotVariant > 0){
         ctx.save();
         ctx.translate(px + TILE/2, py + TILE/2);
         ctx.rotate(rotVariant * Math.PI/2);
@@ -96,18 +101,18 @@ function render(){
         ctx.translate(px, py);
         ctx.scale(S, S);
 
-        if (ground === T.PLAINS && decor < 20){
+        if (ground === T.GRASS && decor < 20){
           ctx.fillStyle = decor < 10 ? '#3a3828' : '#2a3820';
           const dx2 = (decor*3)%24+4, dy2 = (decor*7)%24+4;
           ctx.fillRect(dx2, dy2, 3, 2);
         }
-        if (ground === T.PLAINS && decor >= 20 && decor < 35){
+        if (ground === T.GRASS && decor >= 20 && decor < 35){
           ctx.fillStyle = '#3a4828';
           const dx2 = (decor*5)%20+6;
           ctx.fillRect(dx2, 10, 1, 6);
           ctx.fillRect(dx2+3, 12, 1, 5);
         }
-        if (ground === T.DESERT && decor < 12){
+        if (ground === T.SAND && decor < 12){
           if (decor < 6){
             ctx.fillStyle = '#4a3a20';
             ctx.fillRect((decor*4)%24+4, (decor*7)%24+4, 3, 2);
@@ -119,29 +124,23 @@ function render(){
             ctx.fillRect(cx2+2, 21, 2, 1);
           }
         }
-        if (ground === T.MOUNTAIN && decor < 18){
-          ctx.fillStyle = decor < 9 ? '#3a3838' : '#2a2828';
-          const dx2 = (decor*3)%22+3, dy2 = (decor*7)%20+6;
-          ctx.fillRect(dx2, dy2, 4, 2);
-          ctx.fillRect(dx2+1, dy2+2, 2, 1);
-        }
-        if (ground === T.STONE && decor < 30){
+        if (ground === T.ROCK && decor < 30){
           if (decor < 12){
             // small pebble cluster
-            ctx.fillStyle = decor < 6 ? '#302e2a' : '#28262a';
+            ctx.fillStyle = decor < 6 ? '#3a3630' : '#302e2a';
             const sx = (decor*4)%20+4, sy = (decor*6)%18+6;
             ctx.fillRect(sx, sy, 3, 2);
             ctx.fillRect(sx+1, sy+2, 2, 1);
           } else if (decor < 20){
             // scattered rock chips
-            ctx.fillStyle = '#383632';
+            ctx.fillStyle = '#484438';
             const sx = (decor*3)%18+5, sy = (decor*5)%16+8;
             ctx.fillRect(sx, sy, 2, 1);
             ctx.fillRect(sx+6, sy+3, 2, 1);
             ctx.fillRect(sx+3, sy+7, 1, 1);
           } else {
             // hairline crack across rock surface
-            ctx.fillStyle = 'rgba(10,8,6,0.35)';
+            ctx.fillStyle = 'rgba(20,16,10,0.35)';
             const cy2 = (decor*3)%12+10;
             ctx.fillRect(4, cy2, 7, 1);
             ctx.fillRect(11, cy2-1, 5, 1);
@@ -173,7 +172,7 @@ function render(){
             ctx.fillRect(dwx+1, dwy-1, 1, 1);
           }
         }
-        if (ground === T.CAVE && decor < 10){
+        if (ground === T.CAVE_FLOOR && decor < 10){
           ctx.fillStyle = '#1a1818';
           ctx.fillRect((decor*4)%26+3, (decor*6)%20+6, 2, 3);
         }
@@ -210,6 +209,28 @@ function render(){
           ctx.fillStyle = 'rgba(80,50,20,0.15)';
           const gy = (decor*4)%20+6;
           ctx.fillRect(2, gy, 28, 1);
+        }
+        if (ground === T.FUNGAL_GRASS && decor < 18){
+          if (decor < 9){
+            ctx.fillStyle = '#3a2848';
+            const dx2 = (decor*4)%22+4, dy2 = (decor*6)%18+6;
+            ctx.fillRect(dx2, dy2, 3, 2);
+          } else {
+            ctx.fillStyle = '#504068';
+            const dx2 = (decor*3)%20+6;
+            ctx.fillRect(dx2, 14, 1, 4);
+            ctx.fillRect(dx2+1, 13, 1, 1);
+          }
+        }
+        if (ground === T.MUD && decor < 15){
+          ctx.fillStyle = 'rgba(30,35,15,0.4)';
+          const mx = (decor*4)%20+4, my = (decor*6)%16+8;
+          ctx.fillRect(mx, my, 5, 3);
+        }
+        if (ground === T.DIRT && decor < 15){
+          ctx.fillStyle = decor < 8 ? '#3a2e18' : '#2a2010';
+          const dx2 = (decor*3)%22+4, dy2 = (decor*7)%20+6;
+          ctx.fillRect(dx2, dy2, 3, 2);
         }
 
         ctx.restore();

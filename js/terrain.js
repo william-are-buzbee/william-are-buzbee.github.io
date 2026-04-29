@@ -1,15 +1,15 @@
 // ==================== TERRAIN TYPES ====================
 export const T = {
-  PLAINS:0, FOREST:1, DESERT:2, MOUNTAIN:3, WATER:4, DEEP:5,
+  GRASS:0, FOREST:1, SAND:2, ROCK:3, WATER:4, DEEP_WATER:5,
   ROAD:6, BEACH:7, MUSHFOREST:8,
-  STONE:10, CAVE:11, LAVA:12, UWATER:13,
+  CAVE_WALL:10, CAVE_FLOOR:11, LAVA:12, UWATER:13,
   WHEAT:14, WOOD_FLOOR:15, WALL:16,
   TOWN:20, CASTLE:21, BLACKSPIRE:22,
   STAIRS_DOWN:23, STAIRS_UP:24, SIGN:25, CHEST:26, BOOK:27, GATE:28,
   NPC:29, HOUSE:30, SHOP:31, INN:32, WELL:33, FARM:34,
   THRONE:35,
 
-  // --- New terrain types ---
+  // --- Extended types ---
   DIRT_ROAD:36,        // loose dirt paths between/around settlements
   RUIN_WALL:37,        // crumbled stone wall (non-walkable)
   RUIN_FLOOR:38,       // broken stone floor (walkable)
@@ -26,9 +26,14 @@ export const T = {
   HOUSE_LG:49,         // large (2x2) building on overworld
   RUIN_PILLAR:50,      // decorative ruin column
   VOID:51,             // impassable black void outside cave boundaries
-  ROCK:52,             // solid cave rock wall — impassable, blocks LOS
+  CAVE_ROCK:52,        // dense cave boundary rock — impassable, blocks LOS
   BOULDER:53,          // large rock formation (cover, impassable)
   ROCK_OUTCROP:54,     // smaller rocky protrusion (cover, impassable)
+
+  // --- New surface ground types ---
+  MUD:55,              // swamp/wetland ground
+  FUNGAL_GRASS:56,     // organic ground for the mushroom biome
+  DIRT:57,             // dry, bare earth
 };
 
 // ==================== TERRAIN LAYER CLASSIFICATION ====================
@@ -38,24 +43,27 @@ export const T = {
 
 export const TERRAIN_INFO = {
   // ---- GROUND types ----
-  [T.PLAINS]:    {name:'plains',        sprite:'GRASS',    palette:'plains',   walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.DESERT]:    {name:'desert',        sprite:'DESERT',   palette:'desert',   walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.WATER]:     {name:'water',         sprite:'WATER',    palette:'water',    walk:false, cover:0,   terrainLayer:'ground'},
-  [T.DEEP]:      {name:'deep water',    sprite:'DEEP',     palette:'deep',     walk:false, cover:0,   terrainLayer:'ground'},
-  [T.ROAD]:      {name:'road',          sprite:'ROAD',     palette:'road',     walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.BEACH]:     {name:'beach',         sprite:'BEACH',    palette:'beach',    walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.STONE]:     {name:'stone',         sprite:'STONE',    palette:'stone',    walk:false, cover:0,   terrainLayer:'ground'},
-  [T.CAVE]:      {name:'cave',          sprite:'CAVE',     palette:'cave',     walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.LAVA]:      {name:'lava',          sprite:'LAVA',     palette:'lava',     walk:false, cover:0,   terrainLayer:'ground'},
-  [T.UWATER]:    {name:'dark water',    sprite:'DEEP',     palette:'uwater',   walk:false, cover:0,   terrainLayer:'ground'},
-  [T.WOOD_FLOOR]:{name:'wood floor',    sprite:'WOOD_FLOOR',palette:'wood_floor',walk:true,cover:0,   terrainLayer:'ground'},
-  [T.WALL]:      {name:'wall',          sprite:'STONE',    palette:'stone',    walk:false, cover:0,   terrainLayer:'ground'},
-  [T.DIRT_ROAD]: {name:'dirt path',     sprite:'DIRT_ROAD',palette:'dirt_road',walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.RUIN_FLOOR]:{name:'ancient floor', sprite:'RUIN_FLOOR',palette:'ruin',   walk:true,  cover:10,  terrainLayer:'ground'},
-  [T.SHOP_INSIDE]:{name:'shop floor',   sprite:'SHOP_FLOOR',palette:'wood_floor',walk:true,cover:0,  terrainLayer:'ground'},
-  [T.VOID]:      {name:'void',          sprite:'VOID',     palette:'void',    walk:false, cover:0,   terrainLayer:'ground', transparent:false},
-  [T.ROCK]:      {name:'rock',          sprite:'ROCK',     palette:'rock',    walk:false, cover:0,   terrainLayer:'ground', transparent:false},
-  [T.MOUNTAIN]:  {name:'mountains',     sprite:'MOUNTAIN', palette:'mountain', walk:true,  cover:30,  terrainLayer:'ground'},
+  [T.GRASS]:     {name:'grass',         sprite:'GRASS',      palette:'plains',     walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.SAND]:      {name:'sand',          sprite:'SAND',       palette:'desert',     walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.ROCK]:      {name:'rock',          sprite:'ROCK',       palette:'rock',       walk:true,  cover:10,  terrainLayer:'ground'},
+  [T.WATER]:     {name:'water',         sprite:'WATER',      palette:'water',      walk:false, cover:0,   terrainLayer:'ground'},
+  [T.DEEP_WATER]:{name:'deep water',    sprite:'DEEP_WATER', palette:'deep',       walk:false, cover:0,   terrainLayer:'ground'},
+  [T.ROAD]:      {name:'road',          sprite:'ROAD',       palette:'road',       walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.BEACH]:     {name:'beach',         sprite:'BEACH',      palette:'beach',      walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.CAVE_WALL]: {name:'cave wall',     sprite:'CAVE_WALL',  palette:'stone',      walk:false, cover:0,   terrainLayer:'ground'},
+  [T.CAVE_FLOOR]:{name:'cave floor',    sprite:'CAVE_FLOOR', palette:'cave',       walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.LAVA]:      {name:'lava',          sprite:'LAVA',       palette:'lava',       walk:false, cover:0,   terrainLayer:'ground'},
+  [T.UWATER]:    {name:'dark water',    sprite:'DEEP_WATER', palette:'uwater',     walk:false, cover:0,   terrainLayer:'ground'},
+  [T.WOOD_FLOOR]:{name:'wood floor',    sprite:'WOOD_FLOOR', palette:'wood_floor', walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.WALL]:      {name:'wall',          sprite:'CAVE_WALL',  palette:'stone',      walk:false, cover:0,   terrainLayer:'ground'},
+  [T.DIRT_ROAD]: {name:'dirt path',     sprite:'DIRT_ROAD',  palette:'dirt_road',  walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.RUIN_FLOOR]:{name:'ancient floor', sprite:'RUIN_FLOOR', palette:'ruin',       walk:true,  cover:10,  terrainLayer:'ground'},
+  [T.SHOP_INSIDE]:{name:'shop floor',   sprite:'SHOP_FLOOR', palette:'wood_floor', walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.VOID]:      {name:'void',          sprite:'VOID',       palette:'void',       walk:false, cover:0,   terrainLayer:'ground', transparent:false},
+  [T.CAVE_ROCK]: {name:'cave rock',     sprite:'CAVE_ROCK',  palette:'cave_rock',  walk:false, cover:0,   terrainLayer:'ground', transparent:false},
+  [T.MUD]:       {name:'mud',           sprite:'MUD',        palette:'mud',        walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.FUNGAL_GRASS]:{name:'fungal grass',sprite:'FUNGAL_GRASS',palette:'fungal_grass',walk:true,cover:0,   terrainLayer:'ground'},
+  [T.DIRT]:      {name:'dirt',          sprite:'DIRT',       palette:'dirt',       walk:true,  cover:0,   terrainLayer:'ground'},
 
   // ---- COVER types ----
   [T.FOREST]:    {name:'forest',        sprite:'FOREST',   palette:'forest',   walk:true,  cover:45,  terrainLayer:'cover', overlay:true},
@@ -94,7 +102,7 @@ export const TERRAIN_INFO = {
 };
 
 // ==================== SINGLE-TYPE QUERIES ====================
-export function terrainInfo(t){ return TERRAIN_INFO[t] || TERRAIN_INFO[T.PLAINS]; }
+export function terrainInfo(t){ return TERRAIN_INFO[t] || TERRAIN_INFO[T.GRASS]; }
 export function isOverlay(t){ return !!terrainInfo(t).overlay; }
 export function noRotate(t){ return !!terrainInfo(t).noRotate; }
 export function isGround(t){ return terrainInfo(t).terrainLayer === 'ground'; }
@@ -143,44 +151,44 @@ export function isTransparent(ground, coverType){
 
 // ==================== DEFAULT GROUND FOR COVER TYPES ====================
 // When legacy code placed e.g. T.FOREST as a single tile, it was
-// implicitly "plains ground + forest cover". This map defines what
+// implicitly "grass ground + forest cover". This map defines what
 // ground each cover type gets by default.
 const DEFAULT_GROUND_FOR_COVER = {
-  [T.FOREST]:     T.PLAINS,
-  [T.MUSHFOREST]:  T.CAVE,
-  [T.WHEAT]:       T.PLAINS,
-  [T.TOWN]:        T.PLAINS,
-  [T.CASTLE]:      T.PLAINS,
-  [T.BLACKSPIRE]:  T.PLAINS,
-  [T.STAIRS_DOWN]: T.STONE,
-  [T.STAIRS_UP]:   T.STONE,
-  [T.SIGN]:        T.PLAINS,
-  [T.CHEST]:       T.PLAINS,
-  [T.BOOK]:        T.PLAINS,
-  [T.GATE]:        T.PLAINS,
-  [T.NPC]:         T.PLAINS,
-  [T.HOUSE]:       T.PLAINS,
-  [T.SHOP]:        T.PLAINS,
-  [T.INN]:         T.PLAINS,
-  [T.WELL]:        T.PLAINS,
-  [T.FARM]:        T.PLAINS,
-  [T.THRONE]:      T.CAVE,
+  [T.FOREST]:     T.GRASS,
+  [T.MUSHFOREST]:  T.FUNGAL_GRASS,
+  [T.WHEAT]:       T.GRASS,
+  [T.TOWN]:        T.GRASS,
+  [T.CASTLE]:      T.GRASS,
+  [T.BLACKSPIRE]:  T.GRASS,
+  [T.STAIRS_DOWN]: T.CAVE_WALL,
+  [T.STAIRS_UP]:   T.CAVE_WALL,
+  [T.SIGN]:        T.GRASS,
+  [T.CHEST]:       T.GRASS,
+  [T.BOOK]:        T.GRASS,
+  [T.GATE]:        T.GRASS,
+  [T.NPC]:         T.GRASS,
+  [T.HOUSE]:       T.GRASS,
+  [T.SHOP]:        T.GRASS,
+  [T.INN]:         T.GRASS,
+  [T.WELL]:        T.GRASS,
+  [T.FARM]:        T.GRASS,
+  [T.THRONE]:      T.CAVE_FLOOR,
   [T.RUIN_WALL]:   T.RUIN_FLOOR,
-  [T.WELL_TL]:     T.PLAINS,
-  [T.WELL_TR]:     T.PLAINS,
-  [T.WELL_BL]:     T.PLAINS,
-  [T.WELL_BR]:     T.PLAINS,
-  [T.BARREL]:      T.PLAINS,
-  [T.CRATE]:       T.PLAINS,
-  [T.LAMP_POST]:   T.PLAINS,
+  [T.WELL_TL]:     T.GRASS,
+  [T.WELL_TR]:     T.GRASS,
+  [T.WELL_BL]:     T.GRASS,
+  [T.WELL_BR]:     T.GRASS,
+  [T.BARREL]:      T.GRASS,
+  [T.CRATE]:       T.GRASS,
+  [T.LAMP_POST]:   T.GRASS,
   [T.SHOPKEEPER]:  T.SHOP_INSIDE,
-  [T.FOUNTAIN]:    T.PLAINS,
-  [T.HOUSE_LG]:    T.PLAINS,
-  [T.RUIN_PILLAR]: T.PLAINS,
-  [T.BOULDER]:     T.STONE,
-  [T.ROCK_OUTCROP]:T.STONE,
+  [T.FOUNTAIN]:    T.GRASS,
+  [T.HOUSE_LG]:    T.GRASS,
+  [T.RUIN_PILLAR]: T.GRASS,
+  [T.BOULDER]:     T.ROCK,
+  [T.ROCK_OUTCROP]:T.ROCK,
 };
 
 export function defaultGroundFor(coverType){
-  return DEFAULT_GROUND_FOR_COVER[coverType] || T.PLAINS;
+  return DEFAULT_GROUND_FOR_COVER[coverType] || T.GRASS;
 }

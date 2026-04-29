@@ -161,7 +161,7 @@ export function makeSurface(seed) {
   const grid = [];
   for (let y = 0; y < H_SURF; y++) {
     const row = [];
-    for (let x = 0; x < W_SURF; x++) row.push(T.PLAINS);
+    for (let x = 0; x < W_SURF; x++) row.push(T.GRASS);
     grid.push(row);
   }
   const coverGrid = ensureCoverGrid(LAYER_SURFACE, W_SURF, H_SURF);
@@ -198,7 +198,7 @@ export function makeSurface(seed) {
       if (winner === 'water') {
         const dn = (fbm(depthNoise, x, y, DEPTH_CFG) + 1) * 0.5;
         if (dn > (1.0 - (profile.deepChance || 0))) {
-          groundType = 5; // T.DEEP
+          groundType = T.DEEP_WATER;
         }
       }
 
@@ -260,12 +260,12 @@ export function makeSurface(seed) {
   // ---- Beach adjacency pass (tiles next to water) ----
   for (let y = 0; y < H_SURF; y++) {
     for (let x = 0; x < W_SURF; x++) {
-      if (grid[y][x] !== T.PLAINS && grid[y][x] !== T.DESERT) continue;
+      if (grid[y][x] !== T.GRASS && grid[y][x] !== T.SAND) continue;
       if (coverGrid[y][x]) continue;
       for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
         const nx = x + dx, ny = y + dy;
         if (nx < 0 || ny < 0 || nx >= W_SURF || ny >= H_SURF) continue;
-        if (grid[ny][nx] === T.WATER || grid[ny][nx] === T.DEEP) {
+        if (grid[ny][nx] === T.WATER || grid[ny][nx] === T.DEEP_WATER) {
           grid[y][x] = T.BEACH;
           coverGrid[y][x] = 0;
           break;
@@ -296,7 +296,7 @@ export function makeSurface(seed) {
       label: 'A staircase descends into the mushroom-choked dark.',
     });
   }
-  // NW staircase (mountain zone)
+  // NW staircase (stone zone)
   {
     const nwX = Math.floor(W_SURF * 0.18);
     const nwY = Math.floor(H_SURF * 0.15);
@@ -352,7 +352,7 @@ function dirtPathBetween(grid, x1, y1, x2, y2) {
     if (x >= 0 && y >= 0 && x < W_SURF && y < H_SURF) {
       const t = grid[y][x];
       const c = coverGrid ? coverGrid[y][x] : 0;
-      if ((t === T.PLAINS || t === T.DESERT || t === T.BEACH) && !c) {
+      if ((t === T.GRASS || t === T.SAND || t === T.BEACH) && !c) {
         if (rand() < 0.72) grid[y][x] = T.DIRT_ROAD;
       }
     }
@@ -382,7 +382,7 @@ function dirtRing(grid, cx, cy, radius) {
       if (x < 0 || y < 0 || x >= W_SURF || y >= H_SURF) continue;
       const t = grid[y][x];
       const c = coverGrid ? coverGrid[y][x] : 0;
-      if ((t === T.PLAINS || t === T.DESERT || t === T.BEACH) && !c && rand() < 0.6) {
+      if ((t === T.GRASS || t === T.SAND || t === T.BEACH) && !c && rand() < 0.6) {
         grid[y][x] = T.DIRT_ROAD;
       }
     }

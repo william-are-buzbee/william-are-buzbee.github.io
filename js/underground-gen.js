@@ -40,7 +40,7 @@ function enforceVoidBoundary(grid, w, h, pockets) {
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (!insideAnyPocket(x, y, pockets)) {
-        if (grid[y][x] === T.STONE) {
+        if (grid[y][x] === T.CAVE_WALL) {
           grid[y][x] = T.VOID;
         }
       }
@@ -48,14 +48,14 @@ function enforceVoidBoundary(grid, w, h, pockets) {
   }
   for (let y = 1; y < h - 1; y++) {
     for (let x = 1; x < w - 1; x++) {
-      if (grid[y][x] !== T.STONE) continue;
+      if (grid[y][x] !== T.CAVE_WALL) continue;
       if (insideAnyPocket(x, y, pockets)) continue;
       let bordersCarved = false;
       for (let dy = -1; dy <= 1 && !bordersCarved; dy++) {
         for (let dx = -1; dx <= 1 && !bordersCarved; dx++) {
           if (dx === 0 && dy === 0) continue;
           const t = grid[y + dy][x + dx];
-          if (t !== T.VOID && t !== T.STONE) bordersCarved = true;
+          if (t !== T.VOID && t !== T.CAVE_WALL) bordersCarved = true;
         }
       }
       if (!bordersCarved) grid[y][x] = T.VOID;
@@ -103,13 +103,13 @@ function findCaveNear(grid, tx, ty, w, h, cx, cy, radius){
         const x = tx + dx, y = ty + dy;
         if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1) continue;
         if (!insideBoundary(x, y, cx, cy, radius)) continue;
-        if (grid[y][x] === T.CAVE) return { x, y };
+        if (grid[y][x] === T.CAVE_FLOOR) return { x, y };
       }
     }
   }
   const fx = Math.max(1, Math.min(w - 2, tx));
   const fy = Math.max(1, Math.min(h - 2, ty));
-  grid[fy][fx] = T.CAVE;
+  grid[fy][fx] = T.CAVE_FLOOR;
   return { x: fx, y: fy };
 }
 
@@ -121,7 +121,7 @@ function carveBoundedPath(grid, w, h, x1, y1, x2, y2, cx, cy, radius){
   while ((x !== x2 || y !== y2) && steps < maxSteps){
     steps++;
     if (x >= 1 && y >= 1 && x < w - 1 && y < h - 1){
-      if (grid[y][x] === T.STONE) grid[y][x] = T.CAVE;
+      if (grid[y][x] === T.CAVE_WALL) grid[y][x] = T.CAVE_FLOOR;
     }
     if (rand() < 0.15){
       const perp = rand() < 0.5 ? 1 : -1;
@@ -142,7 +142,7 @@ function carveBoundedPath(grid, w, h, x1, y1, x2, y2, cx, cy, radius){
     }
   }
   if (x2 >= 1 && y2 >= 1 && x2 < w - 1 && y2 < h - 1){
-    if (grid[y2][x2] === T.STONE) grid[y2][x2] = T.CAVE;
+    if (grid[y2][x2] === T.CAVE_WALL) grid[y2][x2] = T.CAVE_FLOOR;
   }
 }
 
@@ -153,7 +153,7 @@ function carveBoundedPathMulti(grid, w, h, x1, y1, x2, y2, pockets){
   while ((x !== x2 || y !== y2) && steps < maxSteps){
     steps++;
     if (x >= 1 && y >= 1 && x < w - 1 && y < h - 1){
-      if (grid[y][x] === T.STONE) grid[y][x] = T.CAVE;
+      if (grid[y][x] === T.CAVE_WALL) grid[y][x] = T.CAVE_FLOOR;
     }
     if (rand() < 0.15){
       const perp = rand() < 0.5 ? 1 : -1;
@@ -170,7 +170,7 @@ function carveBoundedPathMulti(grid, w, h, x1, y1, x2, y2, pockets){
     y = Math.max(1, Math.min(h - 2, y));
   }
   if (x2 >= 1 && y2 >= 1 && x2 < w - 1 && y2 < h - 1){
-    if (grid[y2][x2] === T.STONE) grid[y2][x2] = T.CAVE;
+    if (grid[y2][x2] === T.CAVE_WALL) grid[y2][x2] = T.CAVE_FLOOR;
   }
 }
 
@@ -209,13 +209,13 @@ function carveNarrowCorridor(grid, w, h, x1, y1, x2, y2) {
   while ((x !== x2 || y !== y2) && steps < maxSteps) {
     steps++;
     if (x >= 1 && y >= 1 && x < w - 1 && y < h - 1) {
-      if (grid[y][x] === T.STONE) grid[y][x] = T.CAVE;
+      if (grid[y][x] === T.CAVE_WALL) grid[y][x] = T.CAVE_FLOOR;
       if (rand() < 0.3) {
         const sx = rand() < 0.5 ? 1 : -1;
         const sy = rand() < 0.5 ? 1 : -1;
         const nx = x + sx, ny = y + sy;
         if (nx >= 1 && ny >= 1 && nx < w - 1 && ny < h - 1) {
-          if (grid[ny][nx] === T.STONE) grid[ny][nx] = T.CAVE;
+          if (grid[ny][nx] === T.CAVE_WALL) grid[ny][nx] = T.CAVE_FLOOR;
         }
       }
     }
@@ -242,7 +242,7 @@ function applyBiomeLeakageMulti(grid, coverGrid, w, h, pockets){
 
   for (let y = 1; y < h - 1; y++){
     for (let x = 1; x < w - 1; x++){
-      if (grid[y][x] !== T.CAVE) continue;
+      if (grid[y][x] !== T.CAVE_FLOOR) continue;
       if (!insideAnyPocket(x, y, pockets)) continue;
 
       // Sample atmosphere at this coordinate (surface position maps directly)
@@ -264,11 +264,11 @@ function applyBiomeLeakageMulti(grid, coverGrid, w, h, pockets){
       if (rand() >= prob) continue;
 
       if (isFungal && atmo.fungal >= (1 - atmo.moisture) && atmo.fungal >= atmo.moisture){
-        // Mushroom leakage: cave ground + mushroom cover
-        grid[y][x] = T.CAVE;
+        // Mushroom leakage: cave floor ground + mushroom cover
+        grid[y][x] = T.CAVE_FLOOR;
         coverGrid[y][x] = T.MUSHFOREST;
       } else if (isDry && (1 - atmo.moisture) >= atmo.moisture){
-        grid[y][x] = T.DESERT;
+        grid[y][x] = T.SAND;
       } else if (isWet){
         grid[y][x] = T.UWATER;
       }
@@ -289,7 +289,7 @@ export function makeUnderground(seed, layerIndex, pockets, sourceStairs){
   const grid = [];
   for (let y = 0; y < h; y++){
     const row = [];
-    for (let x = 0; x < w; x++) row.push(T.STONE);
+    for (let x = 0; x < w; x++) row.push(T.CAVE_WALL);
     grid.push(row);
   }
 
@@ -338,9 +338,9 @@ export function makeUnderground(seed, layerIndex, pockets, sourceStairs){
   }
 
   for (const ep of entrancePositions) {
-    grid[ep.y][ep.x] = T.CAVE;
+    grid[ep.y][ep.x] = T.CAVE_FLOOR;
   }
-  grid[exitPos.y][exitPos.x] = T.CAVE;
+  grid[exitPos.y][exitPos.x] = T.CAVE_FLOOR;
 
   const totalPocketArea = pockets.reduce((sum, p) => sum + Math.PI * p.radius * p.radius, 0);
   const totalBudget = Math.floor(totalPocketArea * 0.45);
@@ -360,8 +360,8 @@ export function makeUnderground(seed, layerIndex, pockets, sourceStairs){
       for (let step = 0; step < walkerBudget && carved < totalBudget; step++) {
         if (wx >= 1 && wy >= 1 && wx < w - 1 && wy < h - 1 &&
             insidePocket(wx, wy, pocket)) {
-          if (grid[wy][wx] === T.STONE) {
-            grid[wy][wx] = T.CAVE;
+          if (grid[wy][wx] === T.CAVE_WALL) {
+            grid[wy][wx] = T.CAVE_FLOOR;
             carved++;
           }
         }
@@ -395,11 +395,11 @@ export function makeUnderground(seed, layerIndex, pockets, sourceStairs){
         for (let dy = -1; dy <= 1; dy++){
           for (let dx = -1; dx <= 1; dx++){
             if (dx === 0 && dy === 0) continue;
-            if (copy[y + dy][x + dx] === T.STONE) walls++;
+            if (copy[y + dy][x + dx] === T.CAVE_WALL) walls++;
           }
         }
-        if (copy[y][x] === T.STONE && walls <= 3) grid[y][x] = T.CAVE;
-        if (copy[y][x] === T.CAVE && walls >= 6) grid[y][x] = T.STONE;
+        if (copy[y][x] === T.CAVE_WALL && walls <= 3) grid[y][x] = T.CAVE_FLOOR;
+        if (copy[y][x] === T.CAVE_FLOOR && walls >= 6) grid[y][x] = T.CAVE_WALL;
       }
     }
   }
@@ -409,7 +409,7 @@ export function makeUnderground(seed, layerIndex, pockets, sourceStairs){
   // Place staircase cover + features
   for (let pi = 0; pi < pockets.length; pi++) {
     const ep = entrancePositions[pi];
-    grid[ep.y][ep.x] = T.CAVE;     // ground stays cave
+    grid[ep.y][ep.x] = T.CAVE_FLOOR;     // ground stays cave floor
     coverGrid[ep.y][ep.x] = T.STAIRS_UP;  // stairs as cover
 
     const src = sourceStairs[pi];
@@ -424,7 +424,7 @@ export function makeUnderground(seed, layerIndex, pockets, sourceStairs){
     });
   }
 
-  grid[exitPos.y][exitPos.x] = T.CAVE;
+  grid[exitPos.y][exitPos.x] = T.CAVE_FLOOR;
   coverGrid[exitPos.y][exitPos.x] = T.STAIRS_DOWN;
   setFeature(li, exitPos.x, exitPos.y, {
     type: 'stairs', dir: 'down',
@@ -454,7 +454,7 @@ export function makeLavaLayer(seed, layerIndex, pockets, sourceStairs){
   const grid = [];
   for (let y = 0; y < h; y++){
     const row = [];
-    for (let x = 0; x < w; x++) row.push(T.STONE);
+    for (let x = 0; x < w; x++) row.push(T.CAVE_WALL);
     grid.push(row);
   }
 
@@ -501,8 +501,8 @@ export function makeLavaLayer(seed, layerIndex, pockets, sourceStairs){
     };
   }
 
-  for (const ep of entrancePositions) grid[ep.y][ep.x] = T.CAVE;
-  grid[exitPos.y][exitPos.x] = T.CAVE;
+  for (const ep of entrancePositions) grid[ep.y][ep.x] = T.CAVE_FLOOR;
+  grid[exitPos.y][exitPos.x] = T.CAVE_FLOOR;
 
   const totalPocketArea = pockets.reduce((sum, p) => sum + Math.PI * p.radius * p.radius, 0);
   const totalBudget = Math.floor(totalPocketArea * 0.38);
@@ -522,8 +522,8 @@ export function makeLavaLayer(seed, layerIndex, pockets, sourceStairs){
       for (let step = 0; step < walkerBudget && carved < totalBudget; step++) {
         if (wx >= 1 && wy >= 1 && wx < w - 1 && wy < h - 1 &&
             insidePocket(wx, wy, pocket)) {
-          if (grid[wy][wx] === T.STONE) {
-            grid[wy][wx] = T.CAVE;
+          if (grid[wy][wx] === T.CAVE_WALL) {
+            grid[wy][wx] = T.CAVE_FLOOR;
             carved++;
           }
         }
@@ -554,10 +554,10 @@ export function makeLavaLayer(seed, layerIndex, pockets, sourceStairs){
         for (let dy = -1; dy <= 1; dy++)
           for (let dx = -1; dx <= 1; dx++){
             if (dx === 0 && dy === 0) continue;
-            if (copy[y + dy][x + dx] === T.STONE) walls++;
+            if (copy[y + dy][x + dx] === T.CAVE_WALL) walls++;
           }
-        if (copy[y][x] === T.STONE && walls <= 3) grid[y][x] = T.CAVE;
-        if (copy[y][x] === T.CAVE && walls >= 6) grid[y][x] = T.STONE;
+        if (copy[y][x] === T.CAVE_WALL && walls <= 3) grid[y][x] = T.CAVE_FLOOR;
+        if (copy[y][x] === T.CAVE_FLOOR && walls >= 6) grid[y][x] = T.CAVE_WALL;
       }
     }
   }
@@ -579,7 +579,7 @@ export function makeLavaLayer(seed, layerIndex, pockets, sourceStairs){
           if (px < 1 || py < 1 || px >= w - 1 || py >= h - 1) continue;
           if (!insideAnyPocket(px, py, pockets)) continue;
           if (protectedSet.has(px + ',' + py)) continue;
-          if (grid[py][px] === T.CAVE && rand() < 0.85) grid[py][px] = T.LAVA;
+          if (grid[py][px] === T.CAVE_FLOOR && rand() < 0.85) grid[py][px] = T.LAVA;
         }
       }
     }
@@ -588,7 +588,7 @@ export function makeLavaLayer(seed, layerIndex, pockets, sourceStairs){
   // Staircases as cover
   for (let pi = 0; pi < pockets.length; pi++) {
     const ep = entrancePositions[pi];
-    grid[ep.y][ep.x] = T.CAVE;
+    grid[ep.y][ep.x] = T.CAVE_FLOOR;
     coverGrid[ep.y][ep.x] = T.STAIRS_UP;
 
     const src = sourceStairs[pi];
@@ -603,7 +603,7 @@ export function makeLavaLayer(seed, layerIndex, pockets, sourceStairs){
     });
   }
 
-  grid[exitPos.y][exitPos.x] = T.CAVE;
+  grid[exitPos.y][exitPos.x] = T.CAVE_FLOOR;
   coverGrid[exitPos.y][exitPos.x] = T.STAIRS_DOWN;
   setFeature(layerIndex, exitPos.x, exitPos.y, {
     type: 'stairs', dir: 'down',
@@ -635,7 +635,7 @@ export function carveBetween(grid, w, h, x1, y1, x2, y2){
   let x=x1, y=y1;
   while (x !== x2 || y !== y2){
     if (x>=0&&y>=0&&x<w&&y<h){
-      if (grid[y][x] !== T.LAVA && grid[y][x] !== T.UWATER) grid[y][x] = T.CAVE;
+      if (grid[y][x] !== T.LAVA && grid[y][x] !== T.UWATER) grid[y][x] = T.CAVE_FLOOR;
     }
     if (x<x2) x++; else if (x>x2) x--;
     if (rand()<0.5) continue;
