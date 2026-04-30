@@ -203,6 +203,13 @@ export const BIOME_PROFILES = {
     palette: 'fungal_grass',
     derived: { moisture: 0.45, elevation: 0.35, fungal: 0.65 },
   },
+  mud: {
+    ground: 0,                      // T.GRASS (palette tints it; add T.MUD later)
+    covers: [],
+    lakeChance: 0.02,
+    palette: 'mud',
+    derived: { moisture: 0.70, elevation: 0.25, fungal: 0 },
+  },
 };
 
 // ==================== BLEND TUNING ====================
