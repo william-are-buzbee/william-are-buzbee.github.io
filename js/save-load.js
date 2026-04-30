@@ -57,10 +57,11 @@ function deserializePlayer(raw) {
 /**
  * Serialize all monsters across all layers.
  * Handles bondPartner circular refs by replacing with an index-based ID.
+ * monsters is an Object keyed by layerIndex.
  */
 function serializeMonsters(allLayers) {
-  const result = [];
-  for (let li = 0; li < allLayers.length; li++) {
+  const result = {};
+  for (const li of Object.keys(allLayers)) {
     const layer = allLayers[li] || [];
     const serialized = [];
     for (let mi = 0; mi < layer.length; mi++) {
@@ -69,7 +70,6 @@ function serializeMonsters(allLayers) {
       const out = { ...mon };
       // bondPartner → store as { layer, index } or null
       if (mon.bondPartner && mon.bondPartner !== mon) {
-        // Find the partner in the same layer
         const partnerIdx = layer.indexOf(mon.bondPartner);
         if (partnerIdx >= 0) {
           out._bondRef = { layer: li, index: partnerIdx };
@@ -82,33 +82,36 @@ function serializeMonsters(allLayers) {
       delete out.bondPartner;
       serialized.push(out);
     }
-    result.push(serialized);
+    result[li] = serialized;
   }
   return result;
 }
 
 /** Deserialize monsters and reconnect bondPartner references. */
 function deserializeMonsters(allLayers) {
-  const result = [];
-  for (const layer of allLayers) {
-    result.push(layer ? layer.map(m => (m ? { ...m } : null)).filter(Boolean) : []);
+  const result = {};
+  for (const li of Object.keys(allLayers)) {
+    const layer = allLayers[li];
+    result[li] = layer ? layer.map(m => (m ? { ...m } : null)).filter(Boolean) : [];
   }
   // Second pass: reconnect bond partners
-  for (const layer of allLayers) {
+  for (const li of Object.keys(allLayers)) {
+    const layer = allLayers[li];
     if (!layer) continue;
     for (let mi = 0; mi < layer.length; mi++) {
       const raw = layer[mi];
       if (!raw || !raw._bondRef) continue;
       const ref = raw._bondRef;
       if (result[ref.layer] && result[ref.layer][ref.index]) {
-        result[ref.layer][mi] = result[ref.layer][mi] || {};
-        result[ref.layer][mi].bondPartner = result[ref.layer][ref.index];
+        if (result[li][mi]) {
+          result[li][mi].bondPartner = result[ref.layer][ref.index];
+        }
       }
     }
   }
   // Clean up _bondRef markers
-  for (const layer of result) {
-    for (const mon of layer) {
+  for (const li of Object.keys(result)) {
+    for (const mon of result[li]) {
       if (mon) {
         delete mon._bondRef;
         if (!mon.bondPartner) mon.bondPartner = null;
@@ -119,19 +122,16 @@ function deserializeMonsters(allLayers) {
 }
 
 /**
- * Serialize features. Features can contain various object shapes depending
- * on the feature type (stairs, chests, NPCs, signs, etc.).
- * Most are plain data; we do a deep clone to strip any non-serializable refs.
+ * Serialize features. Features is an Object keyed by layerIndex,
+ * each value is an Object keyed by "x,y".
  */
 function serializeFeatures(allFeatures) {
-  if (!allFeatures) return [];
+  if (!allFeatures) return {};
   try {
-    // Features are typically arrays of plain objects per layer.
-    // Do a structured clone via JSON round-trip to catch issues.
     return JSON.parse(JSON.stringify(allFeatures));
   } catch (e) {
     console.warn('[Save] Features serialization warning:', e);
-    return [];
+    return {};
   }
 }
 
@@ -140,6 +140,17 @@ function serializeFeatures(allFeatures) {
 export function saveGame() {
   try {
     if (state.gameState !== 'play') return; // Only save during active play
+
+    // Serialize worlds and covers as Objects keyed by layerIndex
+    const serializedWorlds = {};
+    for (const li of Object.keys(worlds)) {
+      serializedWorlds[li] = worlds[li] || null;
+    }
+
+    const serializedCovers = {};
+    for (const li of Object.keys(covers)) {
+      serializedCovers[li] = covers[li] || null;
+    }
 
     const saveData = {
       version: SAVE_VERSION,
@@ -154,18 +165,17 @@ export function saveGame() {
         activeLayer: state.activeLayer,
         gameState: state.gameState,
         worldSeed: state.worldSeed,
-        // Preserve any other state fields that exist
         cgAttrs: state.cgAttrs,
       },
 
-      // World grids — 2D arrays of terrain IDs
-      worlds: worlds.map(layer => layer || null),
-      covers: covers.map(layer => layer || null),
+      // World grids — Object keyed by layerIndex, values are 2D arrays
+      worlds: serializedWorlds,
+      covers: serializedCovers,
 
-      // All monsters per layer
+      // All monsters per layer — Object keyed by layerIndex
       monsters: serializeMonsters(monsters),
 
-      // Features per layer
+      // Features per layer — Object keyed by layerIndex
       features: serializeFeatures(features),
 
       // Layer metadata registry
@@ -179,7 +189,6 @@ export function saveGame() {
     localStorage.setItem(SAVE_KEY, json);
   } catch (err) {
     console.error('[Save] Failed to save game:', err);
-    // Don't crash the game over a save failure
   }
 }
 
@@ -238,49 +247,46 @@ export function loadGame() {
     state.turnCount   = savedState.turnCount  || 0;
     state.worldTick   = savedState.worldTick  || 0;
     state.activeLayer = savedState.activeLayer || 0;
-    state.gameState   = 'play'; // Force play state on resume
+    state.gameState   = 'play';
     state.inputLocked = false;
     if (savedState.worldSeed != null) state.worldSeed = savedState.worldSeed;
     if (savedState.cgAttrs) state.cgAttrs = savedState.cgAttrs;
 
-    // --- Restore world grids ---
-    worlds.length = 0;
+    // --- Restore world grids (Object keyed by layerIndex) ---
+    for (const key of Object.keys(worlds)) delete worlds[key];
     if (data.worlds) {
-      for (const layer of data.worlds) {
-        worlds.push(layer || null);
+      for (const [key, value] of Object.entries(data.worlds)) {
+        worlds[key] = value || null;
       }
     }
 
-    covers.length = 0;
+    for (const key of Object.keys(covers)) delete covers[key];
     if (data.covers) {
-      for (const layer of data.covers) {
-        covers.push(layer || null);
+      for (const [key, value] of Object.entries(data.covers)) {
+        covers[key] = value || null;
       }
     }
 
-    // --- Restore monsters ---
-    monsters.length = 0;
+    // --- Restore monsters (Object keyed by layerIndex) ---
+    for (const key of Object.keys(monsters)) delete monsters[key];
     if (data.monsters) {
       const restored = deserializeMonsters(data.monsters);
-      for (const layer of restored) {
-        monsters.push(layer);
+      for (const [key, value] of Object.entries(restored)) {
+        monsters[key] = value;
       }
     }
 
-    // --- Restore features ---
-    if (features && data.features) {
-      features.length = 0;
-      for (const layer of data.features) {
-        features.push(layer || []);
+    // --- Restore features (Object keyed by layerIndex) ---
+    for (const key of Object.keys(features)) delete features[key];
+    if (data.features) {
+      for (const [key, value] of Object.entries(data.features)) {
+        features[key] = value || {};
       }
     }
 
     // --- Restore LAYER_META ---
     if (data.layerMeta) {
-      // Clear existing entries
-      for (const key of Object.keys(LAYER_META)) {
-        delete LAYER_META[key];
-      }
+      for (const key of Object.keys(LAYER_META)) delete LAYER_META[key];
       for (const [key, value] of Object.entries(data.layerMeta)) {
         LAYER_META[key] = value;
       }
@@ -288,9 +294,7 @@ export function loadGame() {
 
     // --- Restore cellKeyToLayer ---
     if (_cellKeyToLayer && data.cellKeyToLayer) {
-      for (const key of Object.keys(_cellKeyToLayer)) {
-        delete _cellKeyToLayer[key];
-      }
+      for (const key of Object.keys(_cellKeyToLayer)) delete _cellKeyToLayer[key];
       for (const [key, value] of Object.entries(data.cellKeyToLayer)) {
         _cellKeyToLayer[key] = value;
       }
