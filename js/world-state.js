@@ -127,11 +127,11 @@ export function chebyshev(ax,ay,bx,by){ return Math.max(Math.abs(ax-bx), Math.ab
 /*
   isImpassable(layer, x, y)
   Returns true if the tile at (x,y) on the given layer should block all
-  movement — VOID, ROCK, STONE (cave walls), and out-of-bounds.
+  movement — VOID, CAVE_ROCK, CAVE_WALL, and out-of-bounds.
   Checks GROUND only — these are hard terrain blockers.
 */
 export function isImpassable(layer, x, y){
   if (!inBounds(layer, x, y)) return true;
   const t = worlds[layer][y][x];
-  return t === T.VOID || t === T.ROCK || t === T.STONE;
+  return t === T.VOID || t === T.CAVE_ROCK || t === T.CAVE_WALL;
 }
