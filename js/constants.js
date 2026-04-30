@@ -118,7 +118,7 @@ export const BIOME_TARGET = [
   ['stone','stone','forest','forest','forest','stone','forest','forest','forest','forest','forest','stone','stone','stone','stone','forest'],
   ['stone','stone','forest','forest','forest','forest','forest','forest','forest','stone','stone','stone','stone','stone','stone','water'],
   ['stone','stone','plains','forest','plains','forest','forest','plains','plains','plains','plains','stone','stone','stone','stone','water'],
-  ['stone','plains','forest','stone','plains','plains','forest','plains','plains','stone','mud','stone','plains','water','water','water'],
+  ['stone','plains','forest','stone','plains','plains','forest','plains','plains','stone','stone','stone','plains','water','water','water'],
   ['stone','forest','plains','plains','plains','plains','plains','plains','plains','plains','plains','stone','water','water','water','water'],
   ['stone','stone','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water','water','water'],
   ['stone','plains','plains','forest','plains','plains','plains','plains','plains','plains','plains','water','water','water','water','water'],
