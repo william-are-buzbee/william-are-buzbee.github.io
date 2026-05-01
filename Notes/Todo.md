@@ -19,6 +19,7 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Mushroom swarm ambush overhaul
 - [x] Remove scattered trees tile type, use regular forest cover with probability gradient
 - [x] Save system (localStorage, auto-save after every action, version number in save data)
+- [x] Fix surface stone/cave terrain visual (should look like rocky ground)
 
 ## Up Next
 - [ ] Re-establish biome layout (tune target map and atmosphere thresholds)
@@ -26,7 +27,6 @@ Prompt queue and task tracker. Check things off as they're done.
 ## Queued
 - [ ] Make world size fully configurable (audit all hardcoded positions/distances)
 - [ ] Underground biome leakage mirrors surface (sample surface atmosphere at each coordinate, proportional bleed)
-- [ ] Fix surface stone/cave terrain visual in northeast (should look like rocky ground not dungeon walls)
 
 ## Ideas (not yet scoped)
 - [ ] Creature taxonomy (design lineage-based tags, replace or reskin enemy roster)
