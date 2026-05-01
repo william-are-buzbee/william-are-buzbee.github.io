@@ -54,6 +54,7 @@ function canvasToWorld(ev) {
 canvas.addEventListener('click', (ev) => {
   if (state.gameState !== 'play' || modalEl.classList.contains('show')) return;
   if (state.inputLocked) return;
+  if (restartConfirmEl.style.display === 'flex') return;
 
   const { wx, wy } = canvasToWorld(ev);
 
@@ -115,7 +116,24 @@ document.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape') { closeModal(); ev.preventDefault(); }
     return;
   }
+
+  // Restart confirm escape
+  if (restartConfirmEl.style.display === 'flex') {
+    if (ev.key === 'Escape' || ev.key.toLowerCase() === 'n') {
+      hideRestartConfirm();
+      ev.preventDefault();
+    }
+    return;
+  }
+
   if (state.gameState !== 'play') return;
+
+  // N key: open restart confirmation
+  if (ev.key.toLowerCase() === 'n') {
+    ev.preventDefault();
+    showRestartConfirm();
+    return;
+  }
 
   const action = KEY_MAP[ev.key.toLowerCase()];
   if (action) {
@@ -199,14 +217,21 @@ function showScreen(id) {
 
 // ---- Save-aware title screen ----
 const titleEl = document.getElementById('title');
+const titleContinueBtn = document.getElementById('title-continue');
+const titleNewGameBtn  = document.getElementById('title-newgame');
+const restartConfirmEl = document.getElementById('restart-confirm');
 
 function updateTitleButtons() {
-  // No dynamic elements to update — title screen is just the name.
-  // Kept as a no-op so callers don't break.
+  if (hasSave()) {
+    titleContinueBtn.style.display = '';
+  } else {
+    titleContinueBtn.style.display = 'none';
+  }
 }
 
-// Click anywhere on title: resume save if one exists, otherwise new game.
-titleEl.addEventListener('click', () => {
+// Continue button: load save
+titleContinueBtn.addEventListener('click', (ev) => {
+  ev.stopPropagation();
   if (hasSave()) {
     if (tryResume()) {
       titleEl.style.display = 'none';
@@ -214,11 +239,22 @@ titleEl.addEventListener('click', () => {
       try { updateUI(); } catch(e) { console.error(e); }
     } else {
       deleteSave();
+      updateTitleButtons();
       openCharGen();
     }
-  } else {
-    openCharGen();
   }
+});
+
+// New Game button: delete save and start chargen
+titleNewGameBtn.addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  deleteSave();
+  openCharGen();
+});
+
+// Prevent stray clicks on the title background from doing anything
+titleEl.addEventListener('click', (ev) => {
+  // Only buttons above should act
 });
 
 // Death / Victory: delete save, return to title
@@ -229,6 +265,31 @@ document.getElementById('death').addEventListener('click', () => {
 document.getElementById('victory').addEventListener('click', () => {
   deleteSave();
   showScreen('title');
+});
+
+// ---- In-game restart confirmation ----
+function showRestartConfirm() {
+  restartConfirmEl.style.display = 'flex';
+}
+function hideRestartConfirm() {
+  restartConfirmEl.style.display = 'none';
+}
+
+document.getElementById('restart-yes').addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  hideRestartConfirm();
+  deleteSave();
+  showScreen('title');
+});
+
+document.getElementById('restart-no').addEventListener('click', (ev) => {
+  ev.stopPropagation();
+  hideRestartConfirm();
+});
+
+// Prevent background clicks on the confirm overlay from leaking
+restartConfirmEl.addEventListener('click', (ev) => {
+  ev.stopPropagation();
 });
 
 // ==================== TITLE-SCREEN BACKDROP ====================
