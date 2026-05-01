@@ -110,17 +110,24 @@ function findUndergroundNear(surfX, surfY, layer, predicate, radius){
 
 // ==================== STRUCTURE PLACEMENT ON SURFACE ====================
 export function placeStructures(){
-  // Millhaven (starter, plains)
-  const mill = findSpotNear(LAYER_SURFACE, 56, 62, t=>t===T.PLAINS, 25);
+  // Search radius scales with map size (~22% of smaller dimension)
+  const searchR = Math.max(5, Math.round(Math.min(W_SURF, H_SURF) * 0.22));
+  const searchRSm = Math.max(4, Math.round(Math.min(W_SURF, H_SURF) * 0.16));
+
+  // Millhaven (starter, plains) — center-south
+  const mill = findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.50), Math.floor(H_SURF * 0.55), t=>t===T.PLAINS, searchR);
   if (mill){
     const [x,y] = mill;
     placeAt(LAYER_SURFACE, x, y, T.TOWN, {type:'town', townKey:'millhaven'});
     state.player.startX = x; state.player.startY = y+1;
     registerTownPosition('millhaven', x, y);
   }
-  // Thornwell
-  const thorn = findSpotNear(LAYER_SURFACE, 44, 27, t=>t===T.PLAINS, 18)
-             || findSpotNear(LAYER_SURFACE, 44, 27, (t,x,y,c)=>t===T.PLAINS && (c===T.FOREST||c===T.SCATTERED_TREES), 18);
+  // Thornwell — NW forest
+  const thorn = findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.39), Math.floor(H_SURF * 0.24), t=>t===T.PLAINS, searchRSm)
+             || findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.39), Math.floor(H_SURF * 0.24), (t,x,y,c)=>t===T.PLAINS && (c===T.FOREST||c===T.SCATTERED_TREES), searchRSm);
   if (thorn){
     const [x,y] = thorn;
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
@@ -135,16 +142,19 @@ export function placeStructures(){
     placeAt(LAYER_SURFACE, x, y, T.TOWN, {type:'town', townKey:'thornwell'});
     registerTownPosition('thornwell', x, y);
   }
-  // Dunegate
-  const dune = findSpotNear(LAYER_SURFACE, 75, 60, t=>t===T.DESERT, 18)
-            || findSpotNear(LAYER_SURFACE, 75, 60, t=>t===T.PLAINS, 18);
+  // Dunegate — E desert
+  const dune = findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.67), Math.floor(H_SURF * 0.54), t=>t===T.DESERT, searchRSm)
+            || findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.67), Math.floor(H_SURF * 0.54), t=>t===T.PLAINS, searchRSm);
   if (dune){
     const [x,y] = dune;
     placeAt(LAYER_SURFACE, x, y, T.TOWN, {type:'town', townKey:'dunegate'});
     registerTownPosition('dunegate', x, y);
   }
-  // Karst Hollow
-  const karst = findSpotNear(LAYER_SURFACE, 30, 75, t=>t===T.PLAINS||t===T.MOUNTAIN, 25);
+  // Karst Hollow — SW mountain
+  const karst = findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.27), Math.floor(H_SURF * 0.67), t=>t===T.PLAINS||t===T.MOUNTAIN, searchR);
   if (karst){
     const [x,y] = karst;
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
@@ -177,8 +187,9 @@ export function placeStructures(){
     }
   });
 
-  // Sunward Hold
-  const sunward = findSpotNear(LAYER_SURFACE, 18, 38, t=>t===T.PLAINS||t===T.MOUNTAIN, 25);
+  // Sunward Hold — W
+  const sunward = findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.16), Math.floor(H_SURF * 0.34), t=>t===T.PLAINS||t===T.MOUNTAIN, searchR);
   if (sunward){
     const [x,y] = sunward;
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
@@ -197,8 +208,10 @@ export function placeStructures(){
     });
     registerStructurePosition('sunward_hold', x, y, LAYER_SURFACE);
   }
-  // Blackspire Keep
-  const bs = findSpotNear(LAYER_SURFACE, 68, 88, t=>t===T.PLAINS||t===T.DESERT, 30);
+  // Blackspire Keep — SE
+  const bsR = Math.max(6, Math.round(Math.min(W_SURF, H_SURF) * 0.27));
+  const bs = findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.61), Math.floor(H_SURF * 0.79), t=>t===T.PLAINS||t===T.DESERT, bsR);
   if (bs){
     const [x,y] = bs;
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
@@ -215,11 +228,12 @@ export function placeStructures(){
     if (sn) placeAt(LAYER_SURFACE, sn[0], sn[1], T.SIGN, {type:'sign', text:SIGN_TEXTS.castle_warn});
   }
 
-  // Mountain cave entrance
-  const cave = findSpotNear(LAYER_SURFACE, 35, 70, t=>t===T.MOUNTAIN, 25);
+  // Mountain cave entrance — SW
+  const cave = findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.31), Math.floor(H_SURF * 0.63), t=>t===T.MOUNTAIN, searchR);
   if (cave){
     const [x,y] = cave;
-    const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE, 40)
+    const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
                || findSpot(LAYER_UNDER, t=>t===T.CAVE, 500)
                || [W_UNDER>>1, H_UNDER>>1];
     placeAt(LAYER_SURFACE, x, y, T.STAIRS_DOWN, {
@@ -283,12 +297,17 @@ export function placeStructures(){
   }
 
   // Northeast surface cave entrances
+  const neCaveSearchR = Math.max(4, Math.round(Math.min(W_SURF, H_SURF) * 0.134));
+  const neScatterX = Math.max(1, Math.round(W_SURF * 0.134));
+  const neScatterY = Math.max(1, Math.round(H_SURF * 0.16));
   for (let i=0; i<3; i++){
-    const neCave = findSpotNear(LAYER_SURFACE, Math.floor(W_SURF*0.65)+randi(15), 8+randi(18),
-      t=>t===T.STONE||t===T.CAVE, 15);
+    const neCave = findSpotNear(LAYER_SURFACE,
+      Math.floor(W_SURF * 0.65) + randi(neScatterX),
+      Math.floor(H_SURF * 0.07) + randi(neScatterY),
+      t=>t===T.STONE||t===T.CAVE, neCaveSearchR);
     if (neCave){
       const [x,y] = neCave;
-      const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE||t===T.STONE, 40)
+      const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE||t===T.STONE, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
                  || findSpot(LAYER_UNDER, t=>t===T.CAVE||t===T.STONE, 500);
       if (uSpot){
         for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
@@ -308,9 +327,14 @@ export function placeStructures(){
   }
 
   // Eastern water cave entrances
+  const wCaveMargin = Math.max(2, Math.round(Math.min(W_SURF, H_SURF) * 0.18));
+  const wCaveScatter = Math.max(1, Math.round(W_SURF * 0.09));
+  const wCaveSearchR = Math.max(3, Math.round(Math.min(W_SURF, H_SURF) * 0.09));
   for (let i=0; i<2; i++){
-    const wCave = findSpotNear(LAYER_SURFACE, W_SURF-20-randi(10), 20+randi(H_SURF-40),
-      t=>t===T.BEACH||t===T.PLAINS, 10);
+    const wCave = findSpotNear(LAYER_SURFACE,
+      W_SURF - wCaveMargin - randi(wCaveScatter),
+      wCaveMargin + randi(Math.max(1, H_SURF - wCaveMargin * 2)),
+      t=>t===T.BEACH||t===T.PLAINS, wCaveSearchR);
     if (wCave){
       const [x,y] = wCave;
       for (let dy2=-3; dy2<=3; dy2++){
@@ -334,15 +358,21 @@ export function placeStructures(){
   }
 
   // Standalone NPCs
-  const fh = findSpotNear(LAYER_SURFACE, 38, 12, (t,x,y,c)=>c===T.FOREST||c===T.SCATTERED_TREES, 30)
-          || findSpotNear(LAYER_SURFACE, 38, 12, t=>t===T.PLAINS, 30);
+  const npcSearchR = Math.max(6, Math.round(Math.min(W_SURF, H_SURF) * 0.27));
+  const fh = findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.34), Math.floor(H_SURF * 0.11),
+    (t,x,y,c)=>c===T.FOREST||c===T.SCATTERED_TREES, npcSearchR)
+          || findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.34), Math.floor(H_SURF * 0.11),
+    t=>t===T.PLAINS, npcSearchR);
   if (fh){
     // Clear forest cover and place NPC
     if (covers[LAYER_SURFACE]) covers[LAYER_SURFACE][fh[1]][fh[0]] = 0;
     worlds[LAYER_SURFACE][fh[1]][fh[0]] = T.PLAINS;
     placeAt(LAYER_SURFACE, fh[0], fh[1], T.NPC, {type:'npc', npcKey:'forest_hermit'});
   }
-  const sch = findSpotNear(LAYER_SURFACE, 62, 32, t=>t===T.PLAINS, 25);
+  const sch = findSpotNear(LAYER_SURFACE,
+    Math.floor(W_SURF * 0.55), Math.floor(H_SURF * 0.29), t=>t===T.PLAINS, searchR);
   if (sch) placeAt(LAYER_SURFACE, sch[0], sch[1], T.NPC, {type:'npc', npcKey:'scholar'});
   const fish = findSpot(LAYER_SURFACE, (t)=>t===T.BEACH);
   if (fish) placeAt(LAYER_SURFACE, fish[0], fish[1], T.NPC, {type:'npc', npcKey:'fisherman'});
@@ -392,7 +422,10 @@ export function spawnMonstersInWorld(){
           cover === T.SIGN || cover === T.NPC || cover === T.HOUSE || cover === T.SHOP ||
           cover === T.INN || cover === T.STAIRS_DOWN || cover === T.STAIRS_UP ||
           cover === T.CHEST || cover === T.BOOK)) continue;
-      if (Math.abs(x-(state.player.startX||56)) < 7 && Math.abs(y-(state.player.startY||63)) < 7) continue;
+      const safeZone = Math.max(3, Math.round(Math.min(W_SURF, H_SURF) * 0.063));
+      const startX = state.player.startX || Math.floor(W_SURF * 0.50);
+      const startY = state.player.startY || Math.floor(H_SURF * 0.56);
+      if (Math.abs(x - startX) < safeZone && Math.abs(y - startY) < safeZone) continue;
       // Use cover type for biome if present, otherwise ground
       const biomeKey = cover || ground;
       const density = surfaceDensity[biomeKey] || 0;
@@ -435,7 +468,7 @@ export function spawnMonstersInWorld(){
   const pairBonders = spawnedWolves.filter(w => w.personality === 'pair_bond' && !w.bondPartner);
   for (let i=0; i<pairBonders.length-1; i+=2){
     const a = pairBonders[i], b = pairBonders[i+1];
-    if (chebyshev(a.x,a.y,b.x,b.y) < 15){
+    if (chebyshev(a.x,a.y,b.x,b.y) < Math.max(5, Math.round(Math.min(W_SURF, H_SURF) * 0.134))){
       a.bondPartner = b;
       b.bondPartner = a;
     }
@@ -500,7 +533,7 @@ export function initWorld(seed){
 
   activateLayer(LAYER_SURFACE);
   state.player.layer = LAYER_SURFACE;
-  state.player.x = state.player.startX || 56;
-  state.player.y = state.player.startY || 63;
+  state.player.x = state.player.startX || Math.floor(W_SURF * 0.50);
+  state.player.y = state.player.startY || Math.floor(H_SURF * 0.56);
   spawnMonstersInWorld();
 }

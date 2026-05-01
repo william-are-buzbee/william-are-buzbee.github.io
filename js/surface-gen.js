@@ -65,7 +65,8 @@ const VARIATION_CFG     = { octaves: 3, frequency: 0.08, lacunarity: 2.0, gain: 
 const LAKE_CFG          = { octaves: 2, frequency: 0.06, lacunarity: 2.0, gain: 0.50 };
 
 // Minimum distance (in tiles) from any land tile for water to become deep.
-const DEEP_WATER_THRESHOLD = 4;
+// Scales with map size — ~3.6% of the smaller dimension, minimum 2.
+const DEEP_WATER_THRESHOLD = Math.max(2, Math.round(Math.min(W_SURF, H_SURF) * 0.036));
 
 // ==================== BIOME TARGET MAP SAMPLING ====================
 // Returns { biomeName: weight } for the biomes influencing world-tile (x, y).

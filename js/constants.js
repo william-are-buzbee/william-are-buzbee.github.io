@@ -3,7 +3,9 @@ export const TILE = 64, PIX = 2, SPR = 16;
 export const VIEW_W = 17, VIEW_H = 11;
 
 export const W_SURF = 112, H_SURF = 112;
-export const W_UNDER = W_SURF, H_UNDER = H_SURF;
+// Underground dimensions always match surface — change W_SURF/H_SURF and these follow.
+export const W_UNDER = W_SURF;
+export const H_UNDER = H_SURF;
 
 // Layer 0 is always the surface.  All other indices are generated on demand.
 // LAYER_SURFACE is kept for readability; LAYER_UNDER is now just a convention

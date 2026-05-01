@@ -11,10 +11,12 @@ import { ensureCoverGrid, populateMonsters } from './gen-utils.js';
 
 // ==================== BOUNDARY MASK (Multi-Pocket) ====================
 export function playableRadius(layerIndex, w, h) {
+  const base = Math.min(w, h);
   if (layerIndex === 0) return Math.max(w, h);
-  if (layerIndex <= 2) return 20 + Math.min(layerIndex, 2) * 4;
-  if (layerIndex <= 5) return 42 + (layerIndex - 3) * 6;
-  return Math.max(14, 46 - (layerIndex - 5) * 6);
+  // ~18-21% of base for early layers, ~37-41% for mid, tapering for deep
+  if (layerIndex <= 2) return Math.round(base * 0.18 + Math.min(layerIndex, 2) * base * 0.036);
+  if (layerIndex <= 5) return Math.round(base * 0.375 + (layerIndex - 3) * base * 0.054);
+  return Math.max(Math.round(base * 0.125), Math.round(base * 0.41 - (layerIndex - 5) * base * 0.054));
 }
 
 function insidePocket(x, y, pocket) {
@@ -329,7 +331,8 @@ export function makeUnderground(seed, layerIndex, pockets, sourceStairs){
   }
 
   if (!exitPos) {
-    const fallbackDist = 8 + Math.floor(rand() * 5);
+    const baseDist = Math.max(4, Math.round(Math.min(w, h) * 0.071));
+    const fallbackDist = baseDist + Math.floor(rand() * Math.max(2, Math.round(baseDist * 0.6)));
     const angle = rand() * Math.PI * 2;
     exitPos = {
       x: Math.max(2, Math.min(w - 3, Math.round(entrancePositions[0].x + Math.cos(angle) * fallbackDist))),
@@ -493,7 +496,8 @@ export function makeLavaLayer(seed, layerIndex, pockets, sourceStairs){
   }
 
   if (!exitPos) {
-    const fallbackDist = 8 + Math.floor(rand() * 5);
+    const baseDist = Math.max(4, Math.round(Math.min(w, h) * 0.071));
+    const fallbackDist = baseDist + Math.floor(rand() * Math.max(2, Math.round(baseDist * 0.6)));
     const angle = rand() * Math.PI * 2;
     exitPos = {
       x: Math.max(2, Math.min(w - 3, Math.round(entrancePositions[0].x + Math.cos(angle) * fallbackDist))),
@@ -626,7 +630,9 @@ export function makeLavaLayer(seed, layerIndex, pockets, sourceStairs){
 
 // ==================== CORRIDOR UTILITIES ====================
 export function carveCorridors(grid, w, h){
-  const pts = [[6,6],[w-7,6],[6,h-7],[w-7,h-7],[w>>1,h>>1]];
+  const mx = Math.max(1, Math.round(w * 0.054));  // ~6 at w=112
+  const my = Math.max(1, Math.round(h * 0.054));
+  const pts = [[mx,my],[w-1-mx,my],[mx,h-1-my],[w-1-mx,h-1-my],[w>>1,h>>1]];
   for (let i=0;i<pts.length-1;i++){
     carveBetween(grid, w, h, pts[i][0], pts[i][1], pts[i+1][0], pts[i+1][1]);
   }

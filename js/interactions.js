@@ -1,6 +1,6 @@
 // ==================== USE / INTERACT — core hub ====================
 import { state, worlds, covers, features, monsters, cellKeyToLayer } from './state.js';
-import { DMG, DIFFICULTIES, resistMult, LAYER_SURFACE, LAYER_UNDER } from './constants.js';
+import { DMG, DIFFICULTIES, resistMult, LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF } from './constants.js';
 import { T, terrainName, coverBonus } from './terrain.js';
 import { rand, randi, choice } from './rng.js';
 import { FOOD, POTIONS, BOOKS, findWeapon, findArmor } from './items.js';
@@ -159,8 +159,8 @@ function enterTown(townKey){
 function exitTown(f){
   const player = state.player;
   state.player.layer = f.returnLayer != null ? f.returnLayer : LAYER_SURFACE;
-  state.player.x = f.returnX != null ? f.returnX : (state.player.returnX || 45);
-  state.player.y = f.returnY != null ? f.returnY : (state.player.returnY || 51);
+  state.player.x = f.returnX != null ? f.returnX : (state.player.returnX || Math.floor(W_SURF * 0.40));
+  state.player.y = f.returnY != null ? f.returnY : (state.player.returnY || Math.floor(H_SURF * 0.46));
   activateLayer(state.player.layer);
   log('You leave.', 'system');
   render();
