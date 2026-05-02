@@ -24,7 +24,8 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Make world size fully configurable (audit all hardcoded positions/distances)
 
 ## Up Next
-- [ ] Increase biome variety, like light or dense forest, deep desert vs 
+- [ ] Make biomes have blending that matches reality, like no trees in water, etc) 
+- [ ] Increase biome variety, like light or dense forest
 - [ ] Underground generation fixes (remove tiny paths between entrances
 - [ ] Surface buildings with walls
 - [ ] Underground biome leakage mirrors surface (sample surface atmosphere at each coordinate, proportional bleed)
