@@ -46,7 +46,7 @@ Prompt queue and task tracker. Check things off as they're done.
 - [ ] Custom domain for GitHub Pages
 
 ## Prompt Reference
-Prompts for queued items are in the Claude chat history. For new chats, include:
+For new chats, include:
 - Only the files that touch the system being changed
 - Key utility signatures (worldDims returns array, getFeature returns by reference, etc.)
 - Known bugs and what causes them
