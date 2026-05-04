@@ -7,7 +7,7 @@ import { T, coverBonus } from './terrain.js';
 import { rand, randi, randRange, roll100 } from './rng.js';
 import { playerMelee, playerAcc, playerDodge, playerDef, playerCritChance,
          playerCritMult, effectiveAP, cursedBaneMul, xpFromKill, deriveHP,
-         effectiveDex, stealthBonus, poisonResistance } from './player.js';
+         stealthBonus, poisonResistance } from './player.js';
 import { monDodge, monAcc, monCritChance, monCritMult, monDamage } from './monsters.js';
 import { inBounds, chebyshev, monsterAt, isTownCell, getCover } from './world-state.js';
 import { log } from './log.js';

@@ -596,9 +596,17 @@ function buildTintedTerrain(spriteName, palette){
   return c;
 }
 
+// Cave wall must render as solid black — override any palette definition
+const CAVE_WALL_BLACK = { bg: '#000000', fg: '#000000', mid: '#000000' };
+
 export function tintedSprite(spriteName, paletteName){
   const key = spriteName + '|' + paletteName;
   if (tintedCache[key]) return tintedCache[key];
+  // Force pitch-black rendering for cave walls
+  if (paletteName === 'cave_wall') {
+    tintedCache[key] = buildTintedTerrain(spriteName, CAVE_WALL_BLACK);
+    return tintedCache[key];
+  }
   const pal = BIOME[paletteName];
   if (!pal){
     // Fallback: if palette not found, use plains

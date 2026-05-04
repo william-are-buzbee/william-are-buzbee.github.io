@@ -65,11 +65,24 @@ export const BIOME = {
   dirt_road: {bg:'#2a2218', fg:'#a08860', mid:'#6e5a3a', tint:null},
   ruin:      {bg:'#1a1818', fg:'#706860', mid:'#484440', tint:'#585050'},
   void:      {bg:'#000000', fg:'#000000', mid:'#000000', tint:null},
+  cave_wall: {bg:'#0c0a08', fg:'#1e1a16', mid:'#141210', tint:null},
   cave_rock: {bg:'#0a0a0a', fg:'#1a1a1a', mid:'#101010', tint:null},
   mud:       {bg:'#1a1c12', fg:'#5a6038', mid:'#3a4020', tint:'#4a5028'},
   fungal_grass:{bg:'#181420', fg:'#7a6898', mid:'#504060', tint:'#685880'},
   dirt:      {bg:'#28200e', fg:'#a08050', mid:'#6a5430', tint:null},
 };
+
+// ==================== PRICE CATEGORIES ====================
+// Tiered INT-discount brackets.  Each item is tagged (or derived)
+// into one of these so buyPriceMul / sellValueMul can apply the
+// correct per-INT scaling.
+//   staple   — food, basic supplies.          1% per INT above 1 (max ~9%).
+//   standard — basic weapons, basic armor.    2% per INT above 1 (max ~18%).
+//   luxury   — books, potions, high-end gear. 3% per INT above 1 (max ~27%).
+export const PRICE_CAT = { STAPLE:'staple', STANDARD:'standard', LUXURY:'luxury' };
+
+// ==================== FED MAX ====================
+export const FED_MAX = 100;
 
 // ==================== DAMAGE TYPES ====================
 export const DMG = {
@@ -115,23 +128,31 @@ export function resistMult(tags, dmgType){
 //
 // The "mountain" biome has been removed.  All former mountain cells are now
 // "stone", which uses walkable rock ground with boulder/outcrop cover.
+//
+// Each cell is { biome, density }.  `density` (0.0–1.0) controls cover
+// intensity — e.g. tree probability in forests — without changing biome
+// identity.  The value is bilinearly interpolated across the map just
+// like biome weights, so gradients between cells create natural treelines
+// and density falloffs with no special-case code.
+function B(biome, density) { return { biome, density }; }
+
 export const BIOME_TARGET = [
-  ['stone','stone','stone','forest','forest','forest','forest','forest','forest','forest','forest','forest','stone','stone','forest','water'],
-  ['stone','stone','forest','forest','forest','stone','forest','forest','forest','forest','forest','stone','stone','stone','stone','forest'],
-  ['stone','stone','forest','forest','forest','forest','forest','forest','forest','stone','stone','stone','stone','stone','stone','water'],
-  ['stone','stone','plains','forest','plains','forest','forest','plains','plains','plains','plains','stone','stone','stone','stone','water'],
-  ['stone','plains','forest','stone','plains','plains','forest','stone','plains','stone','stone','stone','plains','water','water','water'],
-  ['stone','forest','plains','plains','stone','plains','plains','plains','plains','plains','plains','stone','water','water','water','water'],
-  ['stone','stone','plains','plains','plains','plains','plains','plains','plains','plains','water','water','water','water','water','water'],
-  ['stone','plains','plains','forest','plains','plains','plains','plains','plains','plains','plains','water','water','water','water','water'],
-  ['stone','plains','plains','plains','plains','plains','plains','plains','plains','stone','plains','plains','water','water','water','water'],
-  ['plains','plains','stone','plains','plains','plains','plains','plains','plains','plains','plains','plains','mushroom','plains','mushroom','mushroom'],
-  ['plains','plains','plains','plains','plains','desert','plains','desert','plains','plains','mushroom','plains','mushroom','mushroom','mushroom','water'],
-  ['plains','plains','plains','plains','stone','plains','desert','desert','plains','desert','plains','mushroom','mushroom','mushroom','mushroom','mushroom'],
-  ['plains','plains','stone','desert','desert','desert','desert','desert','desert','plains','mushroom','mushroom','mushroom','mushroom','mushroom','mushroom'],
-  ['plains','plains','desert','desert','desert','desert','desert','desert','desert','desert','plains','mushroom','mushroom','mushroom','mushroom','water'],
-  ['plains','desert','desert','desert','desert','desert','desert','desert','desert','desert','plains','mushroom','mushroom','mushroom','plains','mushroom'],
-  ['desert','desert','desert','desert','desert','desert','desert','desert','desert','desert','desert','plains','mushroom','mushroom','mushroom','mushroom'],
+  [B('forest',1.0), B('forest',1.0), B('forest',1.0), B('forest',0.6), B('forest',0.8), B('forest',0.8), B('forest',0.8), B('forest',0.9), B('forest',1.0), B('water',1.0), B('water',1.0), B('stone',1.0), B('stone',0.6), B('stone',0.9), B('stone',0.9), B('water',1.0)],
+  [B('stone',0.9), B('forest',1.0), B('forest',1.0), B('forest',0.7), B('forest',0.8), B('forest',0.4), B('forest',0.7), B('forest',0.9), B('forest',0.9), B('forest',0.8), B('forest',0.8), B('stone',1.0), B('stone',0.5), B('stone',0.8), B('stone',0.9), B('water',1.0)],
+  [B('stone',0.8), B('forest',0.5), B('forest',1.0), B('forest',0.8), B('forest',1.0), B('forest',0.7), B('forest',0.8), B('forest',0.8), B('forest',0.9), B('forest',0.8), B('forest',0.8), B('stone',0.3), B('stone',0.4), B('stone',0.5), B('stone',0.8), B('water',1.0)],
+  [B('forest',0.9), B('forest',0.5), B('forest',0.9), B('forest',0.9), B('forest',0.8), B('forest',0.9), B('forest',0.8), B('forest',0.9), B('forest',0.9), B('forest',0.9), B('forest',0.9), B('stone',0.2), B('stone',1.0), B('stone',0.4), B('water',1.0), B('water',1.0)],
+  [B('stone',0.8), B('forest',0.5), B('forest',1.0), B('plains',0.5), B('plains',0.5), B('plains',0.2), B('plains',0.7), B('plains',0.4), B('plains',0.5), B('plains',0.5), B('plains',0.6), B('stone',0.3), B('stone',0.2), B('water',1.0), B('forest',0.3), B('water',1.0)],
+  [B('stone',0.7), B('plains',1.0), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.2), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.2), B('water',1.0), B('water',1.0), B('water',1.0), B('water',1.0)],
+  [B('stone',0.7), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('forest',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('water',1.0), B('water',1.0), B('water',1.0), B('water',1.0), B('water',1.0)],
+  [B('stone',0.9), B('plains',0.5), B('plains',0.5), B('plains',0.6), B('forest',0.5), B('forest',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('water',1.0), B('water',1.0), B('water',1.0), B('water',1.0), B('water',1.0)],
+  [B('stone',1.0), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.7), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('water',1.0), B('water',1.0), B('water',1.0), B('water',1.0)],
+  [B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('mushroom',0.3), B('plains',1.0), B('mushroom',0.4), B('mushroom',0.9)],
+  [B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('desert',0.5), B('desert',0.5), B('desert',0.5), B('desert',1.0), B('desert',2.0), B('plains',0.9), B('plains',0.9), B('mushroom',0.6), B('mushroom',0.6), B('mushroom',0.7), B('mushroom',1.0)],
+  [B('plains',0.5), B('plains',0.5), B('plains',0.5), B('plains',0.5), B('desert',0.5), B('desert',0.5), B('desert',0.6), B('desert',0.6), B('desert',0.5), B('desert',1.0), B('plains',0.9), B('mushroom',0.6), B('mushroom',0.9), B('mushroom',0.6), B('mushroom',0.9), B('mushroom',0.9)],
+  [B('plains',0.5), B('plains',0.5), B('desert',0.5), B('desert',0.6), B('desert',0.7), B('desert',0.7), B('desert',0.7), B('desert',0.6), B('desert',0.6), B('desert',0.8), B('desert',0.9), B('mushroom',0.8), B('mushroom',0.9), B('mushroom',0.6), B('mushroom',0.9), B('mushroom',0.9)],
+  [B('plains',0.5), B('desert',0.5), B('desert',0.6), B('desert',0.7), B('desert',0.7), B('desert',0.8), B('desert',0.8), B('desert',0.7), B('desert',0.7), B('desert',0.8), B('desert',0.9), B('mushroom',0.8), B('mushroom',0.9), B('mushroom',0.6), B('mushroom',0.9), B('water',1.0)],
+  [B('plains',0.5), B('desert',0.6), B('desert',0.7), B('desert',0.7), B('desert',0.8), B('desert',0.8), B('desert',0.7), B('desert',0.7), B('desert',0.6), B('desert',0.8), B('desert',0.9), B('mushroom',0.7), B('mushroom',0.8), B('mushroom',0.8), B('plains',0.9), B('water',1.0)],
+  [B('desert',0.6), B('desert',0.7), B('desert',0.7), B('desert',0.8), B('desert',0.8), B('desert',0.8), B('desert',0.7), B('desert',0.7), B('desert',0.6), B('desert',0.8), B('desert',0.9), B('desert',0.8), B('mushroom',0.7), B('mushroom',0.8), B('mushroom',0.4), B('water',1.0)],
 ];
 
 // ==================== BIOME PROFILES ====================
@@ -159,6 +180,11 @@ export const BIOME_PROFILES = {
     covers: [
       { type: 1, chance: 0.08 },   // sparse trees
     ],
+    // density 0→0.5%, 1→3%.  Plains stay open at any density.
+    coverScale: (coverType, density) => {
+      if (coverType === 1) return 0.005 + density * 0.025;
+      return null;
+    },
     lakeChance: 0.015,
     palette: 'plains',
     derived: { moisture: 0.35, elevation: 0.30, fungal: 0 },
@@ -168,6 +194,11 @@ export const BIOME_PROFILES = {
     covers: [
       { type: 1, chance: 0.70 },   // dense canopy
     ],
+    // density 0→3%, 1→92%.  The full range from scattered copse to old-growth.
+    coverScale: (coverType, density) => {
+      if (coverType === 1) return 0.03 + density * 0.89;
+      return null;
+    },
     lakeChance: 0.008,
     palette: 'forest',
     derived: { moisture: 0.58, elevation: 0.38, fungal: 0 },
@@ -175,6 +206,11 @@ export const BIOME_PROFILES = {
   desert: {
     ground: 2,                      // T.SAND
     covers: [],
+    // No trees.  Density reserved for future cactus/dead-bush cover.
+    coverScale: (coverType, density) => {
+      if (coverType === 1) return 0;
+      return null;
+    },
     lakeChance: 0,
     palette: 'desert',
     derived: { moisture: 0.10, elevation: 0.40, fungal: 0 },
@@ -185,6 +221,11 @@ export const BIOME_PROFILES = {
       { type: 53, chance: 0.10 },  // boulders
       { type: 54, chance: 0.08 },  // rock outcrops
     ],
+    // No trees.  Density reserved for future boulder frequency scaling.
+    coverScale: (coverType, density) => {
+      if (coverType === 1) return 0;
+      return null;
+    },
     lakeChance: 0,
     palette: 'rock',
     derived: { moisture: 0.18, elevation: 0.80, fungal: 0 },
@@ -192,6 +233,10 @@ export const BIOME_PROFILES = {
   water: {
     ground: 4,                      // T.WATER
     covers: [],
+    coverScale: (coverType, density) => {
+      if (coverType === 1) return 0;
+      return null;
+    },
     lakeChance: 0,
     palette: 'water',
     derived: { moisture: 0.90, elevation: 0.15, fungal: 0 },
@@ -201,6 +246,11 @@ export const BIOME_PROFILES = {
     covers: [
       { type: 8, chance: 0.80 },   // mushroom forest
     ],
+    // No trees.  Density will scale mushroom cover in a future pass.
+    coverScale: (coverType, density) => {
+      if (coverType === 1) return 0;
+      return null;
+    },
     lakeChance: 0,
     palette: 'fungal_grass',
     derived: { moisture: 0.45, elevation: 0.35, fungal: 0.65 },
@@ -208,6 +258,11 @@ export const BIOME_PROFILES = {
   mud: {
     ground: 0,                      // T.GRASS (palette tints it; add T.MUD later)
     covers: [],
+    // Low tree probability regardless of density; future: dead trees, reeds.
+    coverScale: (coverType, density) => {
+      if (coverType === 1) return 0.01 + density * 0.04;
+      return null;
+    },
     lakeChance: 0.02,
     palette: 'mud',
     derived: { moisture: 0.70, elevation: 0.25, fungal: 0 },

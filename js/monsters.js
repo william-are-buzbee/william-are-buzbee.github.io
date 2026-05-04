@@ -9,10 +9,10 @@ const MON = {
                1, 1, 6, 1,  1, 0,
                2,  [0,1],
                ['flesh','beast'], DMG.BLADE,
-               [T.PLAINS],         LAYER_SURFACE,
+               [T.GRASS],          LAYER_SURFACE,
                15, 1,
                0, 2,                // passive, tiny aggro
-               [T.PLAINS],
+               [T.GRASS,T.DIRT,T.DIRT_ROAD,T.BEACH],
                0, 0,
                '#c0a878',           // sandy brown
                null],
@@ -21,10 +21,10 @@ const MON = {
                2, 2, 6, 3,  2, 1,
                12, [2,6],
                ['flesh','beast'], DMG.BLADE,
-               [T.FOREST,T.MOUNTAIN], LAYER_SURFACE,
+               [T.FOREST],            LAYER_SURFACE,
                40, 2,
                2, 5,
-               [T.FOREST,T.MOUNTAIN,T.PLAINS],  // wolves roam across biomes
+               [T.FOREST,T.GRASS,T.MUD,T.DIRT,T.DIRT_ROAD,T.BEACH],  // wolves roam freely across most terrain
                4, 2,
                '#888078',           // brown-grey (not green!)
                null],
@@ -55,10 +55,10 @@ const MON = {
                4, 3, 6, 1,  3, 4,
                22, [4,12],
                ['insect','shelled'], DMG.POISON,
-               [T.DESERT], LAYER_SURFACE,
+               [T.SAND],           LAYER_SURFACE,
                35, 3,
                1, 3,
-               [T.DESERT,T.BEACH],
+               [T.SAND,T.BEACH],
                3, 0,
                '#a88838',           // tan-yellow
                null],
@@ -66,10 +66,10 @@ const MON = {
                5, 4, 4, 2,  3, 3,
                24, [6,16],
                ['flesh','beast'], DMG.BLADE,
-               [T.DESERT], LAYER_SURFACE,
+               [T.SAND],           LAYER_SURFACE,
                30, 3,
                2, 4,
-               [T.DESERT],
+               [T.SAND],
                4, 0,                // aggressive but won't search — ambush predator
                '#c4a068',
                null],
@@ -77,10 +77,10 @@ const MON = {
                6, 6, 1, 3,  3, 3,
                32, [12,28],
                ['flesh','undead'], DMG.BLUNT,
-               [T.DESERT], LAYER_SURFACE,
+               [T.SAND],           LAYER_SURFACE,
                20, 3,
                1, 2,
-               [T.DESERT],
+               [T.SAND],
                6, 2,                // slow but persistent
                '#a09070',
                null],
@@ -89,10 +89,10 @@ const MON = {
                3, 4, 8, 5,  4, 1,
                38, [14,32],
                ['undead','ice'], DMG.COLD,
-               [T.MOUNTAIN], LAYER_SURFACE,
+               [T.ROCK],           LAYER_SURFACE,
                60, 4,
                2, 5,
-               [T.MOUNTAIN],
+               [T.ROCK],
                5, 4,                // intelligent undead — searches
                '#b0c8d8',
                {dodgeMul:1.4}],
@@ -100,10 +100,10 @@ const MON = {
                10, 10, 2, 1,  4, 5,
                70, [25,55],
                ['flesh','ice','beast'], DMG.BLUNT,
-               [T.MOUNTAIN], LAYER_SURFACE,
+               [T.ROCK],           LAYER_SURFACE,
                35, 5,
                2, 4,
-               [T.MOUNTAIN],
+               [T.ROCK],
                3, 0,                // tough and dumb, won't search
                '#a8c0c0',
                null],
@@ -112,10 +112,10 @@ const MON = {
                4, 3, 4, 2,  3, 3,
                22, [6,14],
                ['bone','undead'], DMG.BLADE,
-               [T.STONE,T.CAVE], LAYER_UNDER,
+               [T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
                30, 3,
                2, 4,
-               [T.STONE,T.CAVE],
+               [T.CAVE_FLOOR,T.ROCK],
                4, 0,
                '#c8c4b8',
                null],
@@ -123,10 +123,10 @@ const MON = {
                5, 5, 1, 1,  3, 2,
                24, [4,10],
                ['flesh','undead'], DMG.BLADE,
-               [T.STONE,T.CAVE], LAYER_UNDER,
+               [T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
                20, 3,
                2, 3,
-               [T.STONE,T.CAVE],
+               [T.CAVE_FLOOR,T.ROCK],
                4, 0,
                '#708070',
                null],
@@ -134,10 +134,10 @@ const MON = {
                8, 8, 3, 5,  4, 9,
                90, [30,70],
                ['armored','undead'], DMG.BLADE,
-               [T.STONE], LAYER_UNDER,
+               [T.ROCK], LAYER_UNDER,
                45, 5,
                2, 4,
-               [T.STONE,T.CAVE],
+               [T.CAVE_FLOOR,T.ROCK],
                5, 3,                // disciplined — searches
                '#b0b0c0',
                null],
@@ -146,10 +146,10 @@ const MON = {
                5, 4, 6, 3,  4, 3,
                40, [10,22],
                ['fire','beast'], DMG.FIRE,
-               [T.LAVA,T.STONE], LAYER_UNDER,
+               [T.LAVA,T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
                50, 4,
                2, 4,
-               [T.LAVA,T.STONE],
+               [T.LAVA,T.CAVE_FLOOR,T.ROCK],
                5, 3,                // hounds track
                '#d06040',
                null],
@@ -157,10 +157,10 @@ const MON = {
                8, 8, 4, 6,  4, 4,
                85, [25,55],
                ['fire'], DMG.FIRE,
-               [T.LAVA,T.STONE], LAYER_UNDER,
+               [T.LAVA,T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
                40, 5,
                1, 3,
-               [T.LAVA],
+               [T.LAVA,T.CAVE_FLOOR],
                4, 4,                // intelligent, searches
                '#e07030',
                null],
@@ -173,19 +173,18 @@ const MON = {
                [T.MUSHFOREST], LAYER_SURFACE,
                0, 3,               // zero perception — they don't detect stealth
                0, 0,               // passive, zero aggro range
-               [T.MUSHFOREST],
+               [T.MUSHFOREST,T.FUNGAL_GRASS],
                0, 0,               // no chase, no search — swarm AI handles everything
-               '#9070a0',           // purple-ish mushroom
                null],
   // NORTHEAST CAVES — surface
   rock_golem: ['Rock Golem',      'ROCK_GOLEM',
                7, 10, 1, 1,  4, 8,
                65, [20,45],
                ['stone','rockite'], DMG.BLUNT,
-               [T.CAVE,T.STONE,T.MOUNTAIN], LAYER_SURFACE,
+               [T.CAVE_FLOOR,T.ROCK], LAYER_SURFACE,
                25, 5,
                1, 3,
-               [T.CAVE,T.STONE,T.MOUNTAIN],
+               [T.CAVE_FLOOR,T.ROCK],
                2, 0,
                '#808080',
                null,
@@ -195,10 +194,10 @@ const MON = {
                4, 3, 7, 2,  3, 1,
                30, [8,18],
                ['aquatic','beast'], DMG.ELEC,
-               [T.WATER,T.UWATER], LAYER_SURFACE,
+               [T.WATER,T.DEEP_WATER,T.UWATER], LAYER_SURFACE,
                35, 3,
                1, 4,
-               [T.WATER,T.UWATER,T.BEACH],
+               [T.WATER,T.DEEP_WATER,T.UWATER],
                3, 0,
                '#4090b0',
                {waterHeal:true}],
@@ -206,10 +205,10 @@ const MON = {
                5, 6, 3, 1,  3, 6,
                35, [10,25],
                ['aquatic','shelled'], DMG.BLUNT,
-               [T.WATER,T.UWATER], LAYER_SURFACE,
+               [T.WATER,T.DEEP_WATER,T.UWATER,T.BEACH], LAYER_SURFACE,
                25, 3,
                1, 3,
-               [T.WATER,T.UWATER,T.BEACH],
+               [T.WATER,T.DEEP_WATER,T.UWATER,T.BEACH,T.GRASS,T.SAND],
                2, 0,
                '#607868',
                null],
@@ -218,10 +217,10 @@ const MON = {
                5, 6, 3, 2,  3, 2,
                46, [12,30],
                ['undead','aquatic'], DMG.BLADE,
-               [T.UWATER,T.STONE], LAYER_UNDER,
+               [T.UWATER,T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
                30, 4,
                1, 3,
-               [T.UWATER,T.STONE],
+               [T.UWATER,T.CAVE_FLOOR],
                3, 0,
                '#6890a8',
                null],
@@ -245,7 +244,7 @@ const DREAD_KING = ['The Dread King','DREAD_KING',
                [], LAYER_UNDER,
                95, 7,
                2, 8,
-               [T.STONE,T.CAVE],  // throne area
+               [T.CAVE_FLOOR,T.ROCK],  // throne area
                99, 99,              // never gives up
                '#6a6080',
                {critMul:2.0}];
@@ -336,10 +335,10 @@ MON.dire_wolf = ['Dire Wolf',      'WOLF',
                5, 5, 4, 3,  4, 2,
                22, [6,14],
                ['flesh','beast'], DMG.BLADE,
-               [T.FOREST,T.MOUNTAIN], LAYER_SURFACE,
+               [T.FOREST],            LAYER_SURFACE,
                45, 4,
                2, 5,
-               [T.FOREST,T.MOUNTAIN,T.PLAINS],
+               [T.FOREST,T.GRASS,T.MUD,T.DIRT,T.DIRT_ROAD,T.BEACH],
                5, 2,
                '#5a4840',           // darker brown
                null];
@@ -429,11 +428,26 @@ function spawnMonster(key){
   } else if (personality === 'wary' && key === 'goblin'){
     m.hostility = 1; m.aggroRange = Math.max(2, m.aggroRange - 2);
   } else if (personality === 'explorer' && key === 'goblin'){
-    m.territory = [T.FOREST, T.PLAINS, T.MOUNTAIN]; // explores beyond forest
+    m.territory = [T.FOREST, T.GRASS, T.ROCK]; // explores beyond forest
   } else if (personality === 'skulker' && key === 'goblin'){
     m.percept += 5; m.dex += 1;
   } else if (personality === 'spore_heavy' && key === 'mushroom'){
     m.sporeHeavy = true;  // flag checked during poison touch
+  }
+  // Wolf biome avoidance: wolves avoid desert and rock, give up chase into those biomes.
+  // Pack/leader wolves range wider, lone/wary stick closer to forest.
+  if (key === 'wolf' || key === 'dire_wolf'){
+    m.avoidBiomes = [T.SAND, T.ROCK];  // won't chase deep into desert or stone
+    m.avoidLeash = 3;  // give up after 3 tiles into avoided terrain
+    if (personality === 'lone_hunter' || personality === 'skittish'){
+      m.chase = Math.max(2, m.chase - 2);  // shorter chase range
+      m.avoidLeash = 2;
+    } else if (personality === 'leader'){
+      m.chase += 2;  // pack leaders range wider
+      m.avoidLeash = 5;
+    } else if (personality === 'pair_bond'){
+      m.avoidLeash = 4;
+    }
   }
   m.hpMax = monHP(m);
   m.hp = m.hpMax;

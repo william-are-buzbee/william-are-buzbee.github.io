@@ -18,7 +18,9 @@ export { validateMonsterSpawn, filterSpawnCandidates, populateMonsters } from '.
 // Re-export from sub-modules so existing consumers can keep importing from world-gen
 export { makeSurface, placeDirtRoads } from './surface-gen.js';
 export { makeUnderground, makeLavaLayer, playableRadius, carveCorridors, carveBetween } from './underground-gen.js';
-export { makeTownCell, makeShopInterior } from './town-gen.js';
+// town-gen.js no longer exports interior-layer generators.
+// Surface town placement is handled by placeStartingTown in town-gen.js,
+// called from world-logic.js during initWorld.
 
 // ==================== LAYER BOOTSTRAPPING ====================
 export function addLayer(w, h) {

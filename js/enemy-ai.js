@@ -36,7 +36,7 @@ function biomeAt(layer, x, y){
 // ==================== AQUATIC MOVEMENT LOCK ====================
 // Fish / aquatic enemies (not crabs) are confined to water tiles.
 // They can melee-attack an adjacent target on land but never step onto it.
-const WATER_TILES = new Set([T.WATER, T.DEEP, T.UWATER]);
+const WATER_TILES = new Set([T.WATER, T.DEEP_WATER, T.UWATER]);
 
 function isWaterTile(layer, x, y){
   if (!inBounds(layer, x, y)) return false;
@@ -46,6 +46,108 @@ function isWaterTile(layer, x, y){
 /** True if this monster must stay on water tiles. */
 function isWaterLocked(mon){
   return mon.tags && mon.tags.includes('aquatic') && mon.key !== 'cave_crab';
+}
+
+// ==================== BIOME LEASHING ====================
+// Species-specific leash: max tiles a creature will stray from its home biome.
+// Measured from the nearest tile of the home biome, not from spawn point.
+
+function getLeashDist(mon){
+  switch (mon.key){
+    case 'mushroom':  return 0;  // NEVER leave fungal ground
+    case 'scorpion':  return 2;
+    case 'lurker':    return 2;
+    case 'mummy':     return 3;
+    case 'wolf': case 'dire_wolf':
+      if (mon.personality === 'leader')      return 18;
+      if (mon.personality === 'pair_bond')   return 15;
+      if (mon.personality === 'lone_hunter' || mon.personality === 'skittish') return 8;
+      return 10;
+    case 'hare':       return 99; // flee AI handles drift
+    case 'cave_eel': case 'deep_squid': case 'drowned': return 0; // water-locked
+    case 'cave_crab':  return 5;
+    default:           return 5;
+  }
+}
+
+/** Which tile types count as "home" for leash-distance measurement. */
+function getHomeTiles(mon){
+  switch (mon.key){
+    case 'mushroom':  return [T.MUSHFOREST, T.FUNGAL_GRASS];
+    case 'scorpion': case 'lurker': case 'mummy': return [T.SAND];
+    case 'wolf': case 'dire_wolf': return [T.FOREST];
+    case 'cave_crab':  return [T.WATER, T.DEEP_WATER, T.UWATER, T.BEACH];
+    case 'hare':       return [T.GRASS, T.FOREST, T.DIRT, T.DIRT_ROAD];
+    default:           return mon.biomes && mon.biomes.length ? [...mon.biomes] : [];
+  }
+}
+
+/** Tiles a creature will NEVER step onto, regardless of leash distance. */
+function getHardAvoidTiles(mon){
+  if (mon.key === 'wolf' || mon.key === 'dire_wolf') return [T.SAND, T.ROCK];
+  if (mon.key === 'hare') return [T.SAND, T.ROCK, T.WATER, T.DEEP_WATER, T.UWATER];
+  return null;
+}
+
+/** True if (x,y) is a tile this monster must never enter. */
+function isForbiddenTile(mon, layer, x, y){
+  if (!inBounds(layer, x, y)) return true;
+  const g = worlds[layer][y][x];
+  // Mushrooms: fungal-only
+  if (mon.key === 'mushroom'){
+    const b = biomeAt(layer, x, y);
+    const fungal = [T.MUSHFOREST, T.FUNGAL_GRASS];
+    return !fungal.includes(b) && !fungal.includes(g);
+  }
+  const avoid = getHardAvoidTiles(mon);
+  if (avoid && avoid.includes(g)) return true;
+  return false;
+}
+
+/** Chebyshev distance from monster to nearest home-biome tile. 0 = currently on home. */
+function distFromHomeBiome(mon, layer){
+  const homeTiles = getHomeTiles(mon);
+  if (!homeTiles.length) return 0;
+  // Check current tile (cover then ground)
+  if (!inBounds(layer, mon.x, mon.y)) return 999;
+  const curBiome = biomeAt(layer, mon.x, mon.y);
+  const curGround = worlds[layer][mon.y][mon.x];
+  if (homeTiles.includes(curBiome) || homeTiles.includes(curGround)) return 0;
+  // Spiral scan outward
+  const maxScan = 30;
+  for (let r = 1; r <= maxScan; r++){
+    for (let dy = -r; dy <= r; dy++){
+      for (let dx = -r; dx <= r; dx++){
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const nx = mon.x + dx, ny = mon.y + dy;
+        if (!inBounds(layer, nx, ny)) continue;
+        const b = biomeAt(layer, nx, ny);
+        const g = worlds[layer][ny][nx];
+        if (homeTiles.includes(b) || homeTiles.includes(g)) return r;
+      }
+    }
+  }
+  return maxScan + 1;
+}
+
+/** Position of nearest home-biome tile for retreat pathfinding. */
+function nearestHomeTilePos(mon, layer){
+  const homeTiles = getHomeTiles(mon);
+  if (!homeTiles.length) return null;
+  const maxScan = 30;
+  for (let r = 1; r <= maxScan; r++){
+    for (let dy = -r; dy <= r; dy++){
+      for (let dx = -r; dx <= r; dx++){
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const nx = mon.x + dx, ny = mon.y + dy;
+        if (!inBounds(layer, nx, ny)) continue;
+        const b = biomeAt(layer, nx, ny);
+        const g = worlds[layer][ny][nx];
+        if (homeTiles.includes(b) || homeTiles.includes(g)) return { x: nx, y: ny };
+      }
+    }
+  }
+  return { x: mon.homeX, y: mon.homeY }; // fallback to spawn
 }
 
 /** True if the player is adjacent to at least one water tile (reachable attack position). */
@@ -70,6 +172,12 @@ function playerAdjacentToWater(layer){
     state.player.fed = Math.max(0, state.player.fed - 1);
     state.player.fedProgress -= 10;
   }
+  // Clamp: discard banked progress once starving so it doesn't
+  // instantly re-drain after eating
+  if (state.player.fed <= 0){
+    state.player.fed = 0;
+    state.player.fedProgress = 0;
+  }
   if (state.player.fed === 15 && !state.player._warnedHungry){
     log('You grow hungry.', 'warn'); state.player._warnedHungry = true;
   }
@@ -80,12 +188,15 @@ function playerAdjacentToWater(layer){
     state.player.starveTurns = (state.player.starveTurns||0) + 1;
     if (state.player.starveTurns >= 3){  // 1 HP per 3 turns of starvation
       state.player.starveTurns = 0;
-      if (state.player.hp > 1){
-        state.player.hp -= 1;
-        log('Starvation wears you down.', 'warn');
-      } else {
-        log('You cannot go on like this...', 'warn');
+      state.player.hp -= 1;
+      if (state.player.hp <= 0){
+        state.player.hp = 0;
+        log('You collapse from starvation.', 'dead');
+        state.player.deathCause = 'starvation';
+        if (_onPlayerDeathCallback) _onPlayerDeathCallback();
+        return;
       }
+      log('Starvation wears you down.', 'warn');
     }
   } else {
     state.player.starveTurns = 0;
@@ -103,8 +214,9 @@ function playerAdjacentToWater(layer){
   }
 
   // Player effects tick
-  state.player.effects = state.player.effects.filter(e => {
-    if (e.type === 'stealth') return true;
+  const survivingEffects = [];
+  for (const e of state.player.effects){
+    if (e.type === 'stealth'){ survivingEffects.push(e); continue; }
     if (e.type === 'poison'){
       const resist = poisonResistance(player);
       const reduction = 1 - resist.damageReduction;
@@ -113,14 +225,20 @@ function playerAdjacentToWater(layer){
       // Flat damage
       const flatDmg = Math.max(0, Math.round((e.flatDmg || 1) * reduction));
       const totalPoisonDmg = Math.max(1, pctDmg + flatDmg);
-      if (state.player.hp > 1){
-        state.player.hp = Math.max(1, state.player.hp - totalPoisonDmg);
-        log(`Poison bites. [-${totalPoisonDmg} HP]`, 'dmg');
+      state.player.hp -= totalPoisonDmg;
+      log(`Poison bites. [-${totalPoisonDmg} HP]`, 'dmg');
+      if (state.player.hp <= 0){
+        state.player.hp = 0;
+        log('The venom claims you.', 'dead');
+        state.player.deathCause = 'poison';
+        if (_onPlayerDeathCallback) _onPlayerDeathCallback();
+        return;
       }
     }
     e.turns--;
-    return e.turns > 0;
-  });
+    if (e.turns > 0) survivingEffects.push(e);
+  }
+  state.player.effects = survivingEffects;
 
   // Enemies act — only on current layer, town cells are safe
   if (!isTownCell(state.player.layer)){
@@ -189,6 +307,35 @@ function enemyAct(mon){
     const mt = inBounds(state.player.layer, mon.x, mon.y) ? worlds[state.player.layer][mon.y][mon.x] : -1;
     if (mt === T.WATER || mt === T.UWATER || mt === T.BEACH){
       mon.hp = Math.min(mon.hpMax, mon.hp + 1);
+    }
+  }
+
+  // ====== BIOME LEASH ENFORCEMENT ======
+  // If the creature is beyond its leash distance from home biome, redirect
+  // toward home. It can still melee if adjacent but won't chase further.
+  if (!isWaterLocked(mon) && !mon.isBoss){
+    const leashDist = getLeashDist(mon);
+    const homeDist  = distFromHomeBiome(mon, state.player.layer);
+    if (homeDist > leashDist){
+      // Fight back if adjacent (melee only — no pursuit)
+      if (d <= 1 && (mon.wasAttacked || mon.alerted)){
+        if (mon.key === 'mushroom') mushroomTouch(mon);
+        else monsterMelee(mon);
+      }
+      // Retreat toward nearest home tile
+      const home = nearestHomeTilePos(mon, state.player.layer);
+      if (home) moveMonsterToward(mon, home.x, home.y);
+      // Reset pursuit state
+      mon.aiState = 'idle';
+      mon.alerted = false;
+      mon.chaseTurnsLeft = 0;
+      mon.searchTurnsLeft = 0;
+      mon.wasAttacked = false;
+      if (mon.key === 'mushroom'){
+        mon.swarmPhase = 'passive';
+        mon.coalesceTick = 0;
+      }
+      return;
     }
   }
 
@@ -416,6 +563,15 @@ function enemyAct(mon){
       }
       log(`${mon.name} spotted you!`, 'warn');
     }
+    // Don't initiate chase if already at leash limit
+    if (mon.chase < 99){
+      const leashDist = getLeashDist(mon);
+      const homeDist  = distFromHomeBiome(mon, state.player.layer);
+      if (homeDist >= leashDist){
+        if (rand() < 0.15) wanderInTerritory(mon);
+        return;
+      }
+    }
     // Transition to chase
     mon.aiState = 'chase';
     mon.alerted = true;
@@ -426,9 +582,6 @@ function enemyAct(mon){
 
   // ====== CHASE STATE ======
   if (mon.aiState === 'chase'){
-    // If player left monster's territory and monster is aggressive (not persistent like boss),
-    // give up if monster has already moved out of home biome
-    // BUT: if monster was attacked, don't give up while close to the attacker
     // Treants NEVER leave forest, even when attacked
     if (mon.key === 'treant' && !monInOwnTerritory(mon)){
       if (d <= 8) log(`${mon.name} retreats into the trees.`, 'muted');
@@ -439,15 +592,31 @@ function enemyAct(mon){
       mon.searchTurnsLeft = 0;
       return;
     }
-    if (!playerInTerritory(mon) && !monInOwnTerritory(mon) && mon.chase < 99){
-      if (!mon.wasAttacked || d > 2){
-        if (d <= 8) log(`${mon.name} turns back.`, 'muted');
-        mon.aiState = 'idle';
-        mon.alerted = false;
-        mon.chaseTurnsLeft = 0;
-        mon.searchTurnsLeft = 0;
-        return;
+    // Biome avoidance — wolves (and any monster with avoidBiomes) give up
+    // chase when they've wandered too deep into avoided terrain.
+    if (mon.avoidBiomes && mon.avoidBiomes.length && mon.chase < 99){
+      const monGround = worlds[state.player.layer][mon.y][mon.x];
+      if (mon.avoidBiomes.includes(monGround)){
+        mon._avoidTicks = (mon._avoidTicks || 0) + 1;
+        if (mon._avoidTicks >= (mon.avoidLeash || 3)){
+          if (d <= 8) log(`${mon.name} turns back.`, 'muted');
+          mon.aiState = 'idle';
+          mon.alerted = false;
+          mon.chaseTurnsLeft = 0;
+          mon.searchTurnsLeft = 0;
+          mon._avoidTicks = 0;
+          return;
+        }
+      } else {
+        mon._avoidTicks = 0;  // reset when back on comfortable ground
       }
+    }
+    // Soft territory drain: when both monster and player are outside the
+    // monster's preferred territory, chase turns tick down faster (2× rate).
+    // This is a gentle leash, not a hard stop — the monster still fights
+    // normally, it just loses interest sooner.
+    if (!monInOwnTerritory(mon) && !playerInTerritory(mon) && mon.chase < 99){
+      mon.chaseTurnsLeft = Math.max(0, mon.chaseTurnsLeft - 1);  // extra drain
     }
     if (canSeePlayer(mon)){
       mon.chaseTurnsLeft = mon.chase;  // refresh on sight
@@ -686,6 +855,8 @@ function wanderInTerritory(mon){
     if (!isWalkable(ground, cover)) continue;
     // Water-locked: only step onto water tiles
     if (waterLock && !WATER_TILES.has(ground)) continue;
+    // Biome leash: never step onto forbidden tiles
+    if (isForbiddenTile(mon, state.player.layer, nx, ny)) continue;
     if (monsterAt(nx, ny, state.player.layer)) continue;
     if (nx === state.player.x && ny === state.player.y) continue;
     // Prefer staying in home territory — check biome from cover || ground
@@ -711,6 +882,8 @@ function moveMonsterToward(mon, tx, ty){
     // Water-locked monsters can melee the player from water, but never step on land
     if (nx === state.player.x && ny === state.player.y){ monsterMelee(mon); return; }
     if (waterLock && !WATER_TILES.has(worlds[state.player.layer][ny][nx])) continue;
+    // Biome leash: never step onto forbidden tiles
+    if (isForbiddenTile(mon, state.player.layer, nx, ny)) continue;
     if (monsterAt(nx, ny, state.player.layer)) continue;
     mon.x = nx; mon.y = ny;
     return;

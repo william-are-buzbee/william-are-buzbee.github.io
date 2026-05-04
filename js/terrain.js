@@ -43,27 +43,48 @@ export const T = {
 
 export const TERRAIN_INFO = {
   // ---- GROUND types ----
-  [T.GRASS]:     {name:'grass',         sprite:'GRASS',      palette:'plains',     walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.SAND]:      {name:'sand',          sprite:'SAND',       palette:'desert',     walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.ROCK]:      {name:'rock',          sprite:'ROCK',       palette:'rock',       walk:true,  cover:10,  terrainLayer:'ground'},
-  [T.WATER]:     {name:'water',         sprite:'WATER',      palette:'water',      walk:false, cover:0,   terrainLayer:'ground'},
-  [T.DEEP_WATER]:{name:'deep water',    sprite:'DEEP_WATER', palette:'deep',       walk:false, cover:0,   terrainLayer:'ground'},
-  [T.ROAD]:      {name:'road',          sprite:'ROAD',       palette:'road',       walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.BEACH]:     {name:'beach',         sprite:'BEACH',      palette:'beach',      walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.CAVE_WALL]: {name:'cave wall',     sprite:'CAVE_WALL',  palette:'stone',      walk:false, cover:0,   terrainLayer:'ground'},
-  [T.CAVE_FLOOR]:{name:'cave floor',    sprite:'CAVE_FLOOR', palette:'cave',       walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.LAVA]:      {name:'lava',          sprite:'LAVA',       palette:'lava',       walk:false, cover:0,   terrainLayer:'ground'},
-  [T.UWATER]:    {name:'dark water',    sprite:'DEEP_WATER', palette:'uwater',     walk:false, cover:0,   terrainLayer:'ground'},
-  [T.WOOD_FLOOR]:{name:'wood floor',    sprite:'WOOD_FLOOR', palette:'wood_floor', walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.WALL]:      {name:'wall',          sprite:'CAVE_WALL',  palette:'stone',      walk:false, cover:0,   terrainLayer:'ground'},
-  [T.DIRT_ROAD]: {name:'dirt path',     sprite:'DIRT_ROAD',  palette:'dirt_road',  walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.RUIN_FLOOR]:{name:'ancient floor', sprite:'RUIN_FLOOR', palette:'ruin',       walk:true,  cover:10,  terrainLayer:'ground'},
-  [T.SHOP_INSIDE]:{name:'shop floor',   sprite:'SHOP_FLOOR', palette:'wood_floor', walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.VOID]:      {name:'void',          sprite:'VOID',       palette:'void',       walk:false, cover:0,   terrainLayer:'ground', transparent:false},
-  [T.CAVE_ROCK]: {name:'cave rock',     sprite:'CAVE_ROCK',  palette:'cave_rock',  walk:false, cover:0,   terrainLayer:'ground', transparent:false},
-  [T.MUD]:       {name:'mud',           sprite:'MUD',        palette:'mud',        walk:true,  cover:0,   terrainLayer:'ground'},
-  [T.FUNGAL_GRASS]:{name:'fungal grass',sprite:'FUNGAL_GRASS',palette:'fungal_grass',walk:true,cover:0,   terrainLayer:'ground'},
-  [T.DIRT]:      {name:'dirt',          sprite:'DIRT',       palette:'dirt',       walk:true,  cover:0,   terrainLayer:'ground'},
+  [T.GRASS]:     {name:'grass',         sprite:'GRASS',      palette:'plains',     walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[T.FOREST,T.MUSHFOREST,T.WHEAT,T.BOULDER,T.ROCK_OUTCROP,T.RUIN_WALL,T.RUIN_PILLAR]},
+  [T.SAND]:      {name:'sand',          sprite:'SAND',       palette:'desert',     walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[T.BOULDER,T.ROCK_OUTCROP,T.RUIN_WALL,T.RUIN_PILLAR]},
+  [T.ROCK]:      {name:'rock',          sprite:'ROCK',       palette:'rock',       walk:true,  cover:10,  terrainLayer:'ground',
+                  allowedCover:[T.BOULDER,T.ROCK_OUTCROP,T.RUIN_WALL,T.RUIN_PILLAR]},
+  [T.WATER]:     {name:'water',         sprite:'WATER',      palette:'water',      walk:false, cover:0,   terrainLayer:'ground',
+                  allowedCover:[]},
+  [T.DEEP_WATER]:{name:'deep water',    sprite:'DEEP_WATER', palette:'deep',       walk:false, cover:0,   terrainLayer:'ground',
+                  allowedCover:[]},
+  [T.ROAD]:      {name:'road',          sprite:'ROAD',       palette:'road',       walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[]},
+  [T.BEACH]:     {name:'beach',         sprite:'BEACH',      palette:'beach',      walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[T.BOULDER,T.ROCK_OUTCROP,T.RUIN_WALL,T.RUIN_PILLAR]},
+  [T.CAVE_WALL]: {name:'cave wall',     sprite:'CAVE_WALL',  palette:'cave_wall',  walk:false, cover:0,   terrainLayer:'ground',
+                  allowedCover:[]},
+  [T.CAVE_FLOOR]:{name:'cave floor',    sprite:'CAVE_FLOOR', palette:'cave',       walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[T.MUSHFOREST,T.BOULDER,T.ROCK_OUTCROP,T.RUIN_PILLAR]},
+  [T.LAVA]:      {name:'lava',          sprite:'LAVA',       palette:'lava',       walk:false, cover:0,   terrainLayer:'ground',
+                  allowedCover:[]},
+  [T.UWATER]:    {name:'dark water',    sprite:'DEEP_WATER', palette:'uwater',     walk:false, cover:0,   terrainLayer:'ground',
+                  allowedCover:[]},
+  [T.WOOD_FLOOR]:{name:'wood floor',    sprite:'WOOD_FLOOR', palette:'wood_floor', walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[]},
+  [T.WALL]:      {name:'wall',          sprite:'CAVE_WALL',  palette:'stone',      walk:false, cover:0,   terrainLayer:'ground',
+                  allowedCover:[]},
+  [T.DIRT_ROAD]: {name:'dirt path',     sprite:'DIRT_ROAD',  palette:'dirt_road',  walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[T.FOREST,T.MUSHFOREST,T.WHEAT,T.BOULDER,T.ROCK_OUTCROP,T.RUIN_WALL,T.RUIN_PILLAR]},
+  [T.RUIN_FLOOR]:{name:'ancient floor', sprite:'RUIN_FLOOR', palette:'ruin',       walk:true,  cover:10,  terrainLayer:'ground',
+                  allowedCover:[T.BOULDER,T.ROCK_OUTCROP,T.RUIN_WALL,T.RUIN_PILLAR]},
+  [T.SHOP_INSIDE]:{name:'shop floor',   sprite:'SHOP_FLOOR', palette:'wood_floor', walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[]},
+  [T.VOID]:      {name:'void',          sprite:'VOID',       palette:'void',       walk:false, cover:0,   terrainLayer:'ground', transparent:false,
+                  allowedCover:[]},
+  [T.CAVE_ROCK]: {name:'cave rock',     sprite:'CAVE_ROCK',  palette:'cave_rock',  walk:false, cover:0,   terrainLayer:'ground', transparent:false,
+                  allowedCover:[]},
+  [T.MUD]:       {name:'mud',           sprite:'MUD',        palette:'mud',        walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[T.FOREST,T.MUSHFOREST,T.WHEAT,T.RUIN_WALL,T.RUIN_PILLAR]},
+  [T.FUNGAL_GRASS]:{name:'fungal grass',sprite:'FUNGAL_GRASS',palette:'fungal_grass',walk:true,cover:0,   terrainLayer:'ground',
+                  allowedCover:[T.MUSHFOREST,T.BOULDER,T.ROCK_OUTCROP,T.WHEAT,T.RUIN_WALL,T.RUIN_PILLAR]},
+  [T.DIRT]:      {name:'dirt',          sprite:'DIRT',       palette:'dirt',       walk:true,  cover:0,   terrainLayer:'ground',
+                  allowedCover:[T.FOREST,T.MUSHFOREST,T.WHEAT,T.BOULDER,T.ROCK_OUTCROP,T.RUIN_WALL,T.RUIN_PILLAR]},
 
   // ---- COVER types ----
   [T.FOREST]:    {name:'forest',        sprite:'FOREST',   palette:'forest',   walk:true,  cover:45,  terrainLayer:'cover', overlay:true},
@@ -107,6 +128,15 @@ export function isOverlay(t){ return !!terrainInfo(t).overlay; }
 export function noRotate(t){ return !!terrainInfo(t).noRotate; }
 export function isGround(t){ return terrainInfo(t).terrainLayer === 'ground'; }
 export function isCover(t){ return terrainInfo(t).terrainLayer === 'cover'; }
+
+/** Check whether a cover type may be placed on a given ground type.
+ *  Returns true if the ground's allowedCover list includes the cover,
+ *  or if no allowedCover list is defined (permissive fallback). */
+export function isCoverAllowedOnGround(groundType, coverType){
+  const info = TERRAIN_INFO[groundType];
+  if (!info || !info.allowedCover) return true; // no list → permissive
+  return info.allowedCover.includes(coverType);
+}
 
 // ==================== COMPOSITE QUERIES (ground + cover) ====================
 // These take ground and optional cover, returning the combined result.

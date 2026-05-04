@@ -1,5 +1,5 @@
 // ==================== WORLD LOGIC — placement, spawning, init ====================
-import { state, worlds, covers, features, monsters, cellKeyToLayer, activateLayer } from './state.js';
+import { state, worlds, covers, features, monsters, activateLayer } from './state.js';
 import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, DIFFICULTIES, LAYER_META, getAtmosphere } from './constants.js';
 import { T, isWalkable, isCover } from './terrain.js';
 import { rand, randi, choice } from './rng.js';
@@ -10,9 +10,9 @@ import { worldDims, getFeature, setFeature, inBounds, chebyshev, getCover, setCo
 import { generateLayer } from './world-gen.js';
 import { makeSurface } from './surface-gen.js';
 import { makeUnderground, carveBetween } from './underground-gen.js';
-import { makeTownCell } from './town-gen.js';
+import { placeStartingTown, initScholarInventory } from './town-gen.js';
 import {
-  clearPlacementState, registerTownPosition, registerStructurePosition,
+  clearPlacementState, registerStructurePosition,
   runStructurePlacement,
 } from './structures.js';
 
@@ -114,88 +114,18 @@ export function placeStructures(){
   const searchR = Math.max(5, Math.round(Math.min(W_SURF, H_SURF) * 0.22));
   const searchRSm = Math.max(4, Math.round(Math.min(W_SURF, H_SURF) * 0.16));
 
-  // Millhaven (starter, plains) — center-south
-  const mill = findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.50), Math.floor(H_SURF * 0.55), t=>t===T.PLAINS, searchR);
-  if (mill){
-    const [x,y] = mill;
-    placeAt(LAYER_SURFACE, x, y, T.TOWN, {type:'town', townKey:'millhaven'});
-    state.player.startX = x; state.player.startY = y+1;
-    registerTownPosition('millhaven', x, y);
-  }
-  // Thornwell — NW forest
-  const thorn = findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.39), Math.floor(H_SURF * 0.24), t=>t===T.PLAINS, searchRSm)
-             || findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.39), Math.floor(H_SURF * 0.24), (t,x,y,c)=>t===T.PLAINS && (c===T.FOREST||c===T.SCATTERED_TREES), searchRSm);
-  if (thorn){
-    const [x,y] = thorn;
-    for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
-      const nx=x+dx, ny=y+dy;
-      if (inBounds(LAYER_SURFACE,nx,ny)){
-        // Clear forest cover around town placement
-        if (covers[LAYER_SURFACE] && (covers[LAYER_SURFACE][ny][nx] === T.FOREST || covers[LAYER_SURFACE][ny][nx] === T.SCATTERED_TREES)){
-          covers[LAYER_SURFACE][ny][nx] = 0;
-        }
-      }
-    }
-    placeAt(LAYER_SURFACE, x, y, T.TOWN, {type:'town', townKey:'thornwell'});
-    registerTownPosition('thornwell', x, y);
-  }
-  // Dunegate — E desert
-  const dune = findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.67), Math.floor(H_SURF * 0.54), t=>t===T.DESERT, searchRSm)
-            || findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.67), Math.floor(H_SURF * 0.54), t=>t===T.PLAINS, searchRSm);
-  if (dune){
-    const [x,y] = dune;
-    placeAt(LAYER_SURFACE, x, y, T.TOWN, {type:'town', townKey:'dunegate'});
-    registerTownPosition('dunegate', x, y);
-  }
-  // Karst Hollow — SW mountain
-  const karst = findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.27), Math.floor(H_SURF * 0.67), t=>t===T.PLAINS||t===T.MOUNTAIN, searchR);
-  if (karst){
-    const [x,y] = karst;
-    for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
-      const nx=x+dx, ny=y+dy;
-      if (inBounds(LAYER_SURFACE,nx,ny) && worlds[LAYER_SURFACE][ny][nx]===T.MOUNTAIN){
-        worlds[LAYER_SURFACE][ny][nx] = T.PLAINS;
-      }
-    }
-    placeAt(LAYER_SURFACE, x, y, T.TOWN, {type:'town', townKey:'karst'});
-    registerTownPosition('karst', x, y);
-  }
-
-  // Fix GATE return coords
-  ['millhaven','thornwell','dunegate','karst'].forEach(tk => {
-    const layer = cellKeyToLayer[tk];
-    if (layer == null) return;
-    let townX=-1, townY=-1;
-    for (let y=0;y<H_SURF;y++) for (let x=0;x<W_SURF;x++){
-      const f = getFeature(LAYER_SURFACE, x, y);
-      if (f && f.type === 'town' && f.townKey === tk){ townX=x; townY=y; break; }
-    }
-    if (townX < 0) return;
-    for (const k in features[layer]){
-      const f = features[layer][k];
-      if (f.type === 'gate'){
-        f.returnLayer = LAYER_SURFACE;
-        f.returnX = townX;
-        f.returnY = townY+1;
-      }
-    }
-  });
+  // (Starting town is placed by placeStartingTown in initWorld — no cover
+  // tile towns or interior layers needed.)
 
   // Sunward Hold — W
   const sunward = findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.16), Math.floor(H_SURF * 0.34), t=>t===T.PLAINS||t===T.MOUNTAIN, searchR);
+    Math.floor(W_SURF * 0.16), Math.floor(H_SURF * 0.34), t=>t===T.GRASS||t===T.ROCK, searchR);
   if (sunward){
     const [x,y] = sunward;
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
       const nx=x+dx, ny=y+dy;
-      if (inBounds(LAYER_SURFACE,nx,ny) && worlds[LAYER_SURFACE][ny][nx]===T.MOUNTAIN){
-        worlds[LAYER_SURFACE][ny][nx] = T.PLAINS;
+      if (inBounds(LAYER_SURFACE,nx,ny) && worlds[LAYER_SURFACE][ny][nx]===T.ROCK){
+        worlds[LAYER_SURFACE][ny][nx] = T.GRASS;
       }
     }
     placeAt(LAYER_SURFACE, x, y, T.CASTLE, {
@@ -211,44 +141,44 @@ export function placeStructures(){
   // Blackspire Keep — SE
   const bsR = Math.max(6, Math.round(Math.min(W_SURF, H_SURF) * 0.27));
   const bs = findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.61), Math.floor(H_SURF * 0.79), t=>t===T.PLAINS||t===T.DESERT, bsR);
+    Math.floor(W_SURF * 0.61), Math.floor(H_SURF * 0.79), t=>t===T.GRASS||t===T.SAND, bsR);
   if (bs){
     const [x,y] = bs;
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
       const nx=x+dx, ny=y+dy;
       if (inBounds(LAYER_SURFACE,nx,ny) && !isWalkable(worlds[LAYER_SURFACE][ny][nx])){
-        worlds[LAYER_SURFACE][ny][nx] = T.PLAINS;
+        worlds[LAYER_SURFACE][ny][nx] = T.GRASS;
       }
     }
     placeAt(LAYER_SURFACE, x, y, T.BLACKSPIRE, {
       type:'castle', castleKey:'blackspire', name:'Blackspire Keep', descent:true,
     });
     registerStructurePosition('blackspire_keep', x, y, LAYER_SURFACE);
-    const sn = findSpotNear(LAYER_SURFACE, x-2, y-2, t=>t===T.PLAINS||t===T.DESERT, 10);
+    const sn = findSpotNear(LAYER_SURFACE, x-2, y-2, t=>t===T.GRASS||t===T.SAND, 10);
     if (sn) placeAt(LAYER_SURFACE, sn[0], sn[1], T.SIGN, {type:'sign', text:SIGN_TEXTS.castle_warn});
   }
 
   // Mountain cave entrance — SW
   const cave = findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.31), Math.floor(H_SURF * 0.63), t=>t===T.MOUNTAIN, searchR);
+    Math.floor(W_SURF * 0.31), Math.floor(H_SURF * 0.63), t=>t===T.ROCK, searchR);
   if (cave){
     const [x,y] = cave;
-    const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
-               || findSpot(LAYER_UNDER, t=>t===T.CAVE, 500)
+    const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE_FLOOR, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
+               || findSpot(LAYER_UNDER, t=>t===T.CAVE_FLOOR, 500)
                || [W_UNDER>>1, H_UNDER>>1];
     placeAt(LAYER_SURFACE, x, y, T.STAIRS_DOWN, {
       type:'stairs', dir:'down', targetLayer:LAYER_UNDER, targetX:uSpot[0], targetY:uSpot[1]
     });
     for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
       const nx=uSpot[0]+dx, ny=uSpot[1]+dy;
-      if (inBounds(LAYER_UNDER,nx,ny) && worlds[LAYER_UNDER][ny][nx]===T.STONE){
-        worlds[LAYER_UNDER][ny][nx] = T.CAVE;
+      if (inBounds(LAYER_UNDER,nx,ny) && worlds[LAYER_UNDER][ny][nx]===T.CAVE_WALL){
+        worlds[LAYER_UNDER][ny][nx] = T.CAVE_FLOOR;
       }
     }
     placeAt(LAYER_UNDER, uSpot[0], uSpot[1], T.STAIRS_UP, {
       type:'stairs', dir:'up', targetLayer:LAYER_SURFACE, targetX:x, targetY:y
     });
-    const sn2 = findSpotNear(LAYER_SURFACE, x-2, y+2, t=>t===T.PLAINS||t===T.MOUNTAIN, 8);
+    const sn2 = findSpotNear(LAYER_SURFACE, x-2, y+2, t=>t===T.GRASS||t===T.ROCK, 8);
     if (sn2) placeAt(LAYER_SURFACE, sn2[0], sn2[1], T.SIGN, {type:'sign', text:SIGN_TEXTS.cave_warn});
   }
 
@@ -261,7 +191,7 @@ export function placeStructures(){
 
     for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
       const nx=throneX+dx, ny=throneY+dy;
-      if (inBounds(LAYER_UNDER,nx,ny)) worlds[LAYER_UNDER][ny][nx] = T.STONE;
+      if (inBounds(LAYER_UNDER,nx,ny)) worlds[LAYER_UNDER][ny][nx] = T.ROCK;
     }
     let nearestX = W_UNDER >> 1, nearestY = H_UNDER >> 1;
     let nearestDist = Infinity;
@@ -275,7 +205,7 @@ export function placeStructures(){
     }
     carveBetween(worlds[LAYER_UNDER], W_UNDER, H_UNDER, throneX, throneY - 3, nearestX, nearestY);
     const stairUpX = throneX, stairUpY = throneY - 4;
-    if (inBounds(LAYER_UNDER, stairUpX, stairUpY)) worlds[LAYER_UNDER][stairUpY][stairUpX] = T.CAVE;
+    if (inBounds(LAYER_UNDER, stairUpX, stairUpY)) worlds[LAYER_UNDER][stairUpY][stairUpX] = T.CAVE_FLOOR;
     placeAt(LAYER_UNDER, stairUpX, stairUpY, T.STAIRS_UP, {
       type:'stairs', dir:'up', targetLayer:LAYER_SURFACE, targetX:bsX, targetY:bsY
     });
@@ -288,7 +218,7 @@ export function placeStructures(){
     const dk = spawnMonster('dread_king');
     dk.x = throneX; dk.y = throneY+1;
     dk.homeX = dk.x; dk.homeY = dk.y;
-    worlds[LAYER_UNDER][dk.y][dk.x] = T.STONE;
+    worlds[LAYER_UNDER][dk.y][dk.x] = T.ROCK;
     dk.isBoss = true;
     dk.hpMax = Math.round(dk.hpMax * DIFFICULTIES[state.difficulty].enemyHp);
     dk.hp = dk.hpMax;
@@ -304,16 +234,16 @@ export function placeStructures(){
     const neCave = findSpotNear(LAYER_SURFACE,
       Math.floor(W_SURF * 0.65) + randi(neScatterX),
       Math.floor(H_SURF * 0.07) + randi(neScatterY),
-      t=>t===T.STONE||t===T.CAVE, neCaveSearchR);
+      t=>t===T.ROCK||t===T.CAVE_FLOOR, neCaveSearchR);
     if (neCave){
       const [x,y] = neCave;
-      const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE||t===T.STONE, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
-                 || findSpot(LAYER_UNDER, t=>t===T.CAVE||t===T.STONE, 500);
+      const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE_FLOOR||t===T.ROCK, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
+                 || findSpot(LAYER_UNDER, t=>t===T.CAVE_FLOOR||t===T.ROCK, 500);
       if (uSpot){
         for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
           const nx=uSpot[0]+dx, ny=uSpot[1]+dy;
-          if (inBounds(LAYER_UNDER,nx,ny) && worlds[LAYER_UNDER][ny][nx]===T.STONE){
-            worlds[LAYER_UNDER][ny][nx] = T.CAVE;
+          if (inBounds(LAYER_UNDER,nx,ny) && worlds[LAYER_UNDER][ny][nx]===T.CAVE_WALL){
+            worlds[LAYER_UNDER][ny][nx] = T.CAVE_FLOOR;
           }
         }
         placeAt(LAYER_SURFACE, x, y, T.STAIRS_DOWN, {
@@ -334,7 +264,7 @@ export function placeStructures(){
     const wCave = findSpotNear(LAYER_SURFACE,
       W_SURF - wCaveMargin - randi(wCaveScatter),
       wCaveMargin + randi(Math.max(1, H_SURF - wCaveMargin * 2)),
-      t=>t===T.BEACH||t===T.PLAINS, wCaveSearchR);
+      t=>t===T.BEACH||t===T.GRASS, wCaveSearchR);
     if (wCave){
       const [x,y] = wCave;
       for (let dy2=-3; dy2<=3; dy2++){
@@ -342,9 +272,19 @@ export function placeStructures(){
           const nx=x+dx2, ny=y+dy2;
           if (!inBounds(LAYER_SURFACE,nx,ny)) continue;
           const nt = worlds[LAYER_SURFACE][ny][nx];
-          if (nt === T.BEACH && rand() < 0.3){
-            const eel = rand() < 0.5 ? 'cave_eel' : 'cave_crab';
-            const m = spawnMonster(eel);
+          // Eels spawn on water tiles ONLY; crabs can spawn on beach or water
+          if ((nt === T.WATER || nt === T.DEEP_WATER) && rand() < 0.3 * SPAWN_DENSITY_MULT){
+            const pick = rand() < 0.5 ? 'cave_eel' : 'cave_crab';
+            const m = spawnMonster(pick);
+            m.x = nx; m.y = ny;
+            m.homeX = nx; m.homeY = ny;
+            m.hpMax = Math.round(m.hpMax * DIFFICULTIES[state.difficulty].enemyHp);
+            m.hp = m.hpMax;
+            m.weaponAtk = Math.round(m.weaponAtk * DIFFICULTIES[state.difficulty].enemyAtk);
+            monsters[LAYER_SURFACE].push(m);
+          } else if (nt === T.BEACH && rand() < 0.15 * SPAWN_DENSITY_MULT){
+            // Crabs only on beach (amphibious)
+            const m = spawnMonster('cave_crab');
             m.x = nx; m.y = ny;
             m.homeX = nx; m.homeY = ny;
             m.hpMax = Math.round(m.hpMax * DIFFICULTIES[state.difficulty].enemyHp);
@@ -361,18 +301,18 @@ export function placeStructures(){
   const npcSearchR = Math.max(6, Math.round(Math.min(W_SURF, H_SURF) * 0.27));
   const fh = findSpotNear(LAYER_SURFACE,
     Math.floor(W_SURF * 0.34), Math.floor(H_SURF * 0.11),
-    (t,x,y,c)=>c===T.FOREST||c===T.SCATTERED_TREES, npcSearchR)
+    (t,x,y,c)=>c===T.FOREST, npcSearchR)
           || findSpotNear(LAYER_SURFACE,
     Math.floor(W_SURF * 0.34), Math.floor(H_SURF * 0.11),
-    t=>t===T.PLAINS, npcSearchR);
+    t=>t===T.GRASS, npcSearchR);
   if (fh){
     // Clear forest cover and place NPC
     if (covers[LAYER_SURFACE]) covers[LAYER_SURFACE][fh[1]][fh[0]] = 0;
-    worlds[LAYER_SURFACE][fh[1]][fh[0]] = T.PLAINS;
+    worlds[LAYER_SURFACE][fh[1]][fh[0]] = T.GRASS;
     placeAt(LAYER_SURFACE, fh[0], fh[1], T.NPC, {type:'npc', npcKey:'forest_hermit'});
   }
   const sch = findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.55), Math.floor(H_SURF * 0.29), t=>t===T.PLAINS, searchR);
+    Math.floor(W_SURF * 0.55), Math.floor(H_SURF * 0.29), t=>t===T.GRASS, searchR);
   if (sch) placeAt(LAYER_SURFACE, sch[0], sch[1], T.NPC, {type:'npc', npcKey:'scholar'});
   const fish = findSpot(LAYER_SURFACE, (t)=>t===T.BEACH);
   if (fish) placeAt(LAYER_SURFACE, fish[0], fish[1], T.NPC, {type:'npc', npcKey:'fisherman'});
@@ -388,29 +328,34 @@ export function placeStructures(){
   const surfaceBooks = shuffled.slice(0,4);
   const underBooks   = shuffled.slice(4,7);
   for (const bk of surfaceBooks){
-    const s = findSpot(LAYER_SURFACE, (t,x,y,c)=>(t===T.PLAINS||t===T.DESERT||t===T.MOUNTAIN) && !c);
+    const s = findSpot(LAYER_SURFACE, (t,x,y,c)=>(t===T.GRASS||t===T.SAND||t===T.ROCK) && !c);
     if (s) placeAt(LAYER_SURFACE, s[0], s[1], T.BOOK, {type:'book', bookKey:bk});
   }
   for (const bk of underBooks){
-    const s = findSpot(LAYER_UNDER, (t,x,y,c)=>(t===T.CAVE||t===T.STONE) && !c);
+    const s = findSpot(LAYER_UNDER, (t,x,y,c)=>(t===T.CAVE_FLOOR||t===T.ROCK) && !c);
     if (s) placeAt(LAYER_UNDER, s[0], s[1], T.BOOK, {type:'book', bookKey:bk});
   }
 }
 
 // ==================== MONSTER SPAWNING ====================
+
+// Global spawn density multiplier — halved to reduce crowding
+const SPAWN_DENSITY_MULT = 0.5;
+
 export function spawnMonstersInWorld(){
   const diffMul = DIFFICULTIES[state.difficulty];
 
   const surfaceDensity = {
-    [T.PLAINS]:   0.008,
-    [T.FOREST]:   0.04,
-    [T.SCATTERED_TREES]: 0.02,
-    [T.DESERT]:   0.035,
-    [T.MOUNTAIN]: 0.035,
-    [T.BEACH]:    0.003,
-    [T.STONE]:    0.03,
-    [T.CAVE]:     0.03,
-    [T.MUSHFOREST]:0.05,
+    [T.GRASS]:    0.008  * SPAWN_DENSITY_MULT,
+    [T.FOREST]:   0.04   * SPAWN_DENSITY_MULT,
+    [T.SAND]:     0.035  * SPAWN_DENSITY_MULT,
+    [T.ROCK]:     0.035  * SPAWN_DENSITY_MULT,
+    [T.BEACH]:    0.003  * SPAWN_DENSITY_MULT,
+    [T.CAVE_FLOOR]:0.03  * SPAWN_DENSITY_MULT,
+    [T.MUSHFOREST]:0.05  * SPAWN_DENSITY_MULT,
+    [T.FUNGAL_GRASS]:0.04 * SPAWN_DENSITY_MULT,
+    [T.MUD]:      0.01   * SPAWN_DENSITY_MULT,
+    [T.DIRT]:     0.008  * SPAWN_DENSITY_MULT,
   };
   const spawnedWolves = [];
   for (let y=0;y<H_SURF;y++){
@@ -418,10 +363,13 @@ export function spawnMonstersInWorld(){
       const ground = worlds[LAYER_SURFACE][y][x];
       const cover = covers[LAYER_SURFACE] ? covers[LAYER_SURFACE][y][x] : 0;
       if (!isWalkable(ground, cover)) continue;
+      // Skip town interior tiles and notable cover features
+      if (ground === T.WOOD_FLOOR) continue;
       if (cover && (cover === T.TOWN || cover === T.CASTLE || cover === T.BLACKSPIRE ||
           cover === T.SIGN || cover === T.NPC || cover === T.HOUSE || cover === T.SHOP ||
           cover === T.INN || cover === T.STAIRS_DOWN || cover === T.STAIRS_UP ||
-          cover === T.CHEST || cover === T.BOOK)) continue;
+          cover === T.CHEST || cover === T.BOOK || cover === T.SHOPKEEPER ||
+          cover === T.FOUNTAIN || cover === T.LAMP_POST)) continue;
       const safeZone = Math.max(3, Math.round(Math.min(W_SURF, H_SURF) * 0.063));
       const startX = state.player.startX || Math.floor(W_SURF * 0.50);
       const startY = state.player.startY || Math.floor(H_SURF * 0.56);
@@ -441,15 +389,12 @@ export function spawnMonstersInWorld(){
       {
         const atmo = getAtmosphere(x, y);
         if (atmo.elevation > 0.68 && atmo.moisture < 0.35 &&
-            (ground === T.STONE || ground === T.CAVE || ground === T.MOUNTAIN)){
+            (ground === T.ROCK || ground === T.CAVE_FLOOR)){
           eligible = ['rock_golem'];
         }
       }
       if (cover === T.FOREST && eligible.includes('wolf')){
         eligible.push('dire_wolf');
-        eligible.push('wolf');
-      }
-      if (cover === T.SCATTERED_TREES && eligible.includes('wolf')){
         eligible.push('wolf');
       }
       if (!eligible.length) continue;
@@ -476,8 +421,8 @@ export function spawnMonstersInWorld(){
 
   // Underground
   const underDensity = {
-    [T.CAVE]:  0.03,
-    [T.STONE]: 0.025,
+    [T.CAVE_FLOOR]: 0.03  * SPAWN_DENSITY_MULT,
+    [T.ROCK]:       0.025 * SPAWN_DENSITY_MULT,
   };
   for (let y=0;y<H_UNDER;y++){
     for (let x=0;x<W_UNDER;x++){
@@ -490,8 +435,8 @@ export function spawnMonstersInWorld(){
       for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
         const nx=x+dx,ny=y+dy;
         if (!inBounds(LAYER_UNDER,nx,ny)) continue;
-        if (worlds[LAYER_UNDER][ny][nx]===T.LAVA){ biomeHint = T.LAVA; density = 0.04; }
-        else if (worlds[LAYER_UNDER][ny][nx]===T.UWATER && biomeHint==null){ biomeHint = T.UWATER; density = 0.035; }
+        if (worlds[LAYER_UNDER][ny][nx]===T.LAVA){ biomeHint = T.LAVA; density = 0.04 * SPAWN_DENSITY_MULT; }
+        else if (worlds[LAYER_UNDER][ny][nx]===T.UWATER && biomeHint==null){ biomeHint = T.UWATER; density = 0.035 * SPAWN_DENSITY_MULT; }
       }
       if (rand() >= density) continue;
       const targetT = biomeHint || ground;
@@ -517,23 +462,25 @@ export function initWorld(seed){
   for (const k in covers) delete covers[k];
   for (const k in features) delete features[k];
   for (const k in monsters) delete monsters[k];
-  for (const k in cellKeyToLayer) delete cellKeyToLayer[k];
   for (const k in LAYER_META) delete LAYER_META[k];
   clearPlacementState();
 
   generateLayer(LAYER_SURFACE, seed);
   generateLayer(LAYER_UNDER, seed);
 
-  makeTownCell('millhaven');
-  makeTownCell('thornwell');
-  makeTownCell('dunegate');
-  makeTownCell('karst');
+  // Place the starting town as a walled compound on the surface grid.
+  const cx = Math.floor(W_SURF / 2);
+  const cy = Math.floor(H_SURF / 2);
+  initScholarInventory(Object.keys(BOOKS));
+  const { spawnX, spawnY } = placeStartingTown(LAYER_SURFACE, cx, cy);
+  state.player.startX = spawnX;
+  state.player.startY = spawnY;
 
   placeStructures();
 
   activateLayer(LAYER_SURFACE);
   state.player.layer = LAYER_SURFACE;
-  state.player.x = state.player.startX || Math.floor(W_SURF * 0.50);
-  state.player.y = state.player.startY || Math.floor(H_SURF * 0.56);
+  state.player.x = spawnX;
+  state.player.y = spawnY;
   spawnMonstersInWorld();
 }

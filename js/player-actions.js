@@ -1,5 +1,6 @@
 // ==================== PLAYER ACTIONS ====================
 import { state, worlds, covers } from './state.js';
+import { FED_MAX } from './constants.js';
 import { isWalkable, terrainName } from './terrain.js';
 import { rand, randi, randomRound } from './rng.js';
 import { FOOD, findWeapon, findArmor } from './items.js';
@@ -14,8 +15,8 @@ import { endPlayerTurn } from './enemy-ai.js';
 function fedDrainFor(action){
   if (action === 'rest') return 2;
   if (action === 'move') return 0.5625;
-  if (action === 'attack') return 9;
-  if (action === 'miss') return 9;
+  if (action === 'attack') return 5.4;
+  if (action === 'miss') return 5.4;
   return 1;
 }
 
@@ -72,7 +73,7 @@ function restAction(){
 
 function eatBest(){
   const player = state.player;
-  const deficit = 100 - state.player.fed;
+  const deficit = FED_MAX - state.player.fed;
   const foodItems = state.player.inventory
     .map((it,idx) => it.kind==='food' ? {it,idx,fed:FOOD[it.key].fed} : null)
     .filter(Boolean);
@@ -90,7 +91,7 @@ function eatItem(idx){
   const f = FOOD[it.key];
   const before = state.player.fed;
   const gain = Math.round(f.fed * foodFedMul(player));
-  state.player.fed = Math.min(100, state.player.fed + gain);
+  state.player.fed = Math.min(FED_MAX, state.player.fed + gain);
   const gained = state.player.fed - before;
   log(`You eat ${f.name}. [+${gained} FED]`, 'hit');
   state.player.inventory.splice(idx, 1);

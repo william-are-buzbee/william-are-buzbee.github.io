@@ -4,7 +4,7 @@ import {
   W_SURF, H_SURF, LAYER_SURFACE, LAYER_UNDER,
   ATMOSPHERE, BIOME_TARGET, BIOME_PROFILES, BLEND_WIDTH,
 } from './constants.js';
-import { T, isWalkable } from './terrain.js';
+import { T, isWalkable, isCoverAllowedOnGround } from './terrain.js';
 import { srand, rand, randi } from './rng.js';
 import { setFeature } from './world-state.js';
 import { ensureCoverGrid, populateMonsters } from './gen-utils.js';
@@ -90,10 +90,10 @@ function sampleBiomeWeights(x, y, w, h) {
   const weights = {};
   const add = (biome, wt) => { weights[biome] = (weights[biome] || 0) + wt; };
 
-  add(BIOME_TARGET[y0][x0], (1 - fx) * (1 - fy));
-  add(BIOME_TARGET[y0][x1], fx * (1 - fy));
-  add(BIOME_TARGET[y1][x0], (1 - fx) * fy);
-  add(BIOME_TARGET[y1][x1], fx * fy);
+  add(BIOME_TARGET[y0][x0].biome, (1 - fx) * (1 - fy));
+  add(BIOME_TARGET[y0][x1].biome, fx * (1 - fy));
+  add(BIOME_TARGET[y1][x0].biome, (1 - fx) * fy);
+  add(BIOME_TARGET[y1][x1].biome, fx * fy);
 
   return weights;
 }
@@ -116,6 +116,29 @@ function blendValue(weights, accessor) {
     if (profile) sum += accessor(profile) * weights[biome];
   }
   return sum;
+}
+
+// Bilinearly interpolate the density scalar from the 16×16 target map.
+// Returns a value in [0, 1] representing how "intense" the local biome is.
+function sampleDensity(x, y, w, h) {
+  const targetH = BIOME_TARGET.length;
+  const targetW = BIOME_TARGET[0].length;
+  const tx = (x / w) * targetW - 0.5;
+  const ty = (y / h) * targetH - 0.5;
+  const x0 = Math.max(0, Math.min(targetW - 1, Math.floor(tx)));
+  const y0 = Math.max(0, Math.min(targetH - 1, Math.floor(ty)));
+  const x1 = Math.min(targetW - 1, x0 + 1);
+  const y1 = Math.min(targetH - 1, y0 + 1);
+  const fx = Math.max(0, Math.min(1, tx - x0));
+  const fy = Math.max(0, Math.min(1, ty - y0));
+  const d00 = BIOME_TARGET[y0][x0].density;
+  const d10 = BIOME_TARGET[y0][x1].density;
+  const d01 = BIOME_TARGET[y1][x0].density;
+  const d11 = BIOME_TARGET[y1][x1].density;
+  return d00 * (1 - fx) * (1 - fy)
+       + d10 * fx * (1 - fy)
+       + d01 * (1 - fx) * fy
+       + d11 * fx * fy;
 }
 
 // ==================== HELPERS ====================
@@ -218,10 +241,12 @@ export function makeSurface(seed) {
       // Smooth weights give gradual density falloff across biome borders.
       const smoothWeights = sampleBiomeWeights(x, y, W_SURF, H_SURF);
 
+      // Interpolated density from the target map (smooth coords, matching cover blend).
+      const interpDensity = sampleDensity(x, y, W_SURF, H_SURF);
+
       // Local variation noise: modulates cover density within a biome.
       // Values near 0 create clearings; values near 1 create dense patches.
       const vn = (fbm(variationNoise, x, y, VARIATION_CFG) + 1) * 0.5;
-      const densityMod = 0.3 + vn * 1.4; // range [0.3, 1.7]
 
       // Accumulate interpolated chances per cover type across all blended biomes.
       const coverChances = {};
@@ -234,11 +259,35 @@ export function makeSurface(seed) {
         }
       }
 
+      // Apply density scaling: the dominant biome's coverScale replaces the
+      // blended chance for any cover type it has an opinion about.  This lets
+      // the target map's density value directly drive tree probability.
+      if (profile.coverScale) {
+        for (const typeStr in coverChances) {
+          const scaled = profile.coverScale(Number(typeStr), interpDensity);
+          if (scaled !== null && scaled !== undefined) {
+            coverChances[typeStr] = scaled;
+          }
+        }
+      }
+
       // Roll for each cover type; first hit wins.
+      // Density-scaled covers (coverScale returned non-null) get narrow noise
+      // variation (±15% around the density-derived mean) to create organic
+      // texture without swamping the authored density gradient.
+      // Non-scaled covers keep the wider original modulation.
       for (const typeStr in coverChances) {
-        const chance = coverChances[typeStr] * densityMod;
+        const ct = Number(typeStr);
+        const wasScaled = profile.coverScale
+          ? profile.coverScale(ct, interpDensity) !== null
+          : false;
+        const mod = wasScaled
+          ? 0.85 + vn * 0.30          // range [0.85, 1.15]
+          : 0.3  + vn * 1.4;          // range [0.30, 1.70]  (legacy)
+        const chance = coverChances[typeStr] * mod;
         if (rand() < chance) {
-          coverGrid[y][x] = Number(typeStr);
+          if (!isCoverAllowedOnGround(grid[y][x], ct)) continue;
+          coverGrid[y][x] = ct;
           break;
         }
       }

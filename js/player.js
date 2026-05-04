@@ -1,5 +1,5 @@
 // ==================== PLAYER ====================
-import { DMG, DIFFICULTIES, LAYER_SURFACE } from './constants.js';
+import { DMG, DIFFICULTIES, LAYER_SURFACE, PRICE_CAT } from './constants.js';
 import { rand, randomRound } from './rng.js';
 import { findWeapon, findArmor } from './items.js';
 
@@ -64,10 +64,7 @@ function deriveHP(p){
   if (p.perks && p.perks.hp_bonus) hp += 8;
   return hp;
 }
-function effectiveDex(p){
-  const pen = p.armor.dexPenalty || 0;
-  return Math.max(1, Math.round(p.dex * (1 - pen)));
-}
+
 
 // Fixed 10-slot inventory grid. Weight governs carry limit.
 const INV_SLOTS = 10;
@@ -98,20 +95,19 @@ function effectiveAP(p){
 function playerDef(p){ return p.armor.def; }
 
 // Accuracy: DEX only (INT no longer contributes)
+// Armor accPenalty = dodgePenalty / 2, applied as flat subtraction.
 function playerAcc(p){
-  const dex = effectiveDex(p);
-  return 35 + Math.round(dex*4) + (p.weapon.acc||0);
+  const accPen = (p.armor.dodgePenalty || 0) / 2;
+  return 35 + Math.round(p.dex*4) + (p.weapon.acc||0) - accPen;
 }
-// Dodge: DEX only (INT no longer contributes)
+// Dodge: DEX only, minus armor dodgePenalty (flat subtraction, floor 0).
 function playerDodge(p){
-  const dex = effectiveDex(p);
-  const raw = (dex-1) * 3.5;
-  return Math.max(0, raw);
+  const raw = (p.dex-1) * 3.5;
+  return Math.max(0, raw - (p.armor.dodgePenalty || 0));
 }
 // Crit: scales linearly with DEX. Always enabled (no gate).
 function playerCritChance(p){
-  const dex = effectiveDex(p);
-  const raw = (dex - 1) * 4.5;  // DEX 1=0%, DEX 10=40.5%
+  const raw = (p.dex - 1) * 4.5;  // DEX 1=0%, DEX 10=40.5%
   return Math.min(60, raw) + (p.weapon.crit||0);
 }
 function playerCritMult(p){ return 1.5 + p.str*0.02 + p.int*0.02; }
@@ -133,26 +129,41 @@ function xpFromKill(p, baseXP){
   return Math.max(1, Math.round(baseXP * xpMult(p)));
 }
 
-// INT-based price discount (for buying). 0% at INT 1, ramping with milestones at 8/9/10.
-function buyPriceMul(p){
-  // base: 2% per point above 1
-  let disc = (p.int - 1) * 0.02;
-  // milestone accelerators
-  if (p.int >= 8)  disc += 0.06;  // total 20% at INT 8
-  if (p.int >= 9)  disc += 0.04;  // total 26% at INT 9
-  if (p.int >= 10) disc += 0.04;  // total 32% at INT 10 (close enough to 30%)
-  return Math.max(0.70, 1 - Math.min(disc, 0.30));
+// INT-based price discount (for buying), tiered by item category.
+//   staple   — 1% per INT above 1 (max  9% at INT 10). Commodities.
+//   standard — 2% per INT above 1 (max 18% at INT 10). Normal gear.
+//   luxury   — 3% per INT above 1 (max 27% at INT 10). High-end/rare.
+// When called without a category, defaults to STANDARD for backward compat.
+function buyPriceMul(p, category){
+  const cat = category || PRICE_CAT.STANDARD;
+  const pts = p.int - 1;  // 0 at INT 1
+  let ratePerPoint;
+  if (cat === PRICE_CAT.STAPLE)   ratePerPoint = 0.01;
+  else if (cat === PRICE_CAT.LUXURY) ratePerPoint = 0.03;
+  else                              ratePerPoint = 0.02;
+
+  const maxDisc = ratePerPoint * 9;  // cap at INT 10 equivalent
+  const disc = Math.min(maxDisc, pts * ratePerPoint);
+  return Math.max(1 - maxDisc, 1 - disc);
 }
-// Inn/room&board pricing: half the discount of normal shop prices, never more expensive
+// Inn/room&board pricing: half the discount of staple pricing
 function innPriceMul(p){
-  // Use half of the normal buy discount, clamped so it never exceeds 1.0
-  const normalDiscount = 1 - buyPriceMul(p);  // how much normal shops discount
-  const innDiscount = normalDiscount * 0.5;     // half that discount for inns
-  return Math.max(0.85, 1.0 - innDiscount);     // never cheaper than 85%, never above 1.0
+  const normalDiscount = 1 - buyPriceMul(p, PRICE_CAT.STAPLE);
+  const innDiscount = normalDiscount * 0.5;
+  return Math.max(0.85, 1.0 - innDiscount);
 }
-// Sell value: 25% at INT 1 → 60% at INT 10
-function sellValueMul(p){
-  return 0.25 + (p.int - 1) * (0.35/9);  // 0.25 → 0.60
+// Sell value: tiered by category, same INT scaling direction as buy.
+//   staple   — 25% → 34% at INT 10 (small improvement, commodities)
+//   standard — 25% → 43% at INT 10
+//   luxury   — 25% → 52% at INT 10 (smart sellers get much more for rare goods)
+function sellValueMul(p, category){
+  const cat = category || PRICE_CAT.STANDARD;
+  const pts = p.int - 1;
+  let ratePerPoint;
+  if (cat === PRICE_CAT.STAPLE)   ratePerPoint = 0.01;
+  else if (cat === PRICE_CAT.LUXURY) ratePerPoint = 0.03;
+  else                              ratePerPoint = 0.02;
+  return 0.25 + pts * ratePerPoint;
 }
 
 // Food FED multiplier — Old Physicians book grants +50%
@@ -160,8 +171,7 @@ function foodFedMul(p){ return ((p.perks && p.perks.food_bonus) ? 1.5 : 1.0) * 1
 
 // Stealth effectiveness — scales linearly with DEX
 function stealthBonus(p){
-  const dex = effectiveDex(p);
-  let b = dex*4;
+  let b = p.dex*4;
   if (p.perks && p.perks.stealth_bonus) b += 20;
   return b;
 }
@@ -261,8 +271,10 @@ function describeAttributePerks(p){
     lines.push(`INT ${p.int}: crit dmg ×${(1.5 + p.str*0.02 + p.int*0.02).toFixed(2)}`);
   }
   if (p.int >= 2){
-    const pct = Math.round((1 - buyPriceMul(p)) * 100);
-    if (pct > 0) lines.push(`INT ${p.int}: shop prices -${pct}%`);
+    const staple = Math.round((1 - buyPriceMul(p, PRICE_CAT.STAPLE)) * 100);
+    const standard = Math.round((1 - buyPriceMul(p, PRICE_CAT.STANDARD)) * 100);
+    const luxury = Math.round((1 - buyPriceMul(p, PRICE_CAT.LUXURY)) * 100);
+    if (luxury > 0) lines.push(`INT ${p.int}: prices -${staple}%/${standard}%/${luxury}% (food/gear/rare)`);
   }
   if (p.int < 2){
     lines.push(`INT 1: speech stunted — folk speak simply`);
@@ -309,7 +321,7 @@ function defaultWeight(item){
 }
 
 export {
-  freshPlayer, deriveHP, effectiveDex,
+  freshPlayer, deriveHP,
   INV_SLOTS, carryCapacity, totalWeight, bagFull, overWeight,
   playerMelee, effectiveAP, playerDef, playerAcc, playerDodge,
   playerCritChance, playerCritMult, xpMult, xpFromKill, buyPriceMul, innPriceMul, sellValueMul,

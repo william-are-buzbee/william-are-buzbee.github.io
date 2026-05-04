@@ -1,17 +1,17 @@
 // ==================== USE / INTERACT — core hub ====================
-import { state, worlds, covers, features, monsters, cellKeyToLayer } from './state.js';
-import { DMG, DIFFICULTIES, resistMult, LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF } from './constants.js';
+import { state, worlds, covers, features, monsters } from './state.js';
+import { DMG, DIFFICULTIES, resistMult, LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, PRICE_CAT, FED_MAX } from './constants.js';
 import { T, terrainName, coverBonus } from './terrain.js';
 import { rand, randi, choice } from './rng.js';
-import { FOOD, POTIONS, BOOKS, findWeapon, findArmor } from './items.js';
+import { FOOD, POTIONS, BOOKS, findWeapon, findArmor, itemPriceCategory } from './items.js';
 import { INV_SLOTS, carryCapacity, totalWeight, overWeight, bagFull, addItem,
          defaultWeight, buyPriceMul, innPriceMul, sellValueMul, deriveHP,
-         playerMelee, effectiveDex, playerDef, playerAcc, playerDodge,
+         playerMelee, playerDef, playerAcc, playerDodge,
          playerCritChance, playerCritMult, poisonResistance, foodFedMul } from './player.js';
 import { monDodge, monAcc, monDamage, monCritChance, spawnMonster } from './monsters.js';
-import { NPCS, SHOPS, TOWNS } from './npcs.js';
+import { NPCS, SHOPS } from './npcs.js';
 import { inBounds, monsterAt, chebyshev, getFeature, setFeature, fkey,
-         isTownCell, worldDims, getCover, setCover } from './world-state.js';
+         getCover, setCover } from './world-state.js';
 import { log } from './log.js';
 import { openModal, closeModal, showModal, modalEl } from './modal.js';
 import { updateUI, interactable, adjacentFeature } from './ui.js';
@@ -21,9 +21,9 @@ import { endPlayerTurn } from './enemy-ai.js';
 import { openShop, renderShop, buyCost, sellValue, itemBaseValue } from './shops.js';
 import { openNPC } from './dialogue.js';
 import { openCastle, openSunward, openBlackspire, setUseStairs } from './castle.js';
+import { SHOP_PROFILES } from './town-gen.js';
 
 import { teleportPlayer } from './world-gen.js';
-import { activateLayer } from './state.js';
 
 function monstersHere(){ return monsters[state.player.layer]; }
 
@@ -75,15 +75,13 @@ function interact(f, x, y){
       openModal(`<h2>Signpost</h2><div class="dialogue" style="white-space:pre-line;">${f.text}</div><div class="close-row"><button class="btn" id="btn-close">CLOSE</button></div>`);
       document.getElementById('btn-close').onclick = closeModal; break;
     case 'npc': openNPC(f.npcKey); break;
-    case 'town': enterTown(f.townKey); break;
     case 'castle': openCastle(f, x, y); break;
     case 'stairs': useStairs(f); break;
     case 'chest': openChest(f, x, y); break;
     case 'book': pickUpBook(f, x, y); break;
-    case 'gate': exitTown(f); break;
     case 'shop_building':
-      if (f.enterable && f.interiorLayer != null){
-        enterShopBuilding(f);
+      if (SHOP_PROFILES[f.shopKey]) {
+        openProfileShop(f.shopKey);
       } else {
         openShop(f.shopKey);
       }
@@ -101,70 +99,216 @@ function interact(f, x, y){
   }
 }
 
-// ==================== ENTER / EXIT SHOP BUILDING ====================
-function enterShopBuilding(f){
+// ==================== PROFILE-DRIVEN SHOP MODAL ====================
+// Handles shops defined via SHOP_PROFILES (the new surface-town shops).
+// Reads inventory, pricing, and keeper mercantile from the profile.
+// Pricing is now tiered by item category (staple/standard/luxury).
+// Food shops use a per-shop fedRatio for consistent gold-per-fed pricing.
+function openProfileShop(shopKey){
+  const profile = SHOP_PROFILES[shopKey];
+  if (!profile) return;
   const player = state.player;
-  const shopGrid = worlds[f.interiorLayer];
-  const shopCoverGrid = covers[f.interiorLayer];
-  if (shopGrid && shopCoverGrid) {
-    for (let sy = 0; sy < shopGrid.length; sy++) {
-      for (let sx = 0; sx < shopGrid[0].length; sx++) {
-        if (shopCoverGrid[sy][sx] === T.GATE) {
-          const gf = getFeature(f.interiorLayer, sx, sy);
-          if (gf && gf.type === 'gate') {
-            gf.returnLayer = player.layer;
-            gf.returnX = player.x;
-            gf.returnY = player.y;
-          }
-        }
+  state.shopTab = state.shopTab || 'buy';
+
+  // ---- Item resolver: key → display data ----
+  function resolve(key){
+    const w = findWeapon(key);
+    if (w) return { kind:'weapon', key, name:w.name,
+      desc:`[${w.type}${w.elem?'+'+w.elem:''}] ATK+${w.atk}`,
+      weight: defaultWeight({kind:'weapon',key}) };
+    const a = findArmor(key);
+    if (a) return { kind:'armor', key, name:a.name,
+      desc:`DEF+${a.def}${a.dodgePenalty?` -${a.dodgePenalty}%dodge`:''}${a.coldResist?` ❄${a.coldResist}`:''}`,
+      weight: defaultWeight({kind:'armor',key}) };
+    const f = FOOD[key];
+    if (f) return { kind:'food', key, name:f.name,
+      desc:`+${f.fed} FED`, weight: defaultWeight({kind:'food',key}) };
+    const b = BOOKS[key];
+    if (b) return { kind:'book', key, name:b.name,
+      desc:`INT ${b.intReq}+`, weight: defaultWeight({kind:'book',key}) };
+    const p = POTIONS[key];
+    if (p) return { kind:'potion', key, name:p.name,
+      desc:p.desc||'', weight: defaultWeight({kind:'potion',key}) };
+    return null;
+  }
+
+  // ---- Tiered pricing with mercantile & profile modifiers ----
+  const mercMod = 1 + (profile.keeper.mercantile - 3) * 0.05;
+
+  // If the shop has a fedRatio (gold per FED point), food prices are
+  // derived from it so every food item at this shop has the same ratio.
+  const shopFedRatio = profile.fedRatio || null;
+
+  function foodBuyCost(foodKey){
+    const f = FOOD[foodKey];
+    if (!f) return 0;
+    if (shopFedRatio){
+      // Price = fed * ratio, then INT discount for staples, then mercantile
+      const rawCost = f.fed * shopFedRatio;
+      return Math.max(1, Math.round(rawCost * mercMod * buyPriceMul(player, PRICE_CAT.STAPLE)));
+    }
+    // Fallback: use item base cost with staple discount
+    const base = itemBaseValue({kind:'food', key:foodKey});
+    return Math.max(1, Math.round(base * (profile.sellPriceMod||1) * mercMod * buyPriceMul(player, PRICE_CAT.STAPLE)));
+  }
+
+  function priceBuy(item){
+    // Food uses the fedRatio path
+    if (item.kind === 'food') return foodBuyCost(item.key);
+    const cat = itemPriceCategory(item);
+    const base = itemBaseValue({kind:item.kind, key:item.key});
+    return Math.max(1, Math.round(base * (profile.sellPriceMod||1) * mercMod * buyPriceMul(player, cat)));
+  }
+  function priceSell(invItem){
+    const cat = itemPriceCategory(invItem);
+    const base = itemBaseValue(invItem);
+    let mod = (profile.buyPriceMod||1) / mercMod * sellValueMul(player, cat);
+    // Bonus for matching tags
+    if (profile.bonusBuyTags && profile.bonusBuyTags.length){
+      const itemTags = invItem.tags || [];
+      for (const t of profile.bonusBuyTags){
+        if (itemTags.includes(t)) mod *= 1.15;
       }
     }
+    return Math.max(1, Math.round(base * mod));
   }
-  player.layer = f.interiorLayer;
-  const dims = worldDims(f.interiorLayer);
-  player.x = Math.floor(dims[0] / 2);
-  player.y = dims[1] - 2;
-  activateLayer(f.interiorLayer);
-  log(`You enter ${f.name || 'the shop'}.`, 'system');
-  render();
-}
 
-function enterTown(townKey){
-  const targetLayer = cellKeyToLayer[townKey];
-  if (targetLayer == null) return;
-  const player = state.player;
-  const grid = worlds[targetLayer];
-  const coverGrid = covers[targetLayer];
-  if (grid && coverGrid) {
-    for (let sy = 0; sy < grid.length; sy++) {
-      for (let sx = 0; sx < grid[0].length; sx++) {
-        if (coverGrid[sy][sx] === T.GATE) {
-          const gf = getFeature(targetLayer, sx, sy);
-          if (gf && gf.type === 'gate') {
-            gf.returnLayer = player.layer;
-            gf.returnX = player.x;
-            gf.returnY = player.y;
-          }
+  // ---- Fill Up: buy enough food to max FED, no inventory slots used ----
+  function computeFillUp(){
+    const deficit = FED_MAX - player.fed;
+    if (deficit <= 0) return { cost:0, fed:0, possible:false, reason:'full' };
+    // Effective FED after foodFedMul — we need raw fed to produce 'deficit' after the multiplier
+    const rawNeeded = Math.ceil(deficit / foodFedMul(player));
+    if (!shopFedRatio){
+      // No fedRatio set — use cheapest food item's ratio as fallback
+      const foodKeys = (profile.sellInventory||[]).filter(k => FOOD[k]);
+      if (!foodKeys.length) return { cost:0, fed:0, possible:false, reason:'no_food' };
+      const ratios = foodKeys.map(k => {
+        const cost = foodBuyCost(k);
+        const f = FOOD[k];
+        return { key:k, ratio: cost / f.fed };
+      });
+      ratios.sort((a,b) => a.ratio - b.ratio);
+      const bestRatio = ratios[0].ratio;
+      const totalCost = Math.max(1, Math.round(rawNeeded * bestRatio));
+      if (player.gold < totalCost) return { cost:totalCost, fed:deficit, possible:false, reason:'gold' };
+      return { cost:totalCost, fed:deficit, possible:true };
+    }
+    // FedRatio-based: straightforward
+    const rawCost = rawNeeded * shopFedRatio;
+    const totalCost = Math.max(1, Math.round(rawCost * mercMod * buyPriceMul(player, PRICE_CAT.STAPLE)));
+    if (player.gold < totalCost) return { cost:totalCost, fed:deficit, possible:false, reason:'gold' };
+    return { cost:totalCost, fed:deficit, possible:true };
+  }
+
+  // ---- Render the modal ----
+  function draw(){
+    const mi = document.getElementById('modal-inner');
+    let html = `<h2>${profile.name}</h2>`;
+    html += `<div class="dialogue"><i>${profile.keeper.name} stands behind the counter.</i></div>`;
+    html += `<div style="display:flex;gap:6px;margin:6px 0;">`;
+    html += `<button class="btn${state.shopTab==='buy'?' primary':''}" id="stab-buy">BUY</button>`;
+    html += `<button class="btn${state.shopTab==='sell'?' primary':''}" id="stab-sell">SELL</button>`;
+    html += `</div>`;
+    html += `<div class="dialogue" style="font-style:normal;font-size:10px;">Gold: <b>${player.gold}</b>  ·  FED: <b>${Math.round(player.fed)}/${FED_MAX}</b></div>`;
+
+    if (state.shopTab === 'buy'){
+      const items = profile.sellInventory.map(resolve).filter(Boolean);
+      if (!items.length) html += `<div class="dialogue" style="font-style:normal;">Nothing for sale.</div>`;
+
+      // Show food items with consistent pricing
+      for (const it of items){
+        const cost = priceBuy(it);
+        const ok = player.gold >= cost;
+        html += `<div class="row">`;
+        html += `<div class="lbl"><b>${it.name}</b><div class="sub">${it.desc} · wt ${it.weight}</div></div>`;
+        html += `<button class="btn" data-pbuy="${it.key}" ${ok?'':'disabled'}>${cost}g</button>`;
+        html += `</div>`;
+      }
+
+      // Fill Up button — only if shop sells food
+      const hasFood = items.some(it => it.kind === 'food');
+      if (hasFood && player.fed < FED_MAX){
+        const fill = computeFillUp();
+        if (fill.cost > 0){
+          const canAfford = fill.possible;
+          html += `<div class="row" style="margin-top:4px;border-top:1px solid #333;padding-top:4px;">`;
+          html += `<div class="lbl"><b>Fill Up</b><div class="sub">+${fill.fed} FED to full</div></div>`;
+          html += `<button class="btn${canAfford?' primary':''}" id="btn-fillup" ${canAfford?'':'disabled'}>${fill.cost}g</button>`;
+          html += `</div>`;
         }
       }
+    } else {
+      const sellable = player.inventory
+        .map((it,i) => ({...it, idx:i}))
+        .filter(it => profile.buyCategories.includes(it.kind));
+      if (!sellable.length) html += `<div class="dialogue" style="font-style:normal;">Nothing to sell here.</div>`;
+      for (const it of sellable){
+        const r = resolve(it.key);
+        if (!r) continue;
+        const val = priceSell(it);
+        html += `<div class="row">`;
+        html += `<div class="lbl"><b>${r.name}</b><div class="sub">${r.desc}</div></div>`;
+        html += `<button class="btn" data-psell="${it.idx}">${val}g</button>`;
+        html += `</div>`;
+      }
     }
+
+    html += `<div class="close-row"><button class="btn" id="btn-close">CLOSE</button></div>`;
+    mi.innerHTML = html;
+
+    // Wire handlers
+    document.getElementById('btn-close').onclick = closeModal;
+    document.getElementById('stab-buy').onclick = () => { state.shopTab='buy'; draw(); };
+    document.getElementById('stab-sell').onclick = () => { state.shopTab='sell'; draw(); };
+
+    // Fill Up handler
+    const fillBtn = document.getElementById('btn-fillup');
+    if (fillBtn){
+      fillBtn.onclick = () => {
+        const fill = computeFillUp();
+        if (!fill.possible) return;
+        player.gold -= fill.cost;
+        player.fed = Math.min(FED_MAX, player.fed + fill.fed);
+        log(`Filled up. [+${fill.fed} FED · -${fill.cost}g]`, 'gold');
+        updateUI(); draw();
+      };
+    }
+
+    mi.querySelectorAll('[data-pbuy]').forEach(btn => {
+      btn.onclick = () => {
+        const it = resolve(btn.dataset.pbuy);
+        if (!it) return;
+        const cost = priceBuy(it);
+        if (player.gold < cost){ log('Not enough gold.','warn'); return; }
+        const res = addItem(player, {kind:it.kind, key:it.key});
+        if (res === 'full'){ log('Bag is full.','warn'); return; }
+        if (res === 'heavy'){ log("Too heavy to carry.",'warn'); return; }
+        player.gold -= cost;
+        log(`Bought ${it.name} for ${cost}g.`,'gold');
+        updateUI(); draw();
+      };
+    });
+
+    mi.querySelectorAll('[data-psell]').forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.psell);
+        const it = player.inventory[idx];
+        if (!it) return;
+        const val = priceSell(it);
+        player.gold += val;
+        player.inventory.splice(idx, 1);
+        const r = resolve(it.key);
+        log(`Sold ${r?r.name:'item'} for ${val}g.`,'gold');
+        updateUI(); draw();
+      };
+    });
   }
-  player.layer = targetLayer;
-  player.x = 11; player.y = 13;
-  activateLayer(targetLayer);
-  log(`You enter ${TOWNS[townKey].name}.`, 'system');
-  render();
+
+  showModal();
+  draw();
 }
 
-function exitTown(f){
-  const player = state.player;
-  state.player.layer = f.returnLayer != null ? f.returnLayer : LAYER_SURFACE;
-  state.player.x = f.returnX != null ? f.returnX : (state.player.returnX || Math.floor(W_SURF * 0.40));
-  state.player.y = f.returnY != null ? f.returnY : (state.player.returnY || Math.floor(H_SURF * 0.46));
-  activateLayer(state.player.layer);
-  log('You leave.', 'system');
-  render();
-}
 
 function useStairs(f){
   teleportPlayer(f.targetLayer, f.targetX, f.targetY);
@@ -234,7 +378,7 @@ function openChest(f, x, y){
   } else if (c.type === 'armor'){
     const a = findArmor(c.key);
     html += `<div class="row">
-      <div class="lbl"><b>${a.name}</b><div class="sub">DEF+${a.def}${a.dexPenalty?` -${Math.round(a.dexPenalty*100)}% DEX`:''} · wt ${defaultWeight({kind:'armor',key:c.key})}</div></div>
+      <div class="lbl"><b>${a.name}</b><div class="sub">DEF+${a.def}${a.dodgePenalty?` -${a.dodgePenalty}% dodge`:''} · wt ${defaultWeight({kind:'armor',key:c.key})}</div></div>
       <button data-act="take">TAKE</button><button data-act="leave">LEAVE</button>
     </div>`;
   } else if (c.type === 'food'){
@@ -394,7 +538,7 @@ function readBook(idx){
   openBook(it.key, true, idx);
 }
 
-export { useAction, interact, enterTown, exitTown, enterShopBuilding, useStairs, pickUpBook,
+export { useAction, interact, useStairs, pickUpBook,
          openBook, readBook, openChest, consumeFeature,
          openNPC, openShop, renderShop, buyCost, sellValue, itemBaseValue,
          openCastle, openSunward, openBlackspire,

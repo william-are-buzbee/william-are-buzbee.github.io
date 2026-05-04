@@ -2,18 +2,17 @@
 // Refactored: 5-button HUD system (Status, Character, Equipment, Inventory, Log Toggle)
 // with pixel-art RPG styling. Gold now displayed in Inventory tab.
 
-import { state, worlds, features, monsters, cellKeyToLayer } from './state.js';
+import { state, worlds, features, monsters } from './state.js';
 import { DMG, LAYER_SURFACE, LAYER_UNDER } from './constants.js';
 import { T } from './terrain.js';
 import { FOOD, POTIONS, BOOKS, findWeapon, findArmor } from './items.js';
 import {
-  INV_SLOTS, carryCapacity, totalWeight, effectiveDex,
+  INV_SLOTS, carryCapacity, totalWeight,
   playerMelee, playerDef, playerAcc, playerDodge,
   playerCritChance, playerCritMult, buyPriceMul,
   poisonResistance, passiveRegenInterval, describeAttributePerks
 } from './player.js';
-import { TOWNS } from './npcs.js';
-import { inBounds, isTownCell, getFeature } from './world-state.js';
+import { inBounds, getFeature } from './world-state.js';
 
 // ───────────────────────────────────────────────────────
 //  §1  CONSTANTS & HELPERS
@@ -28,8 +27,8 @@ const EFFECT_LABELS = {
 };
 
 const INTERACTABLE_TYPES = new Set([
-  'stairs', 'sign', 'npc', 'town', 'castle', 'chest',
-  'book', 'well', 'home', 'gate', 'shop_building', 'throne',
+  'stairs', 'sign', 'npc', 'castle', 'chest',
+  'book', 'well', 'home', 'shop_building', 'throne',
 ]);
 
 const $ = id => document.getElementById(id);
@@ -78,7 +77,6 @@ function computeUIData() {
   const p = state.player;
   if (!p) return null;
 
-  const dex    = effectiveDex(p);
   const tWt    = totalWeight(p);
   const cap    = carryCapacity(p);
   const overwt = tWt > cap;
@@ -110,7 +108,7 @@ function computeUIData() {
     slotsText: `${p.inventory.length}/${INV_SLOTS} · ${tWt}/${cap}wt`,
 
     // derived combat
-    dexSuffix: dex !== p.dex ? ` (${p.dex}→${dex})` : '',
+    dexSuffix: p.armor.dodgePenalty ? ` (-${p.armor.dodgePenalty}%)` : '',
     atkText:   '~' + playerMelee(p) + ` [${p.weapon.type}${elemTag}]`,
     defVal:    playerDef(p),
     accVal:    playerAcc(p),
@@ -121,7 +119,7 @@ function computeUIData() {
     // equipment
     wpnName: p.weapon.name,
     wpnTag:  `[${p.weapon.type}${elemTag}${apStr}]`,
-    armText: p.armor.name + (p.armor.dexPenalty ? ` (-${Math.round(p.armor.dexPenalty * 100)}% DEX)` : ''),
+    armText: p.armor.name + (p.armor.dodgePenalty ? ` (-${p.armor.dodgePenalty}% dodge)` : ''),
 
     // flags
     stealth: p.stealth,
@@ -129,8 +127,7 @@ function computeUIData() {
 
     // location
     regionName: getRegionName(),
-    layerLabel: isTownCell(p.layer) ? 'Town'
-              : p.layer === LAYER_SURFACE ? 'Surface'
+    layerLabel: p.layer === LAYER_SURFACE ? 'Surface'
               : 'Underground',
 
     // raw refs for list builders
@@ -370,18 +367,15 @@ function getRegionName() {
   const p = state.player;
   if (!p) return '';
 
-  // Inside a town interior layer
-  if (isTownCell(p.layer)) {
-    for (const tk in cellKeyToLayer) {
-      if (cellKeyToLayer[tk] === p.layer) return TOWNS[tk]?.name ?? 'town';
-    }
-    return 'town';
-  }
-
   // World tile lookup — guard against unloaded worlds
   const row = worlds[p.layer]?.[p.y];
   if (!row) return 'unknown';
   const t = row[p.x];
+
+  // Inside the surface town compound (WOOD_FLOOR or WALL ground on surface)
+  if (p.layer === LAYER_SURFACE && (t === T.WOOD_FLOOR || t === T.WALL)) {
+    return 'Millhaven';
+  }
 
   if (p.layer === LAYER_UNDER) {
     for (let dy = -3; dy <= 3; dy++) {

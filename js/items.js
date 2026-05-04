@@ -1,5 +1,5 @@
 // ==================== ITEMS ====================
-import { DMG } from './constants.js';
+import { DMG, PRICE_CAT } from './constants.js';
 
 // ==================== WEAPONS ====================
 export const WEAPONS = [
@@ -22,25 +22,30 @@ export const WEAPONS = [
 export function findWeapon(key){ return WEAPONS.find(w=>w.key===key); }
 
 // ==================== ARMOR ====================
+// dodgePenalty: flat % subtracted from dodge chance.
+// accPenalty is always dodgePenalty / 2 (derived at usage site, not stored).
 export const ARMORS = [
-  {key:'rags',    name:'Threadbare Rags',  def:0,  dexPenalty:0,     cost:0},
-  {key:'leather', name:'Leather Cuirass',  def:2,  dexPenalty:0,     cost:70},
-  {key:'studded', name:'Studded Leather',  def:3,  dexPenalty:0.10,  cost:140},
-  {key:'chain',   name:'Chain Hauberk',    def:5,  dexPenalty:0.25,  cost:260},
-  {key:'scale',   name:'Scale Armor',      def:7,  dexPenalty:0.35,  cost:420},
-  {key:'plate',   name:'Plate Mail',       def:10, dexPenalty:0.50,  cost:700},
-  {key:'kingsgarb',name:'Kingslayer Plate',def:13, dexPenalty:0.35,  cost:0},
+  {key:'rags',    name:'Threadbare Rags',  def:0,  dodgePenalty:0,   cost:0},
+  {key:'leather', name:'Leather Cuirass',  def:2,  dodgePenalty:2,   cost:70},
+  {key:'wolf_leather', name:'Wolf Leather',def:3,  dodgePenalty:3,   cost:110},
+  {key:'studded', name:'Studded Leather',  def:3,  dodgePenalty:5,   cost:140},
+  {key:'direwolf_leather',name:'Direwolf Hide',def:5,dodgePenalty:6, cost:240},
+  {key:'chain',   name:'Chain Hauberk',    def:5,  dodgePenalty:8,   cost:260},
+  {key:'frost_troll_leather',name:'Frost Troll Leather',def:7,dodgePenalty:7,cost:480, coldResist:3},
+  {key:'scale',   name:'Scale Armor',      def:7,  dodgePenalty:12,  cost:420},
+  {key:'plate',   name:'Plate Mail',       def:10, dodgePenalty:18,  cost:700},
+  {key:'kingsgarb',name:'Kingslayer Plate',def:13, dodgePenalty:10,  cost:0},
 ];
 export function findArmor(key){ return ARMORS.find(a=>a.key===key); }
 
 // ==================== FOOD ====================
 export const FOOD = {
-  apple:      {name:'Apple',         fed:10, cost:7,   desc:'A crisp apple.'},
-  bread:      {name:'Loaf of Bread', fed:22, cost:16,  desc:'Hearty village bread.'},
-  jerky:      {name:'Dried Jerky',   fed:30, cost:27,  desc:'Salted meat strips.'},
-  fish:       {name:'Smoked Fish',   fed:26, cost:22,  desc:'Preserved river fish.'},
-  stew:       {name:'Iron Pot Stew', fed:45, cost:54,  desc:'Warming stew in a tin.'},
-  roast:      {name:'Venison Roast', fed:70, cost:108, desc:'A whole roast. Rare.'},
+  apple:      {name:'Apple',         fed:10, cost:5,   desc:'A crisp apple.'},
+  bread:      {name:'Loaf of Bread', fed:22, cost:12,  desc:'Hearty village bread.'},
+  jerky:      {name:'Dried Jerky',   fed:30, cost:20,  desc:'Salted meat strips.'},
+  fish:       {name:'Smoked Fish',   fed:26, cost:17,  desc:'Preserved river fish.'},
+  stew:       {name:'Iron Pot Stew', fed:45, cost:41,  desc:'Warming stew in a tin.'},
+  roast:      {name:'Venison Roast', fed:70, cost:81,  desc:'A whole roast. Rare.'},
 };
 
 // ==================== POTIONS ====================
@@ -89,3 +94,33 @@ export const BOOKS = {
     perk: 'xp_bonus', summary: 'XP gain +15%.'
   },
 };
+
+// ==================== PRICE CATEGORY DERIVATION ====================
+// Determines which INT-discount tier applies to an item.
+// Accepts {kind, key} or just kind string.  Falls back to STANDARD.
+const LUXURY_WEAPON_COST = 400;   // weapons at or above this base cost → luxury
+const LUXURY_ARMOR_COST  = 400;   // armors at or above this base cost → luxury
+
+function itemPriceCategory(kindOrItem, key){
+  let kind, k;
+  if (typeof kindOrItem === 'object'){ kind = kindOrItem.kind; k = kindOrItem.key; }
+  else { kind = kindOrItem; k = key; }
+
+  if (kind === 'food')   return PRICE_CAT.STAPLE;
+  if (kind === 'potion') return PRICE_CAT.LUXURY;
+  if (kind === 'book')   return PRICE_CAT.LUXURY;
+
+  if (kind === 'weapon'){
+    const w = findWeapon(k);
+    if (w && w.cost >= LUXURY_WEAPON_COST) return PRICE_CAT.LUXURY;
+    return PRICE_CAT.STANDARD;
+  }
+  if (kind === 'armor'){
+    const a = findArmor(k);
+    if (a && a.cost >= LUXURY_ARMOR_COST) return PRICE_CAT.LUXURY;
+    return PRICE_CAT.STANDARD;
+  }
+  return PRICE_CAT.STANDARD;
+}
+
+export { itemPriceCategory };

@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { DIFFICULTIES } from './constants.js';
 import { rand, choice } from './rng.js';
 import { freshPlayer, deriveHP, poisonResistance } from './player.js';
+import { findArmor } from './items.js';
 import { initWorld } from './world-logic.js';
 import { log, logEl } from './log.js';
 import { render } from './rendering.js';
@@ -96,15 +97,18 @@ function renderCharGen(){
   });
 
   // Derived preview — uses the new combined formulas
+  const startArmor = findArmor('rags');
+  const armorDodgePen = startArmor.dodgePenalty || 0;
+  const armorAccPen = armorDodgePen / 2;
   const hp = 10 + state.cgAttrs.con*4 + state.cgAttrs.str;
   const carry = 4 + state.cgAttrs.str*2;
   const melee = 2 + Math.round(state.cgAttrs.str*0.6);  // +2 from dagger, approximate
   const avgAP = ((state.cgAttrs.str - 1) * (3 / 9));
-  // Hit chance: 35 + DEX*4 + weapon.acc (5 for dagger), clamped 5–95 in combat
-  const rawAcc = 35 + state.cgAttrs.dex*4 + 5;
+  // Hit chance: 35 + DEX*4 + weapon.acc (5 for dagger) − armor accPenalty, clamped 5–95
+  const rawAcc = 35 + state.cgAttrs.dex*4 + 5 - armorAccPen;
   const hitChance = Math.min(95, Math.max(5, rawAcc));
-  // Dodge: DEX only
-  const dodge = Math.max(0, (state.cgAttrs.dex-1)*3.5);
+  // Dodge: DEX only, minus armor dodgePenalty (flat), floor 0
+  const dodge = Math.max(0, (state.cgAttrs.dex-1)*3.5 - armorDodgePen);
   // Crit: DEX only, always enabled
   const crit = Math.min(60, (state.cgAttrs.dex - 1) * 4.5) + 3;
   // Crit mult: 50/50 STR and INT
