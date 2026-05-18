@@ -359,76 +359,79 @@ export const STRUCTURE_REGISTRY = [
 
   // ========== MIGRATED: SW Ruins (from world-gen.js placeRuinsSW) ==========
 
-  {
-    key:       'ruin_pocket',
-    frequency: 12,
-    layer:     'surface',
-    ground:    [T.PLAINS, T.DESERT, T.BEACH, T.DIRT],
-    groundAll: true,
-    clearCover: true,
-    bounds: {
-      minX: 4,
-      maxX: Math.floor(W_SURF * 0.45),
-      minY: Math.floor(H_SURF * 0.55),
-      maxY: H_SURF - 6,
-    },
-    tiles: [
-      { dx: 0, dy: 0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
-      { dx: 1, dy: 0, ground: T.RUIN_FLOOR },
-    ],
-    minDistFromOther: 4,
-  },
-  {
-    key:       'ruin_cluster',
-    frequency: 8,
-    layer:     'surface',
-    ground:    [T.PLAINS, T.DESERT, T.BEACH, T.DIRT],
-    groundAll: true,
-    clearCover: true,
-    bounds: {
-      minX: 4,
-      maxX: Math.floor(W_SURF * 0.45),
-      minY: Math.floor(H_SURF * 0.55),
-      maxY: H_SURF - 6,
-    },
-    tiles: [
-      { dx: 0, dy: 0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
-      { dx: 1, dy: 0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
-      { dx: 0, dy: 1, ground: T.RUIN_FLOOR },
-    ],
-    minDistFromOther: 4,
-  },
+  // DISABLED — legacy system, do not delete yet
+  // {
+  //   key:       'ruin_pocket',
+  //   frequency: 12,
+  //   layer:     'surface',
+  //   ground:    [T.PLAINS, T.DESERT, T.BEACH, T.DIRT],
+  //   groundAll: true,
+  //   clearCover: true,
+  //   bounds: {
+  //     minX: 4,
+  //     maxX: Math.floor(W_SURF * 0.45),
+  //     minY: Math.floor(H_SURF * 0.55),
+  //     maxY: H_SURF - 6,
+  //   },
+  //   tiles: [
+  //     { dx: 0, dy: 0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
+  //     { dx: 1, dy: 0, ground: T.RUIN_FLOOR },
+  //   ],
+  //   minDistFromOther: 4,
+  // },
+  // DISABLED — legacy system, do not delete yet
+  // {
+  //   key:       'ruin_cluster',
+  //   frequency: 8,
+  //   layer:     'surface',
+  //   ground:    [T.PLAINS, T.DESERT, T.BEACH, T.DIRT],
+  //   groundAll: true,
+  //   clearCover: true,
+  //   bounds: {
+  //     minX: 4,
+  //     maxX: Math.floor(W_SURF * 0.45),
+  //     minY: Math.floor(H_SURF * 0.55),
+  //     maxY: H_SURF - 6,
+  //   },
+  //   tiles: [
+  //     { dx: 0, dy: 0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
+  //     { dx: 1, dy: 0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
+  //     { dx: 0, dy: 1, ground: T.RUIN_FLOOR },
+  //   ],
+  //   minDistFromOther: 4,
+  // },
 
   // ========== MIGRATED: SW Ruin Chests (from world-logic.js placeContextualChests) ==========
 
-  {
-    key:       'ruin_chest_sw',
-    frequency: 3,
-    layer:     'surface',
-    ground:    [T.PLAINS, T.MOUNTAIN, T.RUIN_FLOOR],
-    clearCover: true,
-    bounds: {
-      minX: 4,
-      maxX: 35,
-      minY: Math.floor(H_SURF * 0.55),
-      maxY: H_SURF - 6,
-    },
-    tiles: [
-      { dx: 0, dy: 0, ground: T.STONE },
-    ],
-    loot: [{
-      dx: 0, dy: 0,
-      featureExtra: { isRuin: true },
-      table: [
-        [{ type: 'weapon', key: ['dagger', 'short_sword', 'club'] }, 0.35],
-        [{ type: 'gold',   amount: [15, 65] }, 0.35],
-        [{ type: 'weapon', key: ['mace', 'long_sword'] }, 0.15],
-        [{ type: 'armor',  key: ['leather', 'studded'] }, 0.15],
-      ],
-    }],
-    minDistFromOther: 6,
-    minDistFromTown: 8,
-  },
+  // DISABLED — legacy system, do not delete yet
+  // {
+  //   key:       'ruin_chest_sw',
+  //   frequency: 3,
+  //   layer:     'surface',
+  //   ground:    [T.PLAINS, T.MOUNTAIN, T.RUIN_FLOOR],
+  //   clearCover: true,
+  //   bounds: {
+  //     minX: 4,
+  //     maxX: 35,
+  //     minY: Math.floor(H_SURF * 0.55),
+  //     maxY: H_SURF - 6,
+  //   },
+  //   tiles: [
+  //     { dx: 0, dy: 0, ground: T.STONE },
+  //   ],
+  //   loot: [{
+  //     dx: 0, dy: 0,
+  //     featureExtra: { isRuin: true },
+  //     table: [
+  //       [{ type: 'weapon', key: ['dagger', 'short_sword', 'club'] }, 0.35],
+  //       [{ type: 'gold',   amount: [15, 65] }, 0.35],
+  //       [{ type: 'weapon', key: ['mace', 'long_sword'] }, 0.15],
+  //       [{ type: 'armor',  key: ['leather', 'studded'] }, 0.15],
+  //     ],
+  //   }],
+  //   minDistFromOther: 6,
+  //   minDistFromTown: 8,
+  // },
 
   // ========== MIGRATED: NE Rock Chests ==========
 
@@ -605,23 +608,24 @@ export const STRUCTURE_REGISTRY = [
   // ========== NEW: Stone Pillar Cluster ==========
   // 5 ruin pillars in a loose group.  Purely decorative.
 
-  {
-    key:       'stone_pillar_cluster',
-    frequency: 4,
-    layer:     'surface',
-    ground:    [T.PLAINS, T.DESERT],
-    clearCover: true,
-    biome:     { elevation: [0.10, 0.60], moisture: [0.15, 0.55] },
-    tiles: [
-      { dx:  0, dy:  0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
-      { dx:  1, dy:  0, ground: T.RUIN_FLOOR },
-      { dx: -1, dy:  0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
-      { dx:  0, dy:  1, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
-      { dx:  1, dy: -1, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
-    ],
-    minDistFromTown:  12,
-    minDistFromOther: 18,
-  },
+  // DISABLED — legacy system, do not delete yet
+  // {
+  //   key:       'stone_pillar_cluster',
+  //   frequency: 4,
+  //   layer:     'surface',
+  //   ground:    [T.PLAINS, T.DESERT],
+  //   clearCover: true,
+  //   biome:     { elevation: [0.10, 0.60], moisture: [0.15, 0.55] },
+  //   tiles: [
+  //     { dx:  0, dy:  0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
+  //     { dx:  1, dy:  0, ground: T.RUIN_FLOOR },
+  //     { dx: -1, dy:  0, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
+  //     { dx:  0, dy:  1, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
+  //     { dx:  1, dy: -1, ground: T.RUIN_FLOOR, cover: T.RUIN_PILLAR },
+  //   ],
+  //   minDistFromTown:  12,
+  //   minDistFromOther: 18,
+  // },
 
   // ========== NEW: Abandoned Camp ==========
   // 2×2 dead campfire area with a crate and an optional loot chest.

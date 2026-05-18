@@ -275,6 +275,7 @@ export function placeStructures(){
           // Eels spawn on water tiles ONLY; crabs can spawn on beach or water
           if ((nt === T.WATER || nt === T.DEEP_WATER) && rand() < 0.3 * SPAWN_DENSITY_MULT){
             const pick = rand() < 0.5 ? 'cave_eel' : 'cave_crab';
+            if (!SPAWN_BLACKLIST.has(pick)) {  // safety: respect blacklist for direct spawns
             const m = spawnMonster(pick);
             m.x = nx; m.y = ny;
             m.homeX = nx; m.homeY = ny;
@@ -282,8 +283,10 @@ export function placeStructures(){
             m.hp = m.hpMax;
             m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
             monsters[LAYER_SURFACE].push(m);
+            }
           } else if (nt === T.BEACH && rand() < 0.15 * SPAWN_DENSITY_MULT){
             // Crabs only on beach (amphibious)
+            if (!SPAWN_BLACKLIST.has('cave_crab')) {  // safety: respect blacklist for direct spawns
             const m = spawnMonster('cave_crab');
             m.x = nx; m.y = ny;
             m.homeX = nx; m.homeY = ny;
@@ -291,6 +294,7 @@ export function placeStructures(){
             m.hp = m.hpMax;
             m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
             monsters[LAYER_SURFACE].push(m);
+            }
           }
         }
       }
@@ -322,19 +326,20 @@ export function placeStructures(){
   runStructurePlacement(LAYER_SURFACE, 'surface');
   runStructurePlacement(LAYER_UNDER, 'underground');
 
+  // DISABLED — legacy system, do not delete yet
   // Books (not migrated — simple scatter, no constraints)
-  const bookKeys = Object.keys(BOOKS);
-  const shuffled = [...bookKeys].sort(() => rand()-0.5);
-  const surfaceBooks = shuffled.slice(0,4);
-  const underBooks   = shuffled.slice(4,7);
-  for (const bk of surfaceBooks){
-    const s = findSpot(LAYER_SURFACE, (t,x,y,c)=>(t===T.GRASS||t===T.SAND||t===T.ROCK) && !c);
-    if (s) placeAt(LAYER_SURFACE, s[0], s[1], T.BOOK, {type:'book', bookKey:bk});
-  }
-  for (const bk of underBooks){
-    const s = findSpot(LAYER_UNDER, (t,x,y,c)=>(t===T.CAVE_FLOOR||t===T.ROCK) && !c);
-    if (s) placeAt(LAYER_UNDER, s[0], s[1], T.BOOK, {type:'book', bookKey:bk});
-  }
+  // const bookKeys = Object.keys(BOOKS);
+  // const shuffled = [...bookKeys].sort(() => rand()-0.5);
+  // const surfaceBooks = shuffled.slice(0,4);
+  // const underBooks   = shuffled.slice(4,7);
+  // for (const bk of surfaceBooks){
+  //   const s = findSpot(LAYER_SURFACE, (t,x,y,c)=>(t===T.GRASS||t===T.SAND||t===T.ROCK) && !c);
+  //   if (s) placeAt(LAYER_SURFACE, s[0], s[1], T.BOOK, {type:'book', bookKey:bk});
+  // }
+  // for (const bk of underBooks){
+  //   const s = findSpot(LAYER_UNDER, (t,x,y,c)=>(t===T.CAVE_FLOOR||t===T.ROCK) && !c);
+  //   if (s) placeAt(LAYER_UNDER, s[0], s[1], T.BOOK, {type:'book', bookKey:bk});
+  // }
 }
 
 // ==================== MONSTER SPAWNING ====================
@@ -397,6 +402,8 @@ export function spawnMonstersInWorld(){
         eligible.push('dire_wolf');
         eligible.push('wolf');
       }
+      // Safety: re-filter after overrides that may reintroduce blacklisted creatures
+      eligible = eligible.filter(k => !SPAWN_BLACKLIST.has(k));
       if (!eligible.length) continue;
       const picked = choice(eligible);
       const m = spawnMonster(picked);
