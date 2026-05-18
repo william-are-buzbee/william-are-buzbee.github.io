@@ -11,6 +11,7 @@ import { playerMelee, playerAcc, playerDodge, playerDef, playerCritChance,
 import { monDodge, monAcc, monCritChance, monCritMult, monDamage } from './monsters.js';
 import { inBounds, chebyshev, monsterAt, isTownCell, getCover } from './world-state.js';
 import { log } from './log.js';
+import { placeItem, generateItemId } from './ground-items.js';
 
 // Forward reference — set by main.js to break circular dep
 let _onVictoryCallback = null;
@@ -138,6 +139,17 @@ function alertNearby(src, radius){
 
 function killMonster(mon){
   const player = state.player;
+
+  // Drop a corpse item on the tile where the monster died
+  placeItem(state.player.layer, mon.x, mon.y, {
+    id:       generateItemId(),
+    type:     'corpse',
+    name:     `${mon.name} Corpse`,
+    sprite:   'corpse',
+    quantity: 1,
+    source:   mon.key,
+  });
+
   const xp = xpFromKill(player, mon.xp);
   const gold = Math.round(randRange(mon.goldRange[0], mon.goldRange[1]) * GOLD_DROP_MUL);
   state.player.xp += xp;
