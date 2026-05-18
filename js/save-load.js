@@ -2,7 +2,7 @@
 // Serializes full game state to localStorage. Auto-saved after every turn.
 // Handles circular references (bondPartner), Set objects, and item registry refs.
 
-import { state, worlds, covers, monsters, features } from './state.js';
+import { state, worlds, covers, monsters, features, groundItems } from './state.js';
 import { LAYER_META } from './constants.js';
 import { findWeapon, findArmor } from './items.js';
 import { render } from './rendering.js';
@@ -202,6 +202,10 @@ export function saveGame() {
       // Features per layer — Object keyed by layerIndex
       features: serializeFeatures(features),
 
+      // Ground items per layer — Object keyed by layerIndex,
+      // each value is a sparse map of "x,y" → array of item objects
+      groundItems: serializeFeatures(groundItems),  // same plain-object structure
+
       // Layer metadata registry
       layerMeta: { ...LAYER_META },
 
@@ -310,6 +314,14 @@ export function loadGame() {
     if (data.features) {
       for (const [key, value] of Object.entries(data.features)) {
         features[key] = value || {};
+      }
+    }
+
+    // --- Restore ground items (Object keyed by layerIndex) ---
+    for (const key of Object.keys(groundItems)) delete groundItems[key];
+    if (data.groundItems) {
+      for (const [key, value] of Object.entries(data.groundItems)) {
+        groundItems[key] = value || {};
       }
     }
 

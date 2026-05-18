@@ -64,6 +64,13 @@ export const features = {};
 // Only state.activeLayer's array is ticked each turn.
 export const monsters = {};
 
+// ==================== GROUND ITEM LAYER ====================
+// groundItems[layerIndex] → plain object keyed by "x,y" strings.
+// Each value is an array of item objects on that tile.
+// Sparse: only tiles with items have entries.  Most tiles have none.
+//   groundItems[0]["14,22"] → [{ id, type, name, sprite, quantity }, ...]
+export const groundItems = {};
+
 // Reverse look-up: cellKey (e.g. "millhaven") → layerIndex
 export const cellKeyToLayer = {};
 

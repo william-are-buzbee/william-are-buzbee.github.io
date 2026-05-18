@@ -1,5 +1,5 @@
 // ==================== RENDERING ====================
-import { state, worlds, covers } from './state.js';
+import { state, worlds, covers, groundItems } from './state.js';
 import { TILE, VIEW_W, VIEW_H, LAYER_UNDER, BIOME } from './constants.js';
 import { T, terrainInfo } from './terrain.js';
 import { spriteCache, tintedSprite, tintedMonsterSprite } from './sprites.js';
@@ -299,6 +299,26 @@ function render(){
       if (cover){
         const coverInfo = terrainInfo(cover);
         ctx.drawImage(tintedSprite(coverInfo.sprite, coverInfo.palette), px, py, TILE, TILE);
+      }
+
+      // ---- Draw GROUND ITEM indicator ----
+      // Small warm-gold dot at bottom-left of tile when items are present.
+      // Drawn after cover but before entities so it sits on the ground layer.
+      const giLayer = groundItems[layer];
+      if (giLayer) {
+        const giStack = giLayer[tileKey];
+        if (giStack && giStack.length > 0) {
+          ctx.save();
+          ctx.translate(px, py);
+          ctx.scale(S, S);
+          // outer dark outline for visibility on any ground
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fillRect(2, 25, 6, 6);
+          // inner warm-gold marker
+          ctx.fillStyle = '#d4a840';
+          ctx.fillRect(3, 26, 4, 4);
+          ctx.restore();
+        }
       }
 
       // ---- FOV: fog overlay for seen-but-not-visible tiles ----
