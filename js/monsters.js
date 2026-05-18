@@ -5,7 +5,7 @@ import { rand, randi, roll100 } from './rng.js';
 
 const MON = {
   // PLAINS
-  hare:       ['Dust Hare',      'HARE',
+  hare:       ['Small Grazer',   'SMALL_GRAZER',
                1, 1, 6, 1, 2,  1, 0,
                2,  [0,1],
                ['flesh','beast'], DMG.BLADE,
@@ -14,19 +14,19 @@ const MON = {
                0, 2,                // passive, tiny aggro
                [T.GRASS,T.DIRT,T.DIRT_ROAD,T.BEACH],
                0, 0,
-               '#c0a878',           // sandy brown
+               '#7a8070',           // muted gray-green, plated integument
                null],
   // FOREST
-  wolf:       ['Grey Wolf',      'WOLF',
+  wolf:       ['Meso-Predator',  'MESO_PRED',
                2, 2, 6, 3, 6,  2, 1,
                12, [2,6],
                ['flesh','beast'], DMG.BLADE,
                [T.FOREST],            LAYER_SURFACE,
                40, 2,
-               1, 3,                // territorial (was aggressive), reduced aggro range
-               [T.FOREST,T.GRASS,T.MUD,T.DIRT,T.DIRT_ROAD,T.BEACH],  // wolves roam freely across most terrain
+               1, 3,                // territorial, reduced aggro range
+               [T.FOREST,T.GRASS,T.MUD,T.DIRT,T.DIRT_ROAD,T.BEACH],  // roams freely across most terrain
                5, 2,                // solo chase ~5 tiles; personalities adjust for pack/wary
-               '#888078',           // brown-grey (not green!)
+               '#5a4a40',           // dark warm gray-brown, wrinkled skin
                {nightVision:true}],
   goblin:     ['Forest Goblin',  'GOBLIN',
                3, 3, 5, 4, 4,  2, 2,
@@ -165,8 +165,8 @@ const MON = {
                '#e07030',
                {nightVision:true}],
 
-  // MUSHROOM FOREST (SE)
-  mushroom:   ['Sporecap',        'MUSHROOM',
+  // CHEMOTROPHIC ZONE (SE)
+  mushroom:   ['Chemotroph',       'CHEMOTROPH_NODE',
                0, 8, 0, 7, 0,  0, 2,  // no STR/DEX, high CON/INT, zero weaponAtk
                28, [8,20],
                ['plant','fungal'], DMG.POISON,
@@ -175,8 +175,8 @@ const MON = {
                0, 0,               // passive, zero aggro range
                [T.MUSHFOREST,T.FUNGAL_GRASS],
                0, 0,               // no chase, no search — swarm AI handles everything
-               null,               // no tint
-               {blindsight:5}],    // spore/vibration sense — ignores LOS and light
+               '#786880',          // muted purple-gray (manganese zone default)
+               {blindsight:5}],    // vibration sense — ignores LOS and light
   // NORTHEAST CAVES — surface
   rock_golem: ['Rock Golem',      'ROCK_GOLEM',
                7, 10, 1, 1, 2,  4, 8,
@@ -202,16 +202,16 @@ const MON = {
                3, 0,
                '#4090b0',
                {waterHeal:true, nightVision:true}],
-  cave_crab:  ['Cave Crab',       'CAVE_CRAB',
+  cave_crab:  ['Wading Grazer',   'WADING_GRAZER',
                5, 6, 3, 1, 3,  3, 6,
                35, [10,25],
-               ['aquatic','shelled'], DMG.BLUNT,
+               ['flesh','beast'], DMG.BLUNT,
                [T.WATER,T.DEEP_WATER,T.UWATER,T.BEACH], LAYER_SURFACE,
                25, 3,
                1, 3,
                [T.WATER,T.DEEP_WATER,T.UWATER,T.BEACH,T.GRASS,T.SAND],
                2, 0,
-               '#607868',
+               '#4a5040',          // dark muddy brown-green, lighter belly
                {nightVision:true}],
   // UNDERGROUND OCEAN
   drowned:    ['The Drowned',    'DROWNED',
@@ -268,6 +268,7 @@ const MON_SPEED = {
   cave_eel: 80,   cave_crab: 45,
   drowned: 45,    deep_squid: 50,
   dread_king: 70,
+  ambush_pred: 70,
 };
 
 // ==================== PERSONALITY SYSTEM ====================
@@ -305,6 +306,10 @@ const PERSONALITY_POOL = {
     {trait:'leader', weight:0.15},
     {trait:'pair_bond', weight:0.15},
   ],
+  ambush_pred: [
+    {trait:'normal', weight:0.70},
+    {trait:'patient', weight:0.30},      // waits longer before striking, tighter leash
+  ],
   treant: [
     {trait:'normal', weight:0.30},
     {trait:'ancient', weight:0.15},      // higher HP, slower to anger
@@ -331,19 +336,34 @@ function rollPersonality(key){
   return pool[pool.length-1].trait;
 }
 
-// ==================== DIRE WOLF DATA ====================
-// Rarer, higher STR/CON, lower DEX, same INT, tends toward lone or small packs
-MON.dire_wolf = ['Dire Wolf',      'WOLF',
+// ==================== APEX PREDATOR DATA ====================
+// Rarer, higher STR/CON, lower DEX, same INT, tends toward lone or small groups
+MON.dire_wolf = ['Apex Predator',  'APEX_PRED',
                5, 5, 4, 3, 7,  4, 2,
                22, [6,14],
                ['flesh','beast'], DMG.BLADE,
                [T.FOREST],            LAYER_SURFACE,
                45, 4,
-               1, 3,                // territorial, reduced aggro range (matches wolf)
+               1, 3,                // territorial, reduced aggro range
                [T.FOREST,T.GRASS,T.MUD,T.DIRT,T.DIRT_ROAD,T.BEACH],
                5, 2,
-               '#5a4840',           // darker brown
+               '#3a302a',           // dark charcoal-brown, dense skin
                {nightVision:true}];
+
+// ==================== AMBUSH PREDATOR DATA ====================
+// Clade B solitary ambush predator. Territorial, disengages outside home range.
+// Spawns at forest and fungal zone edges. Less common than other surface creatures.
+MON.ambush_pred = ['Ambush Predator', 'AMBUSH_PRED',
+               4, 3, 5, 2, 5,  3, 3,
+               18, [4,10],
+               ['flesh','beast'], DMG.BLADE,
+               [T.FOREST,T.MUSHFOREST],  LAYER_SURFACE,
+               40, 2,
+               2, 5,                // aggressive within territory, moderate aggro range
+               [T.FOREST,T.MUSHFOREST,T.FUNGAL_GRASS],
+               4, 0,                // short chase, no search — disengages cleanly
+               '#5a5048',           // dark mottled gray-brown, blends with terrain
+               null];
 function monDodge(mon){
   const raw = (mon.dex - 1) * 2.5 + (mon.int - 1) * 0.8;
   const m = (mon.mods && mon.mods.dodgeMul) || 1;
@@ -375,11 +395,13 @@ const VISION_PROFILES = {
   knight:      { visionType: 'cone', coneAngle: 120 },
   mummy:       { visionType: 'cone', coneAngle: 120 },
   dread_king:  { visionType: 'cone', coneAngle: 120 },
-  // Wolves / predators — focused hunting cone
+  // Clade A predators — focused hunting cone
   wolf:        { visionType: 'cone', coneAngle: 90 },
   dire_wolf:   { visionType: 'cone', coneAngle: 90 },
+  // Clade B ambush predator — moderate forward cone, good motion detection
+  ambush_pred: { visionType: 'cone', coneAngle: 120 },
   magma_hound: { visionType: 'cone', coneAngle: 90 },
-  // Prey animals — near-panoramic awareness
+  // Prey / herbivores — near-panoramic awareness
   hare:        { visionType: 'cone', coneAngle: 170 },
   // Desert predators — moderate forward cone
   scorpion:    { visionType: 'cone', coneAngle: 100 },
@@ -390,7 +412,7 @@ const VISION_PROFILES = {
   drowned:     { visionType: 'cone', coneAngle: 110 },
   // Full-radius vision (omnidirectional / blindsight)
   cave_crab:   { visionType: 'radius' },
-  mushroom:    { visionType: 'radius' },  // blindsight — spore/vibration
+  mushroom:    { visionType: 'radius' },  // blindsight — vibration sense
   // Slow / rooted creatures — wide radius
   treant:      { visionType: 'radius' },
   rock_golem:  { visionType: 'radius' },
@@ -455,7 +477,7 @@ function spawnMonster(key){
     // Vision profile
     visionType: 'radius',
     coneAngle: 360,
-    // Mushroom swarm phase tracking
+    // Chemotroph swarm phase tracking
     swarmPhase: 'passive',    // passive | coalescing | mobbing
     coalesceTick: 0,          // counter for slow drift during coalescing
   };
@@ -478,6 +500,9 @@ function spawnMonster(key){
     m.percept += 5; m.dex += 1;
   } else if (personality === 'spore_heavy' && key === 'mushroom'){
     m.sporeHeavy = true;  // flag checked during poison touch
+  } else if (personality === 'patient' && key === 'ambush_pred'){
+    m.aggroRange = Math.max(2, m.aggroRange - 2);  // tighter detection
+    m.chase += 2;  // but more persistent once committed
   }
   // Wolf biome avoidance: wolves avoid desert and rock, give up chase into those biomes.
   // Pack/leader wolves range wider, lone/wary stick closer to forest.
@@ -500,6 +525,11 @@ function spawnMonster(key){
       m.chase = 8;           // bonded pairs pursue moderately
       m.avoidLeash = 4;
     }
+  }
+  // Ambush predator: territorial leash to home position (8-10 tiles radius).
+  // Disengages immediately when player leaves that radius.
+  if (key === 'ambush_pred'){
+    m.homeLeash = (personality === 'patient') ? 8 : 10;
   }
   // Apply vision profile from lookup
   const vp = VISION_PROFILES[key];

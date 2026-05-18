@@ -35,8 +35,9 @@ function biomeAt(layer, x, y){
 }
 
 // ==================== AQUATIC MOVEMENT LOCK ====================
-// Fish / aquatic enemies (not crabs) are confined to water tiles.
+// Fish / aquatic enemies are confined to water tiles.
 // They can melee-attack an adjacent target on land but never step onto it.
+// The wading grazer (cave_crab key) is amphibious and explicitly excluded.
 const WATER_TILES = new Set([T.WATER, T.DEEP_WATER, T.UWATER]);
 
 function isWaterTile(layer, x, y){
@@ -55,7 +56,7 @@ function isWaterLocked(mon){
 
 function getLeashDist(mon){
   switch (mon.key){
-    case 'mushroom':  return 0;  // NEVER leave fungal ground
+    case 'mushroom':  return 0;  // NEVER leave fungal/chemotrophic ground
     case 'scorpion':  return 2;
     case 'lurker':    return 2;
     case 'mummy':     return 3;
@@ -65,6 +66,7 @@ function getLeashDist(mon){
       if (mon.personality === 'lone_hunter' || mon.personality === 'skittish' || mon.personality === 'wary') return 4;
       return 5;
     case 'hare':       return 99; // flee AI handles drift
+    case 'ambush_pred': return 3; // stays close to home biome
     case 'cave_eel': case 'deep_squid': case 'drowned': return 0; // water-locked
     case 'cave_crab':  return 5;
     default:           return 5;
@@ -78,6 +80,7 @@ function getHomeTiles(mon){
     case 'scorpion': case 'lurker': case 'mummy': return [T.SAND];
     case 'wolf': case 'dire_wolf': return [T.FOREST];
     case 'cave_crab':  return [T.WATER, T.DEEP_WATER, T.UWATER, T.BEACH];
+    case 'ambush_pred': return [T.FOREST, T.MUSHFOREST, T.FUNGAL_GRASS];
     case 'hare':       return [T.GRASS, T.FOREST, T.DIRT, T.DIRT_ROAD];
     default:           return mon.biomes && mon.biomes.length ? [...mon.biomes] : [];
   }
@@ -94,7 +97,7 @@ function getHardAvoidTiles(mon){
 function isForbiddenTile(mon, layer, x, y){
   if (!inBounds(layer, x, y)) return true;
   const g = worlds[layer][y][x];
-  // Mushrooms: fungal-only
+  // Chemotrophs: fungal-only
   if (mon.key === 'mushroom'){
     const b = biomeAt(layer, x, y);
     const fungal = [T.MUSHFOREST, T.FUNGAL_GRASS];
@@ -379,9 +382,9 @@ function enemyAct(mon){
     }
   }
 
-  // Hares — always passive, never aggro. Flee from threats, never chase/attack.
+  // Small grazers — always passive, never aggro. Flee from threats, never chase/attack.
   if (mon.key === 'hare' || (mon.icon && mon.icon === 'HARE')){
-    // If player is nearby or hare was attacked/alerted, flee
+    // If player is nearby or grazer was attacked/alerted, flee
     if (d <= 4 || mon.wasAttacked || mon.alerted){
       const fdx = Math.sign(mon.x - state.player.x);
       const fdy = Math.sign(mon.y - state.player.y);
@@ -407,16 +410,50 @@ function enemyAct(mon){
     return;
   }
 
-  // ====== MUSHROOM SWARM AI ======
-  // Mushrooms always use swarm AI — never the normal state machine.
+  // ====== CHEMOTROPH SWARM AI ======
+  // Chemotrophs always use swarm AI — never the normal state machine.
   // This intercept catches them in any aiState (idle, chase from mobbing, etc.)
   if (mon.key === 'mushroom'){
     mushroomPackAI(mon);
     return;
   }
 
+  // ====== AMBUSH PREDATOR AI ======
+  // Territorial chase: aggressive within homeLeash tiles of home position,
+  // immediately disengages outside that radius. Does not pursue.
+  if (mon.key === 'ambush_pred'){
+    const homeLeash = mon.homeLeash || 10;
+    const playerDistFromHome = chebyshev(state.player.x, state.player.y, mon.homeX, mon.homeY);
+    const monDistFromHome = chebyshev(mon.x, mon.y, mon.homeX, mon.homeY);
+
+    // If monster has wandered too far from home, retreat silently
+    if (monDistFromHome > homeLeash + 2){
+      mon.aiState = 'idle';
+      mon.alerted = false;
+      mon.chaseTurnsLeft = 0;
+      moveMonsterToward(mon, mon.homeX, mon.homeY);
+      return;
+    }
+
+    // Player outside territory — disengage, return home
+    if (playerDistFromHome > homeLeash){
+      if (mon.aiState === 'chase' && d <= 10){
+        log(`${mon.name} breaks off and retreats.`, 'muted');
+      }
+      mon.aiState = 'idle';
+      mon.alerted = false;
+      mon.chaseTurnsLeft = 0;
+      if (monDistFromHome > 2) moveMonsterToward(mon, mon.homeX, mon.homeY);
+      else if (rand() < 0.10) wanderInTerritory(mon);
+      return;
+    }
+
+    // Player inside territory — use standard aggro/chase behavior
+    // (falls through to the normal state machine below)
+  }
+
   // ====== WATER-LOCKED AQUATIC AI ======
-  // Fish / aquatic enemies (not crabs) never leave water. They attack from
+  // Aquatic enemies never leave water. They attack from
   // the water's edge and give up if the player moves away.
   if (isWaterLocked(mon)){
     // If adjacent, attack regardless of target terrain
@@ -484,7 +521,7 @@ function enemyAct(mon){
     return;
   }
 
-  // Wolf 'skittish' personality — flee at low HP
+  // Meso/apex predator 'skittish' personality — flee at low HP
   if (mon.personality === 'skittish' && (mon.key === 'wolf' || mon.key === 'dire_wolf')){
     if (mon.hp < mon.hpMax * 0.3 && d <= 3){
       // Run away from player
@@ -501,7 +538,7 @@ function enemyAct(mon){
     }
   }
 
-  // Wolf pair bonding — try to stay within 3 tiles of partner
+  // Predator pair bonding — try to stay within 3 tiles of partner
   if (mon.personality === 'pair_bond' && mon.bondPartner){
     const partner = mon.bondPartner;
     if (partner.hp > 0){
@@ -531,7 +568,7 @@ function enemyAct(mon){
     }
   }
 
-  // Goblin/wolf 'leader' — when entering combat, alert nearby same-type
+  // Goblin/predator 'leader' — when entering combat, alert nearby same-type
   if (mon.personality === 'leader' && mon.aiState === 'chase' && mon.alerted){
     const followerType = mon.key;
     for (const m of monstersHere()){
@@ -563,7 +600,7 @@ function enemyAct(mon){
     } else {
     // Passive creatures ignore player unless attacked (handled above)
     if (mon.hostility === 0){
-      // Wary wolves: passive at range, but aggro if player is right next to them
+      // Wary predators: passive at range, but aggro if player is right next to them
       if (mon.personality === 'wary' && (mon.key === 'wolf' || mon.key === 'dire_wolf') && d <= 1){
         mon.aiState = 'chase';
         mon.alerted = true;
@@ -641,7 +678,7 @@ function enemyAct(mon){
       mon.searchTurnsLeft = 0;
       return;
     }
-    // Biome avoidance — wolves (and any monster with avoidBiomes) give up
+    // Biome avoidance — predators (and any monster with avoidBiomes) give up
     // chase when they've wandered too deep into avoided terrain.
     if (mon.avoidBiomes && mon.avoidBiomes.length && mon.chase < 99){
       const monGround = worlds[state.player.layer][mon.y][mon.x];
@@ -729,11 +766,11 @@ function enemyAct(mon){
   }
 }
 
-// ==================== MUSHROOM SWARM AI ====================
+// ==================== COLONIAL CHEMOTROPH SWARM AI ====================
 // Phase 1 — Passive:  wander slowly, ignore player entirely
 // Phase 2 — Coalescing: drift toward player over many turns (organic, not a beeline)
-// Phase 3 — Surround trigger: 8+ mushrooms within 2 tiles → ALL nearby go hostile
-// Phase 4 — Mobbing: poison-touch every turn, chase briefly, reset at 6+ tile distance
+// Phase 3 — Surround trigger: 8+ nodes within 2 tiles → ALL nearby go hostile
+// Phase 4 — Mobbing: enzyme-touch every turn, chase briefly, reset at 6+ tile distance
 
 /** Threshold of mushrooms within 2 tiles of player to trigger the ambush. */
 const SWARM_TRIGGER_COUNT = 8;
@@ -781,7 +818,7 @@ function mushroomPackAI(mon){
   }
 
   // ---- PASSIVE PHASE ----
-  // Far from player or player not in mushroom forest area — just wander slowly
+  // Far from player or player not in chemotrophic zone — just wander slowly
   if (d > 10){
     if (rand() < 0.10) wanderInTerritory(mon);
     mon.swarmPhase = 'passive';
@@ -790,7 +827,7 @@ function mushroomPackAI(mon){
 
   // Player is within awareness range — transition to coalescing
   if (mon.swarmPhase === 'passive'){
-    // Don't detect stealth at all — mushrooms have zero perception
+    // Don't detect stealth at all — chemotrophs have zero perception
     if (state.player.stealth) {
       if (rand() < 0.10) wanderInTerritory(mon);
       return;
@@ -814,7 +851,7 @@ function mushroomPackAI(mon){
       && chebyshev(m.x, m.y, state.player.x, state.player.y) <= 2
     );
     if (nearPlayer.length >= SWARM_TRIGGER_COUNT){
-      // AMBUSH! All mushrooms in local group go hostile simultaneously
+      // Colony convergence! All chemotrophs in local group go hostile simultaneously
       const localGroup = monstersHere().filter(m =>
         m.hp > 0 && m.key === 'mushroom'
         && chebyshev(m.x, m.y, state.player.x, state.player.y) <= SWARM_GROUP_RADIUS
@@ -824,7 +861,7 @@ function mushroomPackAI(mon){
         m.alerted = true;
         m.aiState = 'chase';
       }
-      log('The mushrooms close in — it\'s an ambush!', 'warn');
+      log('The colony converges — you\'re surrounded!', 'warn');
       // This mushroom acts immediately if adjacent
       if (d <= 1) mushroomTouch(mon);
       else moveMonsterToward(mon, state.player.x, state.player.y);
@@ -863,17 +900,17 @@ function mushroomPackAI(mon){
   }
 }
 
-// Mushroom poison touch — zero physical damage, flat poison chance
+// Chemotroph enzyme touch — zero physical damage, flat poison chance
 function mushroomTouch(mon){
   const player = state.player;
   if (player.hp <= 0) return;
 
   // No hit/miss roll for touch — it's automatic contact
-  log(`${mon.name} brushes against you with toxic spores.`, 'muted');
+  log(`${mon.name} presses close — caustic enzymes burn.`, 'muted');
 
   // Flat poison chance vs player's poison resistance
   const poisonResist = poisonResistance(player);
-  const baseChance = mon.sporeHeavy ? 70 : 55;  // spore_heavy personality = higher base
+  const baseChance = mon.sporeHeavy ? 70 : 55;  // enzyme-heavy variant = higher base
   const poisonChance = Math.max(5, baseChance - poisonResist.chanceReduction);
 
   if (roll100() <= poisonChance){
@@ -884,8 +921,8 @@ function mushroomTouch(mon){
       flatDmg: 1,        // +1 flat per tick
     });
     const stacks = state.player.effects.filter(e => e.type === 'poison').length;
-    if (stacks === 1) log('Spores seep in — you are poisoned!', 'warn');
-    else log(`Poison stacks from the spores! (×${stacks})`, 'warn');
+    if (stacks === 1) log('Enzymes seep in — you are poisoned!', 'warn');
+    else log(`Enzymatic damage stacks! (×${stacks})`, 'warn');
   }
   if (state.player.stealth) endStealth('Your cover is blown!');
 }
