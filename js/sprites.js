@@ -2,51 +2,17 @@
 import { PIX, SPR, COL_FG, COL_MID, BIOME } from './constants.js';
 
 export const S = {};
-
-// ==================== CLADE A PLAYER SPRITES ====================
-// All three share the six-limbed body plan (three pairs of legs)
-// but differ in proportions and silhouette.
-
-// Stalker — meso-predator body plan. Six-limbed, low-slung, mid-sized.
-S.PLAYER_STALKER = [
-  '................','...##......##...','...###....###...','...##-####-##...',
-  '....########....','.....-####-.....','..##-########-##','..##############',
-  '..##--######--##','..##############','...##.####.##...','...##..##..##...',
-  '..##...##...##..','..#....##....#..','..#....##....#..','................',
+S.PLAYER = [
+  '................','.....######.....','....########....','....##.##.##....',
+  '....########....','.....######.....','.....######.....','...##########...',
+  '..############..','..##-######-##..','..##--####--##..','..############..',
+  '...##########...','....########....','....##....##....','...###....###...',
 ];
-S.PLAYER_STALKER_STEALTH = [
-  '................','...--......--...','...---....---...','...---####---...',
-  '....--------....','.....-####-.....','..---########---','..--############',
-  '..--..####..--..','..--############','...--.-##-.--..-','...--..--..--...',
-  '..-....--...-...','..-.............','..-.............','................',
-];
-
-// Brute — apex predator body plan. Six-limbed, heavier, larger.
-S.PLAYER_BRUTE = [
-  '..##........##..','..###......###..','..##-######-##..','..############..',
-  '...##########...','..##--######--##','##-############-','################',
-  '####--####--####','################','.###.######.###.','.##...####...##.',
-  '.##....##....##.','.##....##....##.','..#....##....#..','................',
-];
-S.PLAYER_BRUTE_STEALTH = [
-  '..--........--..','..---......---..','..---######---..','..------------..',
-  '...----------...','..----######----','---############-','----------------',
-  '----..####..----','----------------','.---.-####-.---.','.--..-####..--.',
-  '.--....--....--.','.--....--....--.','..-....--....-..','.--.............',
-];
-
-// Drifter — large herbivore body plan. Six-limbed, barrel-shaped.
-S.PLAYER_DRIFTER = [
-  '................','....##....##....','....###--###....','....##----##....',
-  '.....######.....','.##--######--##.','##-############-','####--####--####',
-  '################','##-############-','.##--######--##.','.###..####..###.',
-  '..##...##...##..','..##...##...##..','..#....##....#..','................',
-];
-S.PLAYER_DRIFTER_STEALTH = [
-  '................','....--....--....','....---..---....','....------......',
-  '.....------.....','.----######----.','-.-############-','----..####..----',
-  '----------------','---############-','.----######----.','.--..-####..--.',
-  '..-....--...-...','..--...--...-...','..-.............','................',
+S.PLAYER_STEALTH = [
+  '................','.....------.....','....--------....','....--.--.--....',
+  '....--------....','.....------.....','.....------.....','...----------...',
+  '..------------..','..--........-..','..--........-..','..------------..',
+  '...----------...','....--------....','....--....--....','...---....---...',
 ];
 S.GRASS = [
   '................','................','.....#..........','................',
@@ -577,6 +543,54 @@ S.HARE = [
   '.##############.','.##############.','..############..','..###-######-##.',
   '..##########-##.','...####..####...','...###....###...','..####....####..',
 ];
+// Clade A Meso-Predator — six-limbed, low-slung, broad, ear-flaps
+S.MESO_PRED = [
+  '................','...##......##...','...###....###...','..##-##..##-##..',
+  '..#####--#####..','.##-##########-#','.##############.','.##--######--##.',
+  '.##############.','..############..','..###..##..###..','..##...##...##..',
+  '..##...##...##..','..#....##....#..','..#..........#..','................',
+];
+// Clade A Apex Predator — larger, heavier version of meso-predator
+S.APEX_PRED = [
+  '................','..##........##..','..####....####..','.##-###..###-##.',
+  '.######--######.','####-########-##','################','##--##########--',
+  '################','.##############.','.####..##..####.','.###...##...###.',
+  '..##...##...##..','..##...##...##..','.###..####..###.','................',
+];
+// Clade B Small Herbivore — eight-limbed, compact, low profile, busy grazer
+S.SMALL_GRAZER = [
+  '................','................','...##..##..##...','..############..',
+  '..##--####--##..','..############..','..##-########-#.','..############..',
+  '.##-##-##-##-##.','..############..','..##.##..##.##..','..##.##..##.##..',
+  '..#..#...#..#...','................','................','................',
+];
+// Clade A Large Herbivore — six-limbed, heavy, barrel-shaped, amphibious
+S.WADING_GRAZER = [
+  '................','.....######.....',
+  '....########....','...##-####-##...',
+  '..##--####--##..','.##############.',
+  '####-######-####','################',
+  '##--##########--','################',
+  '.##############.','..############..',
+  '..####..##..###.','..###...##..###.',
+  '.####..####.####','................',
+];
+// Clade B Colonial Chemotroph node — eight-limbed, oversized front sensory limbs
+S.CHEMOTROPH_NODE = [
+  '................','##............##','.##..........##.',
+  '..###......###..','...##########...','..##--####--##..',
+  '..############..','..##-########-#.','..############..',
+  '...##-##-##-##..','....##..##..##..','....##..##..##..',
+  '.....##..##.....','................','................',
+  '................',
+];
+// Clade B Solitary Ambush Predator — compact, armored, eight-limbed croucher
+S.AMBUSH_PRED = [
+  '................','................','....########....','...##-####-##...',
+  '..##--####--##..','..############..','.##-##########-#','.##############.',
+  '##-############-','##--##########--','.##-##-##-##-##.','..####..####..##',
+  '...###..###..##.','...##....##..#..','...##....##.....','................',
+];
 
 // ==================== VILLAGE / LANDMARK SPRITES ====================
 
@@ -701,70 +715,4 @@ function mixColors(a, b, t){
   const br=(pb>>16)&255, bg=(pb>>8)&255, bb=pb&255;
   const r=Math.round(ar*(1-t)+br*t), gg=Math.round(ag*(1-t)+bg*t), bl=Math.round(ab*(1-t)+bb*t);
   return '#' + ((r<<16)|(gg<<8)|bl).toString(16).padStart(6,'0');
-}
-
-// ==================== PLAYER BODY TYPE PALETTES ====================
-// Slightly lighter/more saturated than the NPC/enemy versions of these
-// creatures so the player always stands out on the grid.
-export const PLAYER_PALETTES = {
-  stalker: { fg: '#a08e78', mid: '#685840' },   // warm gray-brown (lighter than enemy meso-pred)
-  brute:   { fg: '#8a7e78', mid: '#504848' },   // dark charcoal-brown (lighter than enemy apex)
-  drifter: { fg: '#889868', mid: '#506038' },   // muddy brown-green (lighter than enemy herbivore)
-};
-
-// Build tinted player sprites for each body type.
-// Stores results in spriteCache as e.g. 'PLAYER_STALKER_TINTED', 'PLAYER_STALKER_STEALTH_TINTED'.
-function buildTintedPlayerSprite(spriteName, palette){
-  const rows = S[spriteName];
-  if (!rows) return null;
-  const c = document.createElement('canvas');
-  c.width = SPR*PIX; c.height = SPR*PIX;
-  const g = c.getContext('2d');
-  g.imageSmoothingEnabled = false;
-  for (let y=0;y<SPR;y++){
-    const row = rows[y]||'';
-    for (let x=0;x<SPR;x++){
-      const ch = row[x]||'.';
-      if (ch === '#') g.fillStyle = palette.fg;
-      else if (ch === '-') g.fillStyle = palette.mid;
-      else continue;
-      g.fillRect(x*PIX, y*PIX, PIX, PIX);
-    }
-  }
-  return c;
-}
-
-// Pre-build all tinted player sprites
-for (const [type, pal] of Object.entries(PLAYER_PALETTES)){
-  const upper = type.toUpperCase();
-  spriteCache['PLAYER_' + upper + '_TINTED'] = buildTintedPlayerSprite('PLAYER_' + upper, pal);
-  spriteCache['PLAYER_' + upper + '_STEALTH_TINTED'] = buildTintedPlayerSprite('PLAYER_' + upper + '_STEALTH', pal);
-}
-
-// Create a preview canvas for a player body type at a given pixel size.
-// Used by the chargen body-type selection screen.
-export function buildPlayerPreview(bodyType, size){
-  const pal = PLAYER_PALETTES[bodyType];
-  if (!pal) return null;
-  const spriteName = 'PLAYER_' + bodyType.toUpperCase();
-  const rows = S[spriteName];
-  if (!rows) return null;
-  const c = document.createElement('canvas');
-  const pxSize = Math.floor(size / SPR);
-  c.width = pxSize * SPR;
-  c.height = pxSize * SPR;
-  c.style.imageRendering = 'pixelated';
-  const g = c.getContext('2d');
-  g.imageSmoothingEnabled = false;
-  for (let y=0;y<SPR;y++){
-    const row = rows[y]||'';
-    for (let x=0;x<SPR;x++){
-      const ch = row[x]||'.';
-      if (ch === '#') g.fillStyle = pal.fg;
-      else if (ch === '-') g.fillStyle = pal.mid;
-      else continue;
-      g.fillRect(x*pxSize, y*pxSize, pxSize, pxSize);
-    }
-  }
-  return c;
 }

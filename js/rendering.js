@@ -353,10 +353,7 @@ function drawEntityAtTile(wx, wy, px, py, layer){
   }
 
   if (wx === state.player.x && wy === state.player.y){
-    const bt = (state.player.bodyType || 'stalker').toUpperCase();
-    const pspr = state.player.stealth
-      ? spriteCache['PLAYER_' + bt + '_STEALTH_TINTED']
-      : spriteCache['PLAYER_' + bt + '_TINTED'];
+    const pspr = state.player.stealth ? spriteCache.PLAYER_STEALTH : spriteCache.PLAYER;
     ctx.drawImage(pspr, px, py, TILE, TILE);
     if (state.player.hitFlash > 0){
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
