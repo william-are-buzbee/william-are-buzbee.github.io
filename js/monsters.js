@@ -573,9 +573,9 @@ const SPAWN_BLACKLIST = new Set([
   'lurker',        // legacy — not part of current fauna
   'frost_troll',   // legacy — not part of current fauna
   'cave_eel',      // legacy — not part of current fauna
-  'cave_crab',     // legacy — not part of current fauna
   'deep_squid',    // legacy — not part of current fauna
   'rock_golem',    // legacy — not part of current fauna
+  'treant',        // legacy — not part of current fauna
 ]);
 
 // Re-export everything that other modules need
