@@ -698,60 +698,6 @@
   .chargen-derived .kv.highlight .k{color:var(--accent)!important;}
   .chargen-derived .kv.highlight .v{color:var(--accent)!important;}
 
-  /* ─── Body type selection ─── */
-  .bt-grid{
-    display:flex;
-    gap:10px;
-    justify-content:center;
-    margin:10px 0;
-  }
-  .bt-card{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    width:140px;
-    padding:12px 8px;
-    border:2px solid var(--fg-dark);
-    background:rgba(0,0,0,0.6);
-    cursor:pointer;
-    transition:none;
-  }
-  .bt-card:hover{
-    border-color:var(--fg-dim);
-    background:rgba(20,20,30,0.8);
-  }
-  .bt-card.selected{
-    border-color:var(--accent);
-    background:rgba(40,35,20,0.5);
-    box-shadow:inset 0 0 12px rgba(184,168,112,0.08);
-  }
-  .bt-preview{
-    display:block;
-    image-rendering:pixelated;
-    margin-bottom:8px;
-  }
-  .bt-name{
-    font-size:10px;
-    font-weight:bold;
-    letter-spacing:2px;
-    color:var(--fg);
-    margin-bottom:2px;
-  }
-  .bt-card.selected .bt-name{color:var(--accent);}
-  .bt-sub{
-    font-size:7px;
-    color:var(--fg-dim);
-    letter-spacing:1px;
-    text-transform:uppercase;
-    margin-bottom:6px;
-  }
-  .bt-desc{
-    font-size:7px;
-    color:var(--fg-faint);
-    line-height:1.6;
-    text-align:center;
-  }
-
   .chargen-actions{
     display:flex;justify-content:space-between;gap:10px;margin-top:10px;
   }
@@ -773,6 +719,47 @@
   }
   .title-btn:hover{
     text-shadow:0 0 8px rgba(255,255,255,0.5);
+  }
+
+  /* ─── Body type selection ─── */
+  .bodytype-select{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:18px;
+  }
+  .bodytype-options{
+    display:flex;
+    gap:20px;
+    justify-content:center;
+    align-items:center;
+  }
+  .bodytype-option{
+    width:64px;height:64px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    border:2px solid var(--fg-dark);
+    background:#000;
+    cursor:pointer;
+    transition:none;
+  }
+  .bodytype-option:hover{
+    border-color:var(--fg-dim);
+  }
+  .bodytype-option.selected{
+    border-color:var(--accent);
+    box-shadow:0 0 8px rgba(184,168,112,0.3);
+  }
+  .bt-preview{
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    pointer-events:none;
+  }
+  .bodytype-actions{
+    display:flex;
+    gap:10px;
+    margin-top:4px;
   }
 </style>
 </head>
@@ -927,13 +914,11 @@
       </div>
 
       <div class="centered-screen" id="bodytype-screen" style="display:none;">
-        <div class="chargen">
-          <h1>BODY TYPE</h1>
-          <div class="sub">Choose your Clade A body plan</div>
-          <div class="bt-grid" id="bt-grid"></div>
-          <div class="chargen-actions">
+        <div class="bodytype-select">
+          <div class="bodytype-options" id="bodytype-options"></div>
+          <div class="bodytype-actions">
             <button class="btn" id="bt-back">BACK</button>
-            <button class="btn primary" id="bt-begin">BEGIN</button>
+            <button class="btn primary" id="bt-begin" disabled>BEGIN</button>
           </div>
         </div>
       </div>

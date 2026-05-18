@@ -353,7 +353,9 @@ function drawEntityAtTile(wx, wy, px, py, layer){
   }
 
   if (wx === state.player.x && wy === state.player.y){
-    const pspr = state.player.stealth ? spriteCache.PLAYER_STEALTH : spriteCache.PLAYER;
+    const bodyKey = { meso:'PLAYER_MESO', apex:'PLAYER_APEX', grazer:'PLAYER_GRAZER' }[state.player.bodyType] || 'PLAYER_MESO';
+    const stealthKey = bodyKey + '_STEALTH';
+    const pspr = state.player.stealth ? spriteCache[stealthKey] : spriteCache[bodyKey];
     ctx.drawImage(pspr, px, py, TILE, TILE);
     if (state.player.hitFlash > 0){
       ctx.fillStyle = 'rgba(255,255,255,0.28)';

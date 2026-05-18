@@ -7,6 +7,7 @@ import { findArmor } from './items.js';
 import { initWorld } from './world-logic.js';
 import { log, logEl } from './log.js';
 import { render } from './rendering.js';
+import { spriteCache } from './sprites.js';
 import { getRegionName } from './ui.js';
 import { updatePlayerFOV } from './fov.js';
 
@@ -17,7 +18,20 @@ function openCharGen(){
   document.getElementById('title').style.display = 'none';
   document.getElementById('chargen-screen').style.display = 'flex';
   state.cgAttrs = {str:1, con:1, dex:1, int:1, per:1};
+  state.selectedBodyType = null;
   renderCharGen();
+
+  // Wire NEXT to body-type selection (overrides any main.js binding)
+  document.getElementById('cg-begin').onclick = openBodyTypeSelect;
+
+  // Wire body-type screen buttons
+  const btBack = document.getElementById('bt-back');
+  const btBegin = document.getElementById('bt-begin');
+  if (btBack) btBack.onclick = () => {
+    document.getElementById('bodytype-screen').style.display = 'none';
+    document.getElementById('chargen-screen').style.display = 'flex';
+  };
+  if (btBegin) btBegin.onclick = beginGame;
 }
 
 function renderCharGen(){
@@ -161,15 +175,62 @@ function randomizeAttrs(){
 
 function beginGame(){
   state.exploredCells = new Set();
-  state.player = freshPlayer(state.cgAttrs);
+  state.player = freshPlayer(state.cgAttrs, state.selectedBodyType || 'meso');
   initWorld(Math.floor(Math.random()*999999));
   document.getElementById('chargen-screen').style.display = 'none';
+  document.getElementById('bodytype-screen').style.display = 'none';
   state.gameState = 'play';
   logEl.innerHTML = '';
   log('You stand at the gates of Millhaven. Step through to enter.', 'system');
   log('Listen to townsfolk. Information matters more than steel.', 'system');
   updatePlayerFOV();  // compute initial FOV before first render
   render();
+}
+
+// ==================== BODY TYPE SELECTION ====================
+function openBodyTypeSelect(){
+  document.getElementById('chargen-screen').style.display = 'none';
+  document.getElementById('bodytype-screen').style.display = 'flex';
+  state.selectedBodyType = null;
+  renderBodyTypeSelect();
+}
+
+function renderBodyTypeSelect(){
+  const container = document.getElementById('bodytype-options');
+  const types = [
+    { key: 'meso',   sprite: 'PLAYER_MESO' },
+    { key: 'apex',   sprite: 'PLAYER_APEX' },
+    { key: 'grazer', sprite: 'PLAYER_GRAZER' },
+  ];
+
+  container.innerHTML = types.map(t => {
+    const sel = state.selectedBodyType === t.key ? ' selected' : '';
+    return `<div class="bodytype-option${sel}" data-bt="${t.key}">
+      <canvas class="bt-preview" data-sprite="${t.sprite}" width="48" height="48"></canvas>
+    </div>`;
+  }).join('');
+
+  // Draw each sprite preview onto its canvas
+  container.querySelectorAll('.bt-preview').forEach(cvs => {
+    const spriteName = cvs.dataset.sprite;
+    const src = spriteCache[spriteName];
+    if (src){
+      const g = cvs.getContext('2d');
+      g.imageSmoothingEnabled = false;
+      g.clearRect(0, 0, 48, 48);
+      g.drawImage(src, 0, 0, 48, 48);
+    }
+  });
+
+  // Click handlers
+  container.querySelectorAll('.bodytype-option').forEach(opt => {
+    opt.onclick = () => {
+      state.selectedBodyType = opt.dataset.bt;
+      renderBodyTypeSelect();
+    };
+  });
+
+  document.getElementById('bt-begin').disabled = !state.selectedBodyType;
 }
 
 // ==================== DEATH / VICTORY ====================
@@ -186,4 +247,5 @@ function onVictory(){
 // getRegionName already imported above
 
 export { openCharGen, renderCharGen, randomizeAttrs, beginGame,
+         openBodyTypeSelect, renderBodyTypeSelect,
          onPlayerDeath, onVictory };
