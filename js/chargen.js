@@ -9,6 +9,7 @@ import { log, logEl } from './log.js';
 import { render } from './rendering.js';
 import { getRegionName } from './ui.js';
 import { updatePlayerFOV } from './fov.js';
+import { buildPlayerPreview } from './sprites.js';
 
 // cgAttrs lives in state.js
 function getCGPool(){ return STARTING_POINTS; }
@@ -18,6 +19,8 @@ function openCharGen(){
   document.getElementById('chargen-screen').style.display = 'flex';
   state.cgAttrs = {str:1, con:1, dex:1, int:1, per:1};
   renderCharGen();
+  // Wire NEXT to body-type selection (overrides any main.js wiring)
+  document.getElementById('cg-begin').onclick = openBodySelect;
 }
 
 function renderCharGen(){
@@ -159,10 +162,91 @@ function randomizeAttrs(){
   renderCharGen();
 }
 
-function beginGame(){
+// ==================== BODY TYPE SELECTION ====================
+const BODY_TYPES = [
+  {
+    key: 'stalker',
+    name: 'STALKER',
+    sub: 'Meso-predator',
+    desc: 'Six-limbed, low-slung, mid-sized. The balanced body plan.',
+  },
+  {
+    key: 'brute',
+    name: 'BRUTE',
+    sub: 'Apex predator',
+    desc: 'Six-limbed, heavier, larger. Built for force.',
+  },
+  {
+    key: 'drifter',
+    name: 'DRIFTER',
+    sub: 'Large herbivore',
+    desc: 'Six-limbed, barrel-shaped, amphibious. Built to endure.',
+  },
+];
+
+function openBodySelect(){
+  document.getElementById('chargen-screen').style.display = 'none';
+  const screen = document.getElementById('bodytype-screen');
+  screen.style.display = 'flex';
+
+  const grid = document.getElementById('bt-grid');
+  grid.innerHTML = '';
+
+  let selected = 'stalker';
+
+  BODY_TYPES.forEach(bt => {
+    const card = document.createElement('div');
+    card.className = 'bt-card' + (bt.key === selected ? ' selected' : '');
+    card.dataset.type = bt.key;
+
+    // Sprite preview
+    const preview = buildPlayerPreview(bt.key, 96);
+    if (preview) {
+      preview.className = 'bt-preview';
+      card.appendChild(preview);
+    }
+
+    const nameEl = document.createElement('div');
+    nameEl.className = 'bt-name';
+    nameEl.textContent = bt.name;
+    card.appendChild(nameEl);
+
+    const subEl = document.createElement('div');
+    subEl.className = 'bt-sub';
+    subEl.textContent = bt.sub;
+    card.appendChild(subEl);
+
+    const descEl = document.createElement('div');
+    descEl.className = 'bt-desc';
+    descEl.textContent = bt.desc;
+    card.appendChild(descEl);
+
+    card.onclick = () => {
+      selected = bt.key;
+      grid.querySelectorAll('.bt-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    };
+
+    grid.appendChild(card);
+  });
+
+  // Back button
+  document.getElementById('bt-back').onclick = () => {
+    screen.style.display = 'none';
+    document.getElementById('chargen-screen').style.display = 'flex';
+  };
+
+  // Begin button
+  document.getElementById('bt-begin').onclick = () => {
+    beginGame(selected);
+  };
+}
+
+function beginGame(bodyType){
   state.exploredCells = new Set();
-  state.player = freshPlayer(state.cgAttrs);
+  state.player = freshPlayer(state.cgAttrs, bodyType || 'stalker');
   initWorld(Math.floor(Math.random()*999999));
+  document.getElementById('bodytype-screen').style.display = 'none';
   document.getElementById('chargen-screen').style.display = 'none';
   state.gameState = 'play';
   logEl.innerHTML = '';
@@ -185,5 +269,5 @@ function onVictory(){
 
 // getRegionName already imported above
 
-export { openCharGen, renderCharGen, randomizeAttrs, beginGame,
+export { openCharGen, renderCharGen, randomizeAttrs, beginGame, openBodySelect,
          onPlayerDeath, onVictory };

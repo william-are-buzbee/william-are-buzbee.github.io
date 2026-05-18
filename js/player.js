@@ -7,11 +7,12 @@ import { findWeapon, findArmor } from './items.js';
 
 // player object lives in state.js — functions here take player as parameter `p`
 
-function freshPlayer(attrs){
+function freshPlayer(attrs, bodyType){
   const p = {
     layer: LAYER_SURFACE,
     x:0, y:0,
     returnLayer: LAYER_SURFACE, returnX:0, returnY:0,  // where to go back after town
+    bodyType: bodyType || 'stalker',  // Clade A body plan: stalker | brute | drifter
     str: attrs.str, con: attrs.con, dex: attrs.dex, int: attrs.int, per: attrs.per,
     level:1, xp:0, xpNext:15,
     gold: STARTING_GOLD,
