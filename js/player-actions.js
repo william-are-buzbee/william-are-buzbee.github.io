@@ -3,8 +3,9 @@ import { state, worlds, covers } from './state.js';
 import { FED_MAX } from './constants.js';
 import { isWalkable, terrainName } from './terrain.js';
 import { rand, randi, randomRound } from './rng.js';
-import { FOOD, findWeapon, findArmor } from './items.js';
-import { restHealAmount, foodFedMul, INV_SLOTS, defaultWeight, deriveHP } from './player.js';
+import { FOOD, POTIONS, BOOKS, findWeapon, findArmor } from './items.js';
+import { restHealAmount, foodFedMul, INV_SLOTS, defaultWeight, deriveHP, addItem, bagFull, overWeight } from './player.js';
+import { getItems, removeItem, placeItem, generateItemId } from './ground-items.js';
 import { NPCS, TOWNS } from './npcs.js';
 import { inBounds, monsterAt, getFeature, isImpassable, getCover } from './world-state.js';
 import { log } from './log.js';
@@ -138,10 +139,32 @@ function usePotion(idx){
   endPlayerTurn('rest');
 }
 
+function itemDisplayName(it){
+  if (it.kind === 'food')   { const f = FOOD[it.key]; return f ? f.name : it.key; }
+  if (it.kind === 'potion') { const p = POTIONS[it.key]; return p ? p.name : it.key; }
+  if (it.kind === 'book')   { const b = BOOKS[it.key]; return b ? b.name : it.key; }
+  if (it.kind === 'weapon') { const w = findWeapon(it.key); return w ? w.name : it.key; }
+  if (it.kind === 'armor')  { const a = findArmor(it.key); return a ? a.name : it.key; }
+  return it.key || 'item';
+}
+
 function dropItem(idx){
-  const player = state.player;
+  const it = state.player.inventory[idx];
+  if (!it) return;
+  const name = itemDisplayName(it);
+  // Place on ground at player position
+  const groundObj = {
+    id: generateItemId(),
+    kind: it.kind,
+    key: it.key,
+    name: name,
+    weight: it.weight || defaultWeight(it),
+    quantity: 1,
+  };
+  placeItem(state.player.layer, state.player.x, state.player.y, groundObj);
   state.player.inventory.splice(idx, 1);
-  updateUI();
+  log(`Dropped ${name}.`, 'muted');
+  endPlayerTurn('rest');
 }
 
 function equipWeaponFromInv(idx) {
@@ -194,4 +217,92 @@ function turnInPlace(dx, dy){
   endPlayerTurn('turn');
 }
 
-export { attemptMove, restAction, eatBest, eatItem, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, fedDrainFor, dirName, turnInPlace };
+// ==================== GROUND ITEM INTERACTIONS ====================
+
+/** Look at items on the current tile. Does NOT cost a turn. */
+function lookAtGround(){
+  const items = getItems(state.player.layer, state.player.x, state.player.y);
+  if (!items.length){
+    log('Nothing on the ground.', 'muted');
+    return;
+  }
+  if (items.length === 1){
+    log(`On the ground: ${items[0].name}.`, 'muted');
+  } else {
+    const names = items.map(it => it.name).join(', ');
+    log(`On the ground: ${names}.`, 'muted');
+  }
+  updateUI();
+}
+
+/** Pick up an item from the ground. Costs one turn. */
+function pickUpFromGround(){
+  const px = state.player.x, py = state.player.y;
+  const layer = state.player.layer;
+  const items = getItems(layer, px, py);
+  if (!items.length){
+    log('Nothing to pick up.', 'muted');
+    return;
+  }
+  if (items.length === 1){
+    pickUpGroundItem(items[0], layer, px, py);
+    return;
+  }
+  // Multiple items: show selection via modal
+  showGroundPickupPanel(items, layer, px, py);
+}
+
+function pickUpGroundItem(groundItem, layer, x, y){
+  const invItem = {
+    kind: groundItem.kind,
+    key:  groundItem.key,
+    weight: groundItem.weight || defaultWeight({kind: groundItem.kind, key: groundItem.key}),
+  };
+  const result = addItem(state.player, invItem);
+  if (result === 'full'){ log('Your bag is full.', 'warn'); return; }
+  if (result === 'heavy'){ log("Too heavy to carry.", 'warn'); return; }
+  removeItem(layer, x, y, groundItem.id);
+  log(`Picked up ${groundItem.name}.`, 'hit');
+  endPlayerTurn('rest');
+}
+
+let _groundModalOpen = null, _groundModalClose = null;
+function setGroundModalCallbacks(openFn, closeFn){
+  _groundModalOpen = openFn;
+  _groundModalClose = closeFn;
+}
+
+function showGroundPickupPanel(items, layer, px, py){
+  let html = `<h2>Ground</h2>`;
+  html += `<div class="dialogue" style="font-style:normal;font-size:10px;">Items at your feet:</div>`;
+  for (let i = 0; i < items.length; i++){
+    const it = items[i];
+    html += `<div class="row">`;
+    html += `<div class="lbl"><b>${it.name}</b><div class="sub">${it.kind} · wt ${it.weight||1}</div></div>`;
+    html += `<button class="btn" data-gpick="${i}">TAKE</button>`;
+    html += `</div>`;
+  }
+  html += `<div class="close-row"><button class="btn" id="btn-close">CLOSE</button></div>`;
+
+  if (_groundModalOpen){
+    _groundModalOpen(html);
+    wireGroundPickupButtons(items, layer, px, py);
+  }
+}
+
+function wireGroundPickupButtons(items, layer, px, py){
+  document.getElementById('btn-close').onclick = () => { if (_groundModalClose) _groundModalClose(); };
+  document.querySelectorAll('[data-gpick]').forEach(btn => {
+    btn.onclick = () => {
+      const idx = parseInt(btn.dataset.gpick, 10);
+      // Re-fetch items in case something changed
+      const current = getItems(layer, px, py);
+      if (idx >= 0 && idx < current.length){
+        if (_groundModalClose) _groundModalClose();
+        pickUpGroundItem(current[idx], layer, px, py);
+      }
+    };
+  });
+}
+
+export { attemptMove, restAction, eatBest, eatItem, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, fedDrainFor, dirName, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks };

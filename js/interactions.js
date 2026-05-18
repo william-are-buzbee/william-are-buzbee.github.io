@@ -448,6 +448,8 @@ function showHelp(){
     <b>E</b> · eat best food (fills FED only)<br>
     <b>F</b> · toggle stealth (DEX drives it)<br>
     <b>R</b> · use stairs/sign/NPC/chest/town<br>
+    <b>G</b> · pick up item from ground<br>
+    <b>L</b> · look at items on ground<br>
   </div>`;
   html += `<div class="shop-h">FED & Healing</div>`;
   html += `<div class="dialogue" style="font-style:normal;font-size:10px;line-height:1.7;">
@@ -461,7 +463,8 @@ function showHelp(){
   html += `<div class="dialogue" style="font-style:normal;font-size:10px;line-height:1.7;">
     Bag is <b>10 slots, no stacking.</b> Each item has a <b>weight</b>.<br>
     <b>STR</b> determines carry capacity (4 + STR×2). Overweight pickups are blocked.<br>
-    Weapons and armor go into your bag — equip from the Items tab.
+    Weapons and armor go into your bag — equip from the Items tab.<br>
+    Dropping items (×) places them on the ground — pick them up later with <b>G</b>.
   </div>`;
   html += `<div class="shop-h">Attributes</div>`;
   html += `<div class="dialogue" style="font-style:normal;font-size:10px;line-height:1.7;">

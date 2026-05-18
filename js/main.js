@@ -4,11 +4,11 @@
 
 import { state } from './state.js';
 import { TILE, VIEW_W, VIEW_H } from './constants.js';
-import { modalEl, closeModal, setUpdateUICallback } from './modal.js';
+import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js';
 import { updateUI } from './ui.js';
 import { canvas, ctx } from './rendering.js';
 
-import { attemptMove, restAction, eatBest, eatItem, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace } from './player-actions.js';
+import { attemptMove, restAction, eatBest, eatItem, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks } from './player-actions.js';
 import { setOnPlayerDeathCallback } from './enemy-ai.js';
 import { setOnVictoryCallback, toggleStealth } from './combat.js';
 import { useAction, showHelp, examineTile, readBook } from './interactions.js';
@@ -20,6 +20,7 @@ import { isMapOpen, toggleMap, closeMap, markCurrentCell } from './worldmap.js';
 setUpdateUICallback(updateUI);
 setOnPlayerDeathCallback(() => { deleteSave(); onPlayerDeath(); });
 setOnVictoryCallback(() => { deleteSave(); onVictory(); });
+setGroundModalCallbacks(openModal, closeModal);
 
 // ==================== SAFE DISPATCH ====================
 // Wraps every player action so one bad throw doesn't brick the game.
@@ -127,6 +128,8 @@ const KEY_MAP = {
   'e': eatBest,
   'f': toggleStealth,
   'r': useAction,
+  'l': lookAtGround,
+  'g': pickUpFromGround,
   '?': showHelp,
   '/': showHelp,
 };
