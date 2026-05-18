@@ -143,9 +143,12 @@ function killMonster(mon){
   // Drop a corpse item on the tile where the monster died
   placeItem(state.player.layer, mon.x, mon.y, {
     id:       generateItemId(),
+    kind:     'corpse',
     type:     'corpse',
     name:     `${mon.name} Corpse`,
-    sprite:   'corpse',
+    desc:     `${mon.name} Corpse — could be butchered or examined.`,
+    sprite:   'CORPSE',
+    weight:   2,
     quantity: 1,
     source:   mon.key,
   });

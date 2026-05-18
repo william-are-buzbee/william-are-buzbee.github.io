@@ -145,6 +145,7 @@ function itemDisplayName(it){
   if (it.kind === 'book')   { const b = BOOKS[it.key]; return b ? b.name : it.key; }
   if (it.kind === 'weapon') { const w = findWeapon(it.key); return w ? w.name : it.key; }
   if (it.kind === 'armor')  { const a = findArmor(it.key); return a ? a.name : it.key; }
+  if (it.kind === 'corpse') { return it.name || 'Corpse'; }
   return it.key || 'item';
 }
 
@@ -161,6 +162,12 @@ function dropItem(idx){
     weight: it.weight || defaultWeight(it),
     quantity: 1,
   };
+  // Corpses carry extra fields not in lookup tables
+  if (it.kind === 'corpse') {
+    groundObj.desc   = it.desc;
+    groundObj.source = it.source;
+    groundObj.sprite = it.sprite || 'CORPSE';
+  }
   placeItem(state.player.layer, state.player.x, state.player.y, groundObj);
   state.player.inventory.splice(idx, 1);
   log(`Dropped ${name}.`, 'muted');
@@ -258,6 +265,13 @@ function pickUpGroundItem(groundItem, layer, x, y){
     key:  groundItem.key,
     weight: groundItem.weight || defaultWeight({kind: groundItem.kind, key: groundItem.key}),
   };
+  // Corpses carry extra fields that aren't in a lookup table
+  if (groundItem.kind === 'corpse') {
+    invItem.name   = groundItem.name;
+    invItem.desc   = groundItem.desc || `${groundItem.name} — could be butchered or examined.`;
+    invItem.source = groundItem.source;
+    invItem.sprite = groundItem.sprite || 'CORPSE';
+  }
   const result = addItem(state.player, invItem);
   if (result === 'full'){ log('Your bag is full.', 'warn'); return; }
   if (result === 'heavy'){ log("Too heavy to carry.", 'warn'); return; }
