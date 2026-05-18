@@ -22,6 +22,19 @@ canvas.style.imageRendering = 'pixelated';
 
 const S = TILE / 32;
 
+// ---- Ground item display priority ----
+// When multiple items share a tile, render only the highest-priority one.
+// Priority: corpse (4) > weapon/armor (3) > potion/food/book (2) > other (1).
+const GROUND_ITEM_PRIORITY = { corpse: 4, weapon: 3, armor: 3, potion: 2, food: 2, book: 2 };
+function groundItemPriority(stack) {
+  let best = null, bestP = 0;
+  for (const it of stack) {
+    const p = GROUND_ITEM_PRIORITY[it.kind] || 1;
+    if (p > bestP) { bestP = p; best = it; }
+  }
+  return best;
+}
+
 const VIEW_OFS_X = (canvas.width  - VIEW_W * TILE) >> 1;
 const VIEW_OFS_Y = (canvas.height - VIEW_H * TILE) >> 1;
 
@@ -302,22 +315,42 @@ function render(){
       }
 
       // ---- Draw GROUND ITEM indicator ----
-      // Small warm-gold dot at bottom-left of tile when items are present.
-      // Drawn after cover but before entities so it sits on the ground layer.
+      // Rendered after cover but before entities so items sit on top of trees/mushrooms.
+      // Priority: corpse > weapon/armor > potion/food/book > other.
+      // Draws the highest-priority item's visual; others just get the gold dot.
       const giLayer = groundItems[layer];
       if (giLayer) {
         const giStack = giLayer[tileKey];
         if (giStack && giStack.length > 0) {
-          ctx.save();
-          ctx.translate(px, py);
-          ctx.scale(S, S);
-          // outer dark outline for visibility on any ground
-          ctx.fillStyle = 'rgba(0,0,0,0.5)';
-          ctx.fillRect(2, 25, 6, 6);
-          // inner warm-gold marker
-          ctx.fillStyle = '#d4a840';
-          ctx.fillRect(3, 26, 4, 4);
-          ctx.restore();
+          const topItem = groundItemPriority(giStack);
+          if (topItem && topItem.kind === 'corpse' && spriteCache['CORPSE']) {
+            // Draw corpse sprite at half-opacity so it's visible but subdued
+            ctx.save();
+            ctx.globalAlpha = 0.7;
+            ctx.drawImage(spriteCache['CORPSE'], px, py, TILE, TILE);
+            ctx.restore();
+          } else {
+            // Default gold dot for non-corpse items
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.scale(S, S);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(2, 25, 6, 6);
+            ctx.fillStyle = '#d4a840';
+            ctx.fillRect(3, 26, 4, 4);
+            ctx.restore();
+          }
+          // If multiple items, also draw the gold dot on corpse tiles as a stack hint
+          if (giStack.length > 1 && topItem && topItem.kind === 'corpse') {
+            ctx.save();
+            ctx.translate(px, py);
+            ctx.scale(S, S);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(2, 25, 6, 6);
+            ctx.fillStyle = '#d4a840';
+            ctx.fillRect(3, 26, 4, 4);
+            ctx.restore();
+          }
         }
       }
 

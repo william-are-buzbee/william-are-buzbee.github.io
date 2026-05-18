@@ -108,3 +108,30 @@ export function clearItems(layerIndex, x, y) {
   const key = `${x},${y}`;
   delete groundItems[layerIndex][key];
 }
+
+// ==================== CORPSE ITEM FACTORY ====================
+
+/**
+ * Create a corpse item object suitable for placeItem() or player inventory.
+ * Corpses are inert — no use/eat action. They can be dropped back on the
+ * ground via the normal drop (D) key.
+ *
+ * @param {string} creatureName — display name of the dead creature
+ * @param {object} [opts]
+ * @param {number} [opts.weight=2]   — inventory weight
+ * @param {string} [opts.sprite='CORPSE'] — sprite key in spriteCache
+ * @returns {object} item object with { id, kind, type, name, sprite, desc, weight, quantity }
+ */
+export function makeCorpseItem(creatureName, opts) {
+  const { weight = 2, sprite = 'CORPSE' } = opts || {};
+  return {
+    id: generateItemId(),
+    kind: 'corpse',
+    type: 'corpse',
+    name: `${creatureName} Corpse`,
+    sprite,
+    desc: `${creatureName} Corpse — could be butchered or examined.`,
+    weight,
+    quantity: 1,
+  };
+}

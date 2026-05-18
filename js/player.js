@@ -389,6 +389,7 @@ function defaultWeight(item){
   if (item.kind === 'food') return 1;
   if (item.kind === 'potion') return 1;
   if (item.kind === 'book') return 1;
+  if (item.kind === 'corpse') return item.weight || 2;
   if (item.kind === 'weapon'){
     const w = findWeapon(item.key);
     // Blades 2, heavy blunt 4-5, etc.

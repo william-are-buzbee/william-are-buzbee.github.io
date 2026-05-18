@@ -213,6 +213,7 @@ function buildItemRow(it, idx, player) {
     case 'book':   return bookRow(it, idx, player);
     case 'weapon': return weaponRow(it, idx, player);
     case 'armor':  return armorRow(it, idx, player);
+    case 'corpse': return corpseRow(it, idx);
     default:       return '';
   }
 }
@@ -263,6 +264,14 @@ function armorRow(it, idx, player) {
   return `<div class="item-row">
     <span class="iname">${a.name} <span class="icount">DEF+${a.def}</span> ${equipped ? '<span class="ieq">WORN</span>' : ''} <span class="iwt">wt ${it.weight || 3}</span></span>
     <button data-equip-a="${idx}" ${equipped ? 'disabled' : ''}>WEAR</button>
+    <button data-drop="${idx}">×</button>
+  </div>`;
+}
+
+function corpseRow(it, idx) {
+  const desc = it.desc || 'A corpse.';
+  return `<div class="item-row">
+    <span class="iname">${it.name} <span class="icount" style="color:#777;">[corpse]</span> <span class="iwt">wt ${it.weight || 2}</span></span>
     <button data-drop="${idx}">×</button>
   </div>`;
 }
