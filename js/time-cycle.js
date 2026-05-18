@@ -46,10 +46,13 @@ export function advanceTick() {
 
 // ==================== VISUAL TINT ====================
 // Returns { r, g, b, a } for the overlay colour at the given tick.
-// Day → fully transparent (a ≈ 0).
-// Dusk → warm orange, dims slightly.
-// Night → cool dark blue, much darker.
-// Dawn → transitions from night darkness back to neutral with a warm tinge.
+// Day → warm amber wash (perpetual late-afternoon feel from the dim
+//        yellow-orange star).  Never fully transparent.
+// Dusk → amber deepens, world dims significantly.
+// Night → genuinely dark.  No blue shift — ambient light on this
+//         planet is warm (yellow-orange star), so even scattered
+//         night-sky light trends warm-dark, not cool.
+// Dawn → dark warm tones lighten back toward the daytime amber baseline.
 
 /**
  * Compute the RGBA tint for the viewport overlay.
@@ -62,37 +65,39 @@ export function getTint(tick) {
 
   switch (phase) {
     case 'day':
-      // No tint
-      return { r: 0, g: 0, b: 0, a: 0 };
+      // Persistent warm amber wash — dim yellow-orange star,
+      // perpetual late-afternoon feel even at midday.
+      return { r: 45, g: 28, b: 6, a: 0.07 };
 
     case 'dusk': {
-      // Warm orange tint fading in, darkening gradually
-      // progress 0 → barely tinted, progress 1 → near-night
-      const a = lerp(0.0, 0.45, progress);
-      const r = lerp(40, 15, progress);
-      const g = lerp(20, 10, progress);
-      const b = lerp(5, 30, progress);
+      // Amber deepens, world dims significantly toward night.
+      // progress 0 → daytime amber, progress 1 → near-night darkness
+      const a = lerp(0.07, 0.52, progress);
+      const r = lerp(45, 12, progress);
+      const g = lerp(28, 6, progress);
+      const b = lerp(6, 3, progress);
       return { r, g, b, a };
     }
 
     case 'night': {
-      // Deep cool blue-black, mostly constant with subtle pulse
-      const a = lerp(0.45, 0.50, Math.sin(progress * Math.PI) * 0.5 + 0.5);
-      return { r: 10, g: 10, b: 30, a };
+      // Genuinely dark — low ambient light, warm-dark not blue-shifted.
+      // Subtle breathing pulse for atmosphere.
+      const a = lerp(0.52, 0.58, Math.sin(progress * Math.PI) * 0.5 + 0.5);
+      return { r: 8, g: 5, b: 3, a };
     }
 
     case 'dawn': {
-      // Transition from dark/cool back to warm then neutral
-      // progress 0 → like late night, progress 1 → nearly clear
-      const a = lerp(0.45, 0.0, progress);
-      const r = lerp(10, 40, progress);   // warm up
-      const g = lerp(10, 25, progress);
-      const b = lerp(30, 10, progress);   // lose the blue
+      // Dark warm tones lighten back toward daytime amber baseline.
+      // progress 0 → like late night, progress 1 → daytime amber
+      const a = lerp(0.52, 0.07, progress);
+      const r = lerp(8, 45, progress);
+      const g = lerp(5, 28, progress);
+      const b = lerp(3, 6, progress);
       return { r, g, b, a };
     }
 
     default:
-      return { r: 0, g: 0, b: 0, a: 0 };
+      return { r: 45, g: 28, b: 6, a: 0.07 };
   }
 }
 
