@@ -32,8 +32,7 @@ function openCharGen(){
     document.getElementById('bodytype-screen').style.display = 'none';
     document.getElementById('chargen-screen').style.display = 'flex';
   };
-  // Body type NEXT → color selection (not begin game)
-  if (btBegin) btBegin.onclick = openColorSelect;
+  if (btBegin) btBegin.onclick = beginGame;
 }
 
 function renderCharGen(){
@@ -181,8 +180,6 @@ function beginGame(){
   initWorld(Math.floor(Math.random()*999999));
   document.getElementById('chargen-screen').style.display = 'none';
   document.getElementById('bodytype-screen').style.display = 'none';
-  const colorScreen = document.getElementById('colorpalette-screen');
-  if (colorScreen) colorScreen.style.display = 'none';
   state.gameState = 'play';
   logEl.innerHTML = '';
   log('You awaken in the wilds. The land stretches before you.', 'system');
@@ -191,15 +188,48 @@ function beginGame(){
   render();
 }
 
-// ==================== BODY TYPE SELECTION ====================
+// ==================== BODY TYPE + COLOR SELECTION (unified screen) ====================
 function openBodyTypeSelect(){
   document.getElementById('chargen-screen').style.display = 'none';
   document.getElementById('bodytype-screen').style.display = 'flex';
   state.selectedBodyType = null;
-  // Relabel: this button now goes to color selection, not begin game
-  const btBegin = document.getElementById('bt-begin');
-  if (btBegin) btBegin.textContent = 'NEXT';
+  state.selectedColorPalette = null;
+
+  // Inject color palette UI into the body-type screen (once)
+  ensureColorUI();
+
   renderBodyTypeSelect();
+}
+
+/** Inject color swatch row + live preview into the body-type screen panel. */
+function ensureColorUI(){
+  if (document.getElementById('colorpalette-options')) return;
+  const btOptions = document.getElementById('bodytype-options');
+  if (!btOptions) return;
+
+  // Color palette swatch container
+  const cpLabel = document.createElement('h3');
+  cpLabel.id = 'cp-label';
+  cpLabel.textContent = 'Color';
+  cpLabel.style.cssText = 'margin:10px 0 4px;text-align:center;font-size:14px;color:#bbb;';
+  btOptions.parentNode.insertBefore(cpLabel, btOptions.nextSibling);
+
+  const cpContainer = document.createElement('div');
+  cpContainer.id = 'colorpalette-options';
+  cpContainer.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-bottom:10px;';
+  cpLabel.parentNode.insertBefore(cpContainer, cpLabel.nextSibling);
+
+  // Live preview canvas
+  const previewWrap = document.createElement('div');
+  previewWrap.id = 'cp-preview-wrap';
+  previewWrap.style.cssText = 'display:flex;justify-content:center;margin-bottom:10px;';
+  const preview = document.createElement('canvas');
+  preview.id = 'cp-preview';
+  preview.width = 64;
+  preview.height = 64;
+  preview.style.cssText = 'image-rendering:pixelated;border:2px solid rgba(255,255,255,0.1);border-radius:6px;background:rgba(0,0,0,0.3);';
+  previewWrap.appendChild(preview);
+  cpContainer.parentNode.insertBefore(previewWrap, cpContainer.nextSibling);
 }
 
 function renderBodyTypeSelect(){
@@ -217,10 +247,15 @@ function renderBodyTypeSelect(){
     </div>`;
   }).join('');
 
-  // Draw each sprite preview onto its canvas
+  // Draw each body-type sprite preview — tinted if a color is selected
   container.querySelectorAll('.bt-preview').forEach(cvs => {
     const spriteName = cvs.dataset.sprite;
-    const src = spriteCache[spriteName];
+    let src;
+    if (state.selectedColorPalette){
+      const palEntry = COLOR_PALETTES[state.selectedColorPalette];
+      if (palEntry) src = tintedMonsterSprite(spriteName, palEntry.color);
+    }
+    if (!src) src = spriteCache[spriteName];
     if (src){
       const g = cvs.getContext('2d');
       g.imageSmoothingEnabled = false;
@@ -229,7 +264,7 @@ function renderBodyTypeSelect(){
     }
   });
 
-  // Click handlers
+  // Click handlers — body type
   container.querySelectorAll('.bodytype-option').forEach(opt => {
     opt.onclick = () => {
       state.selectedBodyType = opt.dataset.bt;
@@ -237,83 +272,43 @@ function renderBodyTypeSelect(){
     };
   });
 
-  document.getElementById('bt-begin').disabled = !state.selectedBodyType;
+  // Render color palette swatches
+  renderColorSwatches();
+
+  // Update the live preview
+  updateColorPreview();
+
+  // BEGIN only enabled when both body type AND color are selected
+  document.getElementById('bt-begin').disabled = !(state.selectedBodyType && state.selectedColorPalette);
 }
 
-// ==================== COLOR PALETTE SELECTION ====================
-
-/** Create the color-palette screen DOM once if it doesn't exist yet. */
-function ensureColorScreen(){
-  if (document.getElementById('colorpalette-screen')) return;
-  const screen = document.createElement('div');
-  screen.id = 'colorpalette-screen';
-  screen.className = 'overlay';
-  screen.style.display = 'none';
-  screen.innerHTML = `
-    <div class="panel" style="max-width:420px;">
-      <h2>Choose Color</h2>
-      <div id="cp-preview-wrap" style="display:flex;justify-content:center;margin-bottom:10px;">
-        <canvas id="cp-preview" width="64" height="64" style="image-rendering:pixelated;"></canvas>
-      </div>
-      <div id="colorpalette-options" style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-bottom:14px;"></div>
-      <div style="display:flex;justify-content:center;gap:10px;">
-        <button id="cp-back" class="btn">BACK</button>
-        <button id="cp-begin" class="btn" disabled>BEGIN</button>
-      </div>
-    </div>`;
-  // Insert after bodytype-screen so overlay stacking works
-  const btScreen = document.getElementById('bodytype-screen');
-  if (btScreen && btScreen.parentNode){
-    btScreen.parentNode.insertBefore(screen, btScreen.nextSibling);
-  } else {
-    document.body.appendChild(screen);
-  }
-  // Wire buttons
-  document.getElementById('cp-back').onclick = () => {
-    screen.style.display = 'none';
-    document.getElementById('bodytype-screen').style.display = 'flex';
-  };
-  document.getElementById('cp-begin').onclick = beginGame;
-}
-
-function openColorSelect(){
-  ensureColorScreen();
-  document.getElementById('bodytype-screen').style.display = 'none';
-  document.getElementById('colorpalette-screen').style.display = 'flex';
-  state.selectedColorPalette = null;
-  renderColorSelect();
-}
-
-function renderColorSelect(){
-  const container = document.getElementById('colorpalette-options');
+function renderColorSwatches(){
+  const cpContainer = document.getElementById('colorpalette-options');
+  if (!cpContainer) return;
   const keys = Object.keys(COLOR_PALETTES);
 
-  container.innerHTML = keys.map(k => {
+  cpContainer.innerHTML = keys.map(k => {
     const pal = COLOR_PALETTES[k];
-    const sel = state.selectedColorPalette === k ? ' selected' : '';
-    return `<div class="colorpalette-option${sel}" data-cp="${k}"
+    const isSel = state.selectedColorPalette === k;
+    return `<div class="colorpalette-option" data-cp="${k}"
               style="display:flex;flex-direction:column;align-items:center;cursor:pointer;
                      padding:6px 8px;border-radius:6px;
-                     border:2px solid ${state.selectedColorPalette === k ? '#d4a050' : 'transparent'};
-                     background:${state.selectedColorPalette === k ? 'rgba(212,160,80,0.12)' : 'transparent'};">
-      <div style="width:32px;height:32px;border-radius:50%;background:${pal.color};
-                  border:2px solid rgba(255,255,255,0.25);"></div>
-      <span style="font-size:10px;margin-top:4px;color:#bbb;text-align:center;max-width:72px;line-height:1.2;">${pal.label}</span>
+                     border:2px solid ${isSel ? '#d4a050' : 'rgba(255,255,255,0.1)'};
+                     background:${isSel ? 'rgba(212,160,80,0.12)' : 'transparent'};">
+      <div style="width:28px;height:28px;border-radius:50%;background:${pal.color};
+                  border:2px solid ${isSel ? '#d4a050' : 'rgba(255,255,255,0.2)'};"></div>
+      <span style="font-size:9px;margin-top:3px;color:${isSel ? '#d4a050' : '#888'};
+                   text-align:center;max-width:68px;line-height:1.15;">${pal.label}</span>
     </div>`;
   }).join('');
 
-  // Click handlers
-  container.querySelectorAll('.colorpalette-option').forEach(opt => {
+  // Click handlers — color
+  cpContainer.querySelectorAll('.colorpalette-option').forEach(opt => {
     opt.onclick = () => {
       state.selectedColorPalette = opt.dataset.cp;
-      renderColorSelect();
+      renderBodyTypeSelect();   // re-render everything to update body previews + swatch highlight
     };
   });
-
-  // Update live preview
-  updateColorPreview();
-
-  document.getElementById('cp-begin').disabled = !state.selectedColorPalette;
 }
 
 /** Draw a live preview combining the selected body type + color palette. */
@@ -324,17 +319,19 @@ function updateColorPreview(){
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, 64, 64);
 
-  const bodyKey = { meso:'PLAYER_MESO', apex:'PLAYER_APEX', grazer:'PLAYER_GRAZER' }[state.selectedBodyType] || 'PLAYER_MESO';
+  // Need both selections to show a meaningful preview
+  if (!state.selectedBodyType && !state.selectedColorPalette) return;
+
+  const bodyKey = { meso:'PLAYER_MESO', apex:'PLAYER_APEX', grazer:'PLAYER_GRAZER' }[state.selectedBodyType || 'meso'] || 'PLAYER_MESO';
 
   if (state.selectedColorPalette){
     const palEntry = COLOR_PALETTES[state.selectedColorPalette];
     if (palEntry){
       const src = tintedMonsterSprite(bodyKey, palEntry.color);
-      if (src) g.drawImage(src, 0, 0, 64, 64);
-      return;
+      if (src){ g.drawImage(src, 0, 0, 64, 64); return; }
     }
   }
-  // Fallback: default white/gray sprite
+  // Fallback: white/gray default
   const src = spriteCache[bodyKey];
   if (src) g.drawImage(src, 0, 0, 64, 64);
 }
@@ -354,5 +351,4 @@ function onVictory(){
 
 export { openCharGen, renderCharGen, randomizeAttrs, beginGame,
          openBodyTypeSelect, renderBodyTypeSelect,
-         openColorSelect, renderColorSelect,
          onPlayerDeath, onVictory };
