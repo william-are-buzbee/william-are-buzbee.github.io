@@ -164,9 +164,11 @@ function dropItem(idx){
   };
   // Corpses carry extra fields not in lookup tables
   if (it.kind === 'corpse') {
+    groundObj.type   = 'corpse';
     groundObj.desc   = it.desc;
     groundObj.source = it.source;
     groundObj.sprite = it.sprite || 'CORPSE';
+    groundObj.nutrition = it.nutrition || 0;
   }
   placeItem(state.player.layer, state.player.x, state.player.y, groundObj);
   state.player.inventory.splice(idx, 1);
@@ -267,10 +269,12 @@ function pickUpGroundItem(groundItem, layer, x, y){
   };
   // Corpses carry extra fields that aren't in a lookup table
   if (groundItem.kind === 'corpse') {
+    invItem.type   = 'corpse';
     invItem.name   = groundItem.name;
     invItem.desc   = groundItem.desc || `${groundItem.name} — could be butchered or examined.`;
     invItem.source = groundItem.source;
     invItem.sprite = groundItem.sprite || 'CORPSE';
+    invItem.nutrition = groundItem.nutrition || 0;
   }
   const result = addItem(state.player, invItem);
   if (result === 'full'){ log('Your bag is full.', 'warn'); return; }
