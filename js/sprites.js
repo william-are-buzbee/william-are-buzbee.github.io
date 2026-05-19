@@ -702,8 +702,8 @@ Object.keys(S).forEach(k => spriteCache[k] = buildSprite(S[k]));
 
 // Corpse sprite uses custom meat/bone colors instead of default COL_FG/COL_MID
 (function bakeCorpseSprite(){
-  const MEAT = '#8a3030';  // dark reddish-brown
-  const BONE = '#d0b898';  // warm off-white rib/marbling
+  const MEAT = '#a84040';  // warm reddish-brown, lifted for native vision
+  const BONE = '#e0caa8';  // warm off-white rib/marbling
   const rows = S.CORPSE;
   const c = document.createElement('canvas');
   c.width = SPR*PIX; c.height = SPR*PIX;
@@ -745,15 +745,15 @@ function buildTintedTerrain(spriteName, palette){
   return c;
 }
 
-// Cave wall must render as solid black — override any palette definition
-const CAVE_WALL_BLACK = { bg: '#000000', fg: '#000000', mid: '#000000' };
+// Cave wall renders as dark warm stone — visible to native eyes, not pure black
+const CAVE_WALL_DARK = { bg: '#1a1614', fg: '#342e28', mid: '#262220' };
 
 export function tintedSprite(spriteName, paletteName){
   const key = spriteName + '|' + paletteName;
   if (tintedCache[key]) return tintedCache[key];
-  // Force pitch-black rendering for cave walls
+  // Force dark warm rendering for cave walls — visible, not pitch-black
   if (paletteName === 'cave_wall') {
-    tintedCache[key] = buildTintedTerrain(spriteName, CAVE_WALL_BLACK);
+    tintedCache[key] = buildTintedTerrain(spriteName, CAVE_WALL_DARK);
     return tintedCache[key];
   }
   const pal = BIOME[paletteName];
@@ -778,7 +778,7 @@ export function tintedMonsterSprite(spriteName, tintColor){
   c.width = SPR*PIX; c.height = SPR*PIX;
   const g = c.getContext('2d');
   g.imageSmoothingEnabled = false;
-  const darker = mixColors(tintColor, '#000000', 0.4);
+  const darker = mixColors(tintColor, '#000000', 0.3);
   for (let y=0;y<SPR;y++){
     const row = rows[y]||'';
     for (let x=0;x<SPR;x++){

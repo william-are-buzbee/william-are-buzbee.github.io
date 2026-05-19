@@ -65,39 +65,39 @@ export function getTint(tick) {
 
   switch (phase) {
     case 'day':
-      // Persistent warm amber wash — dim yellow-orange star,
-      // perpetual late-afternoon feel even at midday.
-      return { r: 45, g: 28, b: 6, a: 0.07 };
+      // Subtle warm amber enhancement — native eyes evolved for this light.
+      // Tints warm without dimming; the world feels like a comfortable amber afternoon.
+      return { r: 50, g: 32, b: 8, a: 0.04 };
 
     case 'dusk': {
-      // Amber deepens, world dims significantly toward night.
-      // progress 0 → daytime amber, progress 1 → near-night darkness
-      const a = lerp(0.07, 0.52, progress);
-      const r = lerp(45, 12, progress);
-      const g = lerp(28, 6, progress);
-      const b = lerp(6, 3, progress);
+      // Amber deepens toward night, but native eyes compensate well.
+      // progress 0 → daytime warmth, progress 1 → dim but navigable
+      const a = lerp(0.04, 0.30, progress);
+      const r = lerp(50, 18, progress);
+      const g = lerp(32, 10, progress);
+      const b = lerp(8, 4, progress);
       return { r, g, b, a };
     }
 
     case 'night': {
-      // Genuinely dark — low ambient light, warm-dark not blue-shifted.
-      // Subtle breathing pulse for atmosphere.
-      const a = lerp(0.52, 0.58, Math.sin(progress * Math.PI) * 0.5 + 0.5);
-      return { r: 8, g: 5, b: 3, a };
+      // Dim but not blind — native eyes are sensitive in low light.
+      // Warm-dark ambient, subtle breathing pulse for atmosphere.
+      const a = lerp(0.30, 0.36, Math.sin(progress * Math.PI) * 0.5 + 0.5);
+      return { r: 14, g: 8, b: 4, a };
     }
 
     case 'dawn': {
-      // Dark warm tones lighten back toward daytime amber baseline.
-      // progress 0 → like late night, progress 1 → daytime amber
-      const a = lerp(0.52, 0.07, progress);
-      const r = lerp(8, 45, progress);
-      const g = lerp(5, 28, progress);
-      const b = lerp(3, 6, progress);
+      // Night dims lighten back to daytime amber.
+      // progress 0 → like late night, progress 1 → daytime warmth
+      const a = lerp(0.30, 0.04, progress);
+      const r = lerp(14, 50, progress);
+      const g = lerp(8, 32, progress);
+      const b = lerp(4, 8, progress);
       return { r, g, b, a };
     }
 
     default:
-      return { r: 45, g: 28, b: 6, a: 0.07 };
+      return { r: 50, g: 32, b: 8, a: 0.04 };
   }
 }
 
