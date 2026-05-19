@@ -2,7 +2,7 @@
 import { state, worlds, covers, groundItems } from './state.js';
 import { TILE, VIEW_W, VIEW_H, LAYER_UNDER, BIOME } from './constants.js';
 import { T, terrainInfo } from './terrain.js';
-import { spriteCache, tintedSprite, tintedMonsterSprite } from './sprites.js';
+import { spriteCache, tintedSprite, tintedMonsterSprite, COLOR_PALETTES } from './sprites.js';
 import { inBounds, isTownCell, monsterAt, getCover } from './world-state.js';
 import { updateUI } from './ui.js';
 import { drawTimeTint } from './time-cycle.js';
@@ -408,7 +408,12 @@ function drawEntityAtTile(wx, wy, px, py, layer){
   if (wx === state.player.x && wy === state.player.y){
     const bodyKey = { meso:'PLAYER_MESO', apex:'PLAYER_APEX', grazer:'PLAYER_GRAZER' }[state.player.bodyType] || 'PLAYER_MESO';
     const stealthKey = bodyKey + '_STEALTH';
-    const pspr = state.player.stealth ? spriteCache[stealthKey] : spriteCache[bodyKey];
+    const sprKey = state.player.stealth ? stealthKey : bodyKey;
+    // Apply creature color palette if set
+    const palEntry = COLOR_PALETTES[state.player.colorPalette];
+    const pspr = palEntry
+      ? tintedMonsterSprite(sprKey, palEntry.color)
+      : spriteCache[sprKey];
     ctx.drawImage(pspr, px, py, TILE, TILE);
     if (state.player.hitFlash > 0){
       ctx.fillStyle = 'rgba(255,255,255,0.28)';

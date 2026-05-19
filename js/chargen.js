@@ -7,7 +7,7 @@ import { findArmor } from './items.js';
 import { initWorld } from './world-logic.js';
 import { log, logEl } from './log.js';
 import { render } from './rendering.js';
-import { spriteCache } from './sprites.js';
+import { spriteCache, COLOR_PALETTES, tintedMonsterSprite } from './sprites.js';
 import { getRegionName } from './ui.js';
 import { updatePlayerFOV } from './fov.js';
 
@@ -19,6 +19,7 @@ function openCharGen(){
   document.getElementById('chargen-screen').style.display = 'flex';
   state.cgAttrs = {str:1, con:1, dex:1, int:1, per:1};
   state.selectedBodyType = null;
+  state.selectedColorPalette = null;
   renderCharGen();
 
   // Wire NEXT to body-type selection (overrides any main.js binding)
@@ -31,7 +32,8 @@ function openCharGen(){
     document.getElementById('bodytype-screen').style.display = 'none';
     document.getElementById('chargen-screen').style.display = 'flex';
   };
-  if (btBegin) btBegin.onclick = beginGame;
+  // Body type NEXT → color selection (not begin game)
+  if (btBegin) btBegin.onclick = openColorSelect;
 }
 
 function renderCharGen(){
@@ -175,10 +177,12 @@ function randomizeAttrs(){
 
 function beginGame(){
   state.exploredCells = new Set();
-  state.player = freshPlayer(state.cgAttrs, state.selectedBodyType || 'meso');
+  state.player = freshPlayer(state.cgAttrs, state.selectedBodyType || 'meso', state.selectedColorPalette || 'meso_predator');
   initWorld(Math.floor(Math.random()*999999));
   document.getElementById('chargen-screen').style.display = 'none';
   document.getElementById('bodytype-screen').style.display = 'none';
+  const colorScreen = document.getElementById('colorpalette-screen');
+  if (colorScreen) colorScreen.style.display = 'none';
   state.gameState = 'play';
   logEl.innerHTML = '';
   log('You awaken in the wilds. The land stretches before you.', 'system');
@@ -192,6 +196,9 @@ function openBodyTypeSelect(){
   document.getElementById('chargen-screen').style.display = 'none';
   document.getElementById('bodytype-screen').style.display = 'flex';
   state.selectedBodyType = null;
+  // Relabel: this button now goes to color selection, not begin game
+  const btBegin = document.getElementById('bt-begin');
+  if (btBegin) btBegin.textContent = 'NEXT';
   renderBodyTypeSelect();
 }
 
@@ -233,6 +240,105 @@ function renderBodyTypeSelect(){
   document.getElementById('bt-begin').disabled = !state.selectedBodyType;
 }
 
+// ==================== COLOR PALETTE SELECTION ====================
+
+/** Create the color-palette screen DOM once if it doesn't exist yet. */
+function ensureColorScreen(){
+  if (document.getElementById('colorpalette-screen')) return;
+  const screen = document.createElement('div');
+  screen.id = 'colorpalette-screen';
+  screen.className = 'overlay';
+  screen.style.display = 'none';
+  screen.innerHTML = `
+    <div class="panel" style="max-width:420px;">
+      <h2>Choose Color</h2>
+      <div id="cp-preview-wrap" style="display:flex;justify-content:center;margin-bottom:10px;">
+        <canvas id="cp-preview" width="64" height="64" style="image-rendering:pixelated;"></canvas>
+      </div>
+      <div id="colorpalette-options" style="display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-bottom:14px;"></div>
+      <div style="display:flex;justify-content:center;gap:10px;">
+        <button id="cp-back" class="btn">BACK</button>
+        <button id="cp-begin" class="btn" disabled>BEGIN</button>
+      </div>
+    </div>`;
+  // Insert after bodytype-screen so overlay stacking works
+  const btScreen = document.getElementById('bodytype-screen');
+  if (btScreen && btScreen.parentNode){
+    btScreen.parentNode.insertBefore(screen, btScreen.nextSibling);
+  } else {
+    document.body.appendChild(screen);
+  }
+  // Wire buttons
+  document.getElementById('cp-back').onclick = () => {
+    screen.style.display = 'none';
+    document.getElementById('bodytype-screen').style.display = 'flex';
+  };
+  document.getElementById('cp-begin').onclick = beginGame;
+}
+
+function openColorSelect(){
+  ensureColorScreen();
+  document.getElementById('bodytype-screen').style.display = 'none';
+  document.getElementById('colorpalette-screen').style.display = 'flex';
+  state.selectedColorPalette = null;
+  renderColorSelect();
+}
+
+function renderColorSelect(){
+  const container = document.getElementById('colorpalette-options');
+  const keys = Object.keys(COLOR_PALETTES);
+
+  container.innerHTML = keys.map(k => {
+    const pal = COLOR_PALETTES[k];
+    const sel = state.selectedColorPalette === k ? ' selected' : '';
+    return `<div class="colorpalette-option${sel}" data-cp="${k}"
+              style="display:flex;flex-direction:column;align-items:center;cursor:pointer;
+                     padding:6px 8px;border-radius:6px;
+                     border:2px solid ${state.selectedColorPalette === k ? '#d4a050' : 'transparent'};
+                     background:${state.selectedColorPalette === k ? 'rgba(212,160,80,0.12)' : 'transparent'};">
+      <div style="width:32px;height:32px;border-radius:50%;background:${pal.color};
+                  border:2px solid rgba(255,255,255,0.25);"></div>
+      <span style="font-size:10px;margin-top:4px;color:#bbb;text-align:center;max-width:72px;line-height:1.2;">${pal.label}</span>
+    </div>`;
+  }).join('');
+
+  // Click handlers
+  container.querySelectorAll('.colorpalette-option').forEach(opt => {
+    opt.onclick = () => {
+      state.selectedColorPalette = opt.dataset.cp;
+      renderColorSelect();
+    };
+  });
+
+  // Update live preview
+  updateColorPreview();
+
+  document.getElementById('cp-begin').disabled = !state.selectedColorPalette;
+}
+
+/** Draw a live preview combining the selected body type + color palette. */
+function updateColorPreview(){
+  const cvs = document.getElementById('cp-preview');
+  if (!cvs) return;
+  const g = cvs.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, 64, 64);
+
+  const bodyKey = { meso:'PLAYER_MESO', apex:'PLAYER_APEX', grazer:'PLAYER_GRAZER' }[state.selectedBodyType] || 'PLAYER_MESO';
+
+  if (state.selectedColorPalette){
+    const palEntry = COLOR_PALETTES[state.selectedColorPalette];
+    if (palEntry){
+      const src = tintedMonsterSprite(bodyKey, palEntry.color);
+      if (src) g.drawImage(src, 0, 0, 64, 64);
+      return;
+    }
+  }
+  // Fallback: default white/gray sprite
+  const src = spriteCache[bodyKey];
+  if (src) g.drawImage(src, 0, 0, 64, 64);
+}
+
 // ==================== DEATH / VICTORY ====================
 function onPlayerDeath(){
   state.gameState = 'death';
@@ -248,4 +354,5 @@ function onVictory(){
 
 export { openCharGen, renderCharGen, randomizeAttrs, beginGame,
          openBodyTypeSelect, renderBodyTypeSelect,
+         openColorSelect, renderColorSelect,
          onPlayerDeath, onVictory };

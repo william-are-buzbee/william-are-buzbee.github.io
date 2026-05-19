@@ -71,6 +71,8 @@ function deserializePlayer(raw) {
   delete p._armorKey;
   // Backwards compat: PER attribute added post-launch
   if (p.per == null) p.per = 1;
+  // Backwards compat: colorPalette added post-launch
+  if (p.colorPalette == null) p.colorPalette = 'meso_predator';
   // Reconstruct Sets
   p.npcsMet   = new Set(raw._npcsMet   || []);
   p.booksRead = new Set(raw._booksRead || []);

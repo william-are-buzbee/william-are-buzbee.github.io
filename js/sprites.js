@@ -679,6 +679,18 @@ S.NPC_VILLAGER = [
   '...##------##...','....########....','....##....##....','...###....###...',
 ];
 
+// ==================== COLOR PALETTES (creature tints for player chargen) ====================
+// Pulled directly from the six current creature sprite definitions.
+// key → { label (display name), color (hex tint used by tintedMonsterSprite) }
+export const COLOR_PALETTES = {
+  meso_predator:       { label: 'Meso-Predator',      color: '#5a4a40' },
+  apex_predator:       { label: 'Apex Predator',       color: '#3a302a' },
+  large_herbivore:     { label: 'Large Herbivore',     color: '#4a5040' },
+  small_herbivore:     { label: 'Small Herbivore',     color: '#7a8070' },
+  colonial_chemotroph: { label: 'Colonial Chemotroph', color: '#786880' },
+  ambush_predator:     { label: 'Ambush Predator',     color: '#5a5048' },
+};
+
 // Sprite bake cache
 export const spriteCache = {};
 function buildSprite(rows){
