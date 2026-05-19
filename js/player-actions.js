@@ -95,14 +95,36 @@ function restAction(){
 function eatBest(){
   const player = state.player;
   const deficit = FED_MAX - state.player.fed;
-  const foodItems = state.player.inventory
-    .map((it,idx) => it.kind==='food' ? {it,idx,fed:FOOD[it.key].fed} : null)
+
+  // Collect all edible items: regular food and corpses with nutrition
+  const edibles = state.player.inventory
+    .map((it, idx) => {
+      if (it.kind === 'food') {
+        return { idx, fed: FOOD[it.key].fed, isCorpse: false };
+      }
+      if (it.kind === 'corpse' && it.nutrition > 0) {
+        return { idx, fed: it.nutrition, isCorpse: true };
+      }
+      return null;
+    })
     .filter(Boolean);
-  if (!foodItems.length){ log('You have no food.', 'warn'); return; }
+
+  if (!edibles.length){ log('You have no food.', 'warn'); return; }
   if (deficit <= 0){ log('Your belly is full.', 'muted'); return; }
-  foodItems.sort((a,b) => a.fed - b.fed);
-  const pick = foodItems.find(f => f.fed >= deficit) || foodItems[foodItems.length-1];
-  eatItem(pick.idx);
+
+  // Prefer regular food over corpses
+  const food    = edibles.filter(e => !e.isCorpse).sort((a,b) => a.fed - b.fed);
+  const corpses = edibles.filter(e => e.isCorpse).sort((a,b) => a.fed - b.fed);
+
+  let pick;
+  if (food.length){
+    pick = food.find(f => f.fed >= deficit) || food[food.length - 1];
+  } else {
+    pick = corpses.find(f => f.fed >= deficit) || corpses[corpses.length - 1];
+  }
+
+  if (pick.isCorpse) eatCorpseFromInv(pick.idx);
+  else               eatItem(pick.idx);
 }
 
 function eatItem(idx){
@@ -115,6 +137,17 @@ function eatItem(idx){
   state.player.fed = Math.min(FED_MAX, state.player.fed + gain);
   const gained = state.player.fed - before;
   log(`You eat ${f.name}. [+${gained} FED]`, 'hit');
+  state.player.inventory.splice(idx, 1);
+  endPlayerTurn('rest');
+}
+
+function eatCorpseFromInv(idx){
+  const it = state.player.inventory[idx];
+  if (!it || it.kind !== 'corpse' || !it.nutrition) return;
+  const before = state.player.fed;
+  state.player.fed = Math.min(FED_MAX, state.player.fed + it.nutrition);
+  const gained = state.player.fed - before;
+  log(`You eat the ${it.name}. [+${gained} FED]`, 'hit');
   state.player.inventory.splice(idx, 1);
   endPlayerTurn('rest');
 }
@@ -323,4 +356,4 @@ function wireGroundPickupButtons(items, layer, px, py){
   });
 }
 
-export { attemptMove, restAction, eatBest, eatItem, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, fedDrainFor, dirName, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks };
+export { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, fedDrainFor, dirName, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks };
