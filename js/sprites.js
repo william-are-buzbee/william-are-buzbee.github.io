@@ -633,13 +633,14 @@ S.AMBUSH_PRED = [
 ];
 
 // ==================== CORPSE SPRITE ====================
-// Generic corpse — a small, flat, dark shape readable as "something dead."
-// Low-contrast so it doesn't dominate the tile. Drawn when a corpse ground item exists.
+// Meat-chunk — a small reddish-brown oval slab with 2-3 lighter curved lines
+// suggesting exposed rib bone / marbling. Sits in the lower portion of the tile.
+// '#' = meat (dark reddish-brown #8a3030), '-' = bone/marbling (warm off-white #d0b898).
 S.CORPSE = [
   '................','................','................','................',
   '................','................','................','................',
-  '................','......--........','....##---##.....','...##-----##....',
-  '...#--###--#....','....########....','......----......','................',
+  '................','.....####.......','....######......','...###--###.....',
+  '...##-##-##.....','...########.....','....######......','................',
 ];
 
 // ==================== VILLAGE / LANDMARK SPRITES ====================
@@ -686,6 +687,28 @@ function buildSprite(rows){
   return c;
 }
 Object.keys(S).forEach(k => spriteCache[k] = buildSprite(S[k]));
+
+// Corpse sprite uses custom meat/bone colors instead of default COL_FG/COL_MID
+(function bakeCorpseSprite(){
+  const MEAT = '#8a3030';  // dark reddish-brown
+  const BONE = '#d0b898';  // warm off-white rib/marbling
+  const rows = S.CORPSE;
+  const c = document.createElement('canvas');
+  c.width = SPR*PIX; c.height = SPR*PIX;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  for (let y=0;y<SPR;y++){
+    const row = rows[y]||'';
+    for (let x=0;x<SPR;x++){
+      const ch = row[x]||'.';
+      if (ch === '#') g.fillStyle = MEAT;
+      else if (ch === '-') g.fillStyle = BONE;
+      else continue;
+      g.fillRect(x*PIX, y*PIX, PIX, PIX);
+    }
+  }
+  spriteCache['CORPSE'] = c;
+})();
 
 // Terrain tint cache
 const tintedCache = {};

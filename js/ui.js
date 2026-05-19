@@ -269,9 +269,11 @@ function armorRow(it, idx, player) {
 }
 
 function corpseRow(it, idx) {
-  const desc = it.desc || 'A corpse.';
+  const nutri = it.nutrition || 0;
+  const nutriTag = nutri > 0 ? `<span class="ifood">+${nutri} HP</span> ` : '';
   return `<div class="item-row">
-    <span class="iname">${it.name} <span class="icount" style="color:#777;">[corpse]</span> <span class="iwt">wt ${it.weight || 2}</span></span>
+    <span class="iname">${it.name} <span class="icount" style="color:#777;">[corpse]</span> ${nutriTag}<span class="iwt">wt ${it.weight || 2}</span></span>
+    ${nutri > 0 ? `<button data-eat-corpse="${idx}">EAT</button>` : ''}
     <button data-drop="${idx}">×</button>
   </div>`;
 }

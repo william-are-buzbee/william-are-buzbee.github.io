@@ -6,7 +6,8 @@ import { state } from './state.js';
 import { TILE, VIEW_W, VIEW_H } from './constants.js';
 import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js';
 import { updateUI } from './ui.js';
-import { canvas, ctx } from './rendering.js';
+import { canvas, ctx, render } from './rendering.js';
+import { log } from './log.js';
 
 import { attemptMove, restAction, eatBest, eatItem, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks } from './player-actions.js';
 import { setOnPlayerDeathCallback } from './enemy-ai.js';
@@ -227,14 +228,28 @@ document.getElementById('act-help').addEventListener('click', () => {
   try { showHelp(); } catch (e) { console.error(e); }
 });
 
+// ==================== CORPSE EATING ====================
+function eatCorpseItem(idx) {
+  const p = state.player;
+  const it = p.inventory[idx];
+  if (!it || it.type !== 'corpse' || !it.nutrition) return;
+  const healed = Math.min(it.nutrition, p.hpMax - p.hp);
+  p.hp = Math.min(p.hpMax, p.hp + it.nutrition);
+  p.inventory.splice(idx, 1);
+  log(`You eat the ${it.name}. Restored ${healed} HP.`, 'heal');
+  state.worldTick++;
+  render();
+}
+
 // ==================== INVENTORY DELEGATION ====================
 const INV_ACTIONS = {
-  eat:    (i) => eatItem(i),
-  drop:   (i) => dropItem(i),
-  potion: (i) => usePotion(i),
-  book:   (i) => readBook(i),
-  equipW: (i) => equipWeaponFromInv(i),
-  equipA: (i) => equipArmorFromInv(i),
+  eat:        (i) => eatItem(i),
+  drop:       (i) => dropItem(i),
+  potion:     (i) => usePotion(i),
+  book:       (i) => readBook(i),
+  equipW:     (i) => equipWeaponFromInv(i),
+  equipA:     (i) => equipArmorFromInv(i),
+  eatCorpse:  (i) => eatCorpseItem(i),
 };
 
 document.getElementById('items-list').addEventListener('click', (ev) => {

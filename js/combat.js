@@ -151,6 +151,7 @@ function killMonster(mon){
     weight:   2,
     quantity: 1,
     source:   mon.key,
+    nutrition: mon.hpMax,
   });
 
   const xp = xpFromKill(player, mon.xp);
