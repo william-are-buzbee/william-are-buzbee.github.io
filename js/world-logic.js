@@ -3,14 +3,16 @@ import { state, worlds, covers, features, monsters, activateLayer } from './stat
 import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, ENEMY_HP_MUL, ENEMY_ATK_MUL, LAYER_META, getAtmosphere } from './constants.js';
 import { T, isWalkable, isCover } from './terrain.js';
 import { rand, randi, choice } from './rng.js';
-import { BOOKS } from './items.js';
+// DISABLED — town removed (was used for initScholarInventory)
+// import { BOOKS } from './items.js';
 import { spawnMonster, MON, SPAWN_BLACKLIST } from './monsters.js';
 import { SIGN_TEXTS } from './npcs.js';
 import { worldDims, getFeature, setFeature, inBounds, chebyshev, getCover, setCover } from './world-state.js';
 import { generateLayer } from './world-gen.js';
 import { makeSurface } from './surface-gen.js';
 import { makeUnderground, carveBetween } from './underground-gen.js';
-import { placeStartingTown, initScholarInventory } from './town-gen.js';
+// DISABLED — town removed
+// import { placeStartingTown, initScholarInventory } from './town-gen.js';
 import {
   clearPlacementState, registerStructurePosition,
   runStructurePlacement,
@@ -114,8 +116,7 @@ export function placeStructures(){
   const searchR = Math.max(5, Math.round(Math.min(W_SURF, H_SURF) * 0.22));
   const searchRSm = Math.max(4, Math.round(Math.min(W_SURF, H_SURF) * 0.16));
 
-  // (Starting town is placed by placeStartingTown in initWorld — no cover
-  // tile towns or interior layers needed.)
+  // (Starting town has been disabled — player spawns directly on surface.)
 
   // Sunward Hold — W
   const sunward = findSpotNear(LAYER_SURFACE,
@@ -476,11 +477,28 @@ export function initWorld(seed){
   generateLayer(LAYER_SURFACE, seed);
   generateLayer(LAYER_UNDER, seed);
 
-  // Place the starting town as a walled compound on the surface grid.
-  const cx = Math.floor(W_SURF / 2);
-  const cy = Math.floor(H_SURF / 2);
-  initScholarInventory(Object.keys(BOOKS));
-  const { spawnX, spawnY } = placeStartingTown(LAYER_SURFACE, cx, cy);
+  // DISABLED — town removed
+  // const cx = Math.floor(W_SURF / 2);
+  // const cy = Math.floor(H_SURF / 2);
+  // initScholarInventory(Object.keys(BOOKS));
+  // const { spawnX, spawnY } = placeStartingTown(LAYER_SURFACE, cx, cy);
+
+  // Spawn player on the surface: scan outward from center for a walkable,
+  // non-water, non-cover tile.
+  const spawnCenter = findSpotNear(
+    LAYER_SURFACE,
+    Math.floor(W_SURF / 2),
+    Math.floor(H_SURF / 2),
+    (ground, x, y, cover) => {
+      if (cover) return false;
+      return isWalkable(ground, cover)
+        && ground !== T.WATER && ground !== T.DEEP_WATER
+        && ground !== T.LAVA;
+    },
+    Math.max(W_SURF, H_SURF),
+  );
+  const spawnX = spawnCenter ? spawnCenter[0] : Math.floor(W_SURF / 2);
+  const spawnY = spawnCenter ? spawnCenter[1] : Math.floor(H_SURF / 2);
   state.player.startX = spawnX;
   state.player.startY = spawnY;
 

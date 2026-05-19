@@ -181,8 +181,8 @@ function beginGame(){
   document.getElementById('bodytype-screen').style.display = 'none';
   state.gameState = 'play';
   logEl.innerHTML = '';
-  log('You stand at the gates of Millhaven. Step through to enter.', 'system');
-  log('Listen to townsfolk. Information matters more than steel.', 'system');
+  log('You awaken in the wilds. The land stretches before you.', 'system');
+  log('Explore carefully. Danger lurks in every shadow.', 'system');
   updatePlayerFOV();  // compute initial FOV before first render
   render();
 }
