@@ -207,17 +207,11 @@ function ensureColorUI(){
   const btOptions = document.getElementById('bodytype-options');
   if (!btOptions) return;
 
-  // Color palette swatch container
-  const cpLabel = document.createElement('h3');
-  cpLabel.id = 'cp-label';
-  cpLabel.textContent = 'Color';
-  cpLabel.style.cssText = 'margin:10px 0 4px;text-align:center;font-size:14px;color:#bbb;';
-  btOptions.parentNode.insertBefore(cpLabel, btOptions.nextSibling);
-
+  // Color palette swatch container (no label, minimal)
   const cpContainer = document.createElement('div');
   cpContainer.id = 'colorpalette-options';
-  cpContainer.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-bottom:10px;';
-  cpLabel.parentNode.insertBefore(cpContainer, cpLabel.nextSibling);
+  cpContainer.style.cssText = 'display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:10px 0;';
+  btOptions.parentNode.insertBefore(cpContainer, btOptions.nextSibling);
 
   // Live preview canvas
   const previewWrap = document.createElement('div');
@@ -291,14 +285,8 @@ function renderColorSwatches(){
     const pal = COLOR_PALETTES[k];
     const isSel = state.selectedColorPalette === k;
     return `<div class="colorpalette-option" data-cp="${k}"
-              style="display:flex;flex-direction:column;align-items:center;cursor:pointer;
-                     padding:6px 8px;border-radius:6px;
-                     border:2px solid ${isSel ? '#d4a050' : 'rgba(255,255,255,0.1)'};
-                     background:${isSel ? 'rgba(212,160,80,0.12)' : 'transparent'};">
-      <div style="width:28px;height:28px;border-radius:50%;background:${pal.color};
-                  border:2px solid ${isSel ? '#d4a050' : 'rgba(255,255,255,0.2)'};"></div>
-      <span style="font-size:9px;margin-top:3px;color:${isSel ? '#d4a050' : '#888'};
-                   text-align:center;max-width:68px;line-height:1.15;">${pal.label}</span>
+              style="width:28px;height:28px;cursor:pointer;background:${pal.color};
+                     border:2px solid ${isSel ? '#d4a050' : 'rgba(255,255,255,0.15)'};">
     </div>`;
   }).join('');
 
