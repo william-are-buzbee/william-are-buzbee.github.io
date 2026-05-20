@@ -466,3 +466,151 @@ export const LANDMARKS = [
     ],
   },
 ];
+
+// ==================== BODY MAPS ====================
+// Phase 1 — body zone definitions for locational hit resolution.
+// Each creature type maps to an array of zones.  targetWeight values
+// sum to 1.0 per creature and represent the probability a random
+// (non-targeted) attack lands on that zone.
+//
+// `vital: true`  — zone destruction kills the creature (not enforced yet).
+// `functions`    — what the zone provides; used by future phases for
+//                  degradation when the zone takes damage.
+//
+// Clade A (6 limbs, centralized brain): head is vital.
+// Clade B (8 limbs, distributed ganglia): head is NOT vital; central
+//   body ganglion cluster is the closest thing to a single point of failure.
+
+// ---- Clade A base layout (meso-predator) ----
+const CLADE_A_BASE = [
+  { key: 'head',        name: 'head',        targetWeight: 0.10, vital: true,  functions: ['sensory', 'organ'] },
+  { key: 'torso',       name: 'torso',       targetWeight: 0.35, vital: true,  functions: ['organ'] },
+  { key: 'front_limbs', name: 'front limbs', targetWeight: 0.15, vital: false, functions: ['attack_melee', 'grip'] },
+  { key: 'mid_limbs',   name: 'mid limbs',   targetWeight: 0.15, vital: false, functions: ['locomotion'] },
+  { key: 'rear_limbs',  name: 'rear limbs',  targetWeight: 0.15, vital: false, functions: ['locomotion'] },
+  { key: 'underside',   name: 'underside',   targetWeight: 0.10, vital: false, functions: ['attack_melee'] },
+];
+
+// ---- Clade B base layout (8 limbs, distributed ganglia) ----
+const CLADE_B_BASE = [
+  { key: 'head',           name: 'head',           targetWeight: 0.08, vital: false, functions: ['sensory'] },
+  { key: 'central_body',   name: 'central body',   targetWeight: 0.25, vital: true,  functions: ['organ'] },
+  { key: 'front_sensory',  name: 'front limbs',    targetWeight: 0.12, vital: false, functions: ['sensory'] },
+  { key: 'second_limbs',   name: 'second limbs',   targetWeight: 0.15, vital: false, functions: ['grip'] },
+  { key: 'rear_limbs_a',   name: 'rear limbs',     targetWeight: 0.15, vital: false, functions: ['locomotion'] },
+  { key: 'rear_limbs_b',   name: 'hind limbs',     targetWeight: 0.15, vital: false, functions: ['locomotion'] },
+  { key: 'integument',     name: 'shell',          targetWeight: 0.10, vital: false, functions: ['defense'] },
+];
+
+// Helper: clone a base map with optional per-zone weight overrides.
+function deriveMap(base, overrides) {
+  return base.map(z => {
+    const o = overrides && overrides[z.key];
+    if (!o) return { ...z, functions: [...z.functions] };
+    return { ...z, ...o, functions: o.functions ? [...o.functions] : [...z.functions] };
+  });
+}
+
+export const BODY_MAPS = {
+  // ─── Clade A creatures ───────────────────────────────
+
+  // Meso-predator — standard Clade A proportions
+  wolf: deriveMap(CLADE_A_BASE),
+
+  // Apex predator — heavier torso (bigger target), slightly smaller head
+  dire_wolf: deriveMap(CLADE_A_BASE, {
+    head:        { targetWeight: 0.08 },
+    torso:       { targetWeight: 0.38 },
+    front_limbs: { targetWeight: 0.14 },
+    mid_limbs:   { targetWeight: 0.14 },
+    rear_limbs:  { targetWeight: 0.14 },
+    underside:   { targetWeight: 0.12 },
+  }),
+
+  // Wading grazer (large herbivore) — bulkier limbs, slightly smaller torso
+  cave_crab: deriveMap(CLADE_A_BASE, {
+    head:        { targetWeight: 0.08 },
+    torso:       { targetWeight: 0.30 },
+    front_limbs: { targetWeight: 0.17 },
+    mid_limbs:   { targetWeight: 0.17 },
+    rear_limbs:  { targetWeight: 0.18 },
+    underside:   { targetWeight: 0.10 },
+  }),
+
+  // ─── Clade B creatures ───────────────────────────────
+
+  // Small herbivore — standard Clade B
+  hare: deriveMap(CLADE_B_BASE),
+
+  // Colonial chemotroph — sessile, no melee on front limbs
+  mushroom: deriveMap(CLADE_B_BASE, {
+    front_sensory: { name: 'sensory fronds', functions: ['sensory'] },
+    second_limbs:  { name: 'mid fronds',     functions: ['grip'] },
+    integument:    { name: 'outer rind',     targetWeight: 0.10 },
+  }),
+
+  // Ambush predator — front sensory limbs double as attack weapons
+  ambush_pred: deriveMap(CLADE_B_BASE, {
+    front_sensory: { name: 'strike limbs', functions: ['sensory', 'attack_melee'] },
+    second_limbs:  { functions: ['attack_melee', 'grip'] },
+  }),
+
+  // ─── Boss ────────────────────────────────────────────
+  // Dread King — undead armored biped.  Simplified body map.
+  dread_king: [
+    { key: 'head',      name: 'crowned skull', targetWeight: 0.10, vital: true,  functions: ['sensory', 'organ'] },
+    { key: 'torso',     name: 'ribcage',       targetWeight: 0.35, vital: true,  functions: ['organ'] },
+    { key: 'left_arm',  name: 'shield arm',    targetWeight: 0.15, vital: false, functions: ['defense', 'grip'] },
+    { key: 'right_arm', name: 'sword arm',     targetWeight: 0.15, vital: false, functions: ['attack_melee'] },
+    { key: 'legs',      name: 'legs',          targetWeight: 0.20, vital: false, functions: ['locomotion'] },
+    { key: 'mantle',    name: 'mantle',        targetWeight: 0.05, vital: false, functions: ['defense'] },
+  ],
+
+  // ─── Player body maps (all Clade A) ─────────────────
+  // All three player body types use Clade A layout with minor tweaks.
+  player_meso: deriveMap(CLADE_A_BASE),
+
+  player_apex: deriveMap(CLADE_A_BASE, {
+    head:        { targetWeight: 0.08 },
+    torso:       { targetWeight: 0.38 },
+    front_limbs: { targetWeight: 0.14 },
+    mid_limbs:   { targetWeight: 0.14 },
+    rear_limbs:  { targetWeight: 0.14 },
+    underside:   { targetWeight: 0.12 },
+  }),
+
+  player_grazer: deriveMap(CLADE_A_BASE, {
+    head:        { targetWeight: 0.08 },
+    torso:       { targetWeight: 0.30 },
+    front_limbs: { targetWeight: 0.17 },
+    mid_limbs:   { targetWeight: 0.17 },
+    rear_limbs:  { targetWeight: 0.18 },
+    underside:   { targetWeight: 0.10 },
+  }),
+};
+
+// Look up a body map for any combatant (player or monster).
+// Returns the zone array or null if no map is defined.
+export function getBodyMap(entity) {
+  if (entity.isPlayer) {
+    const bt = entity.bodyType || 'meso';
+    return BODY_MAPS['player_' + bt] || BODY_MAPS.player_meso;
+  }
+  if (entity.key) {
+    return BODY_MAPS[entity.key] || null;
+  }
+  return null;
+}
+
+// Weighted random zone selection.  Takes a body map (zone array),
+// returns the selected zone object.  Uses Math.random — called only
+// after a hit is confirmed, so the roll is independent of the hit roll.
+export function selectHitZone(bodyMap) {
+  let r = Math.random();
+  for (const zone of bodyMap) {
+    r -= zone.targetWeight;
+    if (r <= 0) return zone;
+  }
+  // Floating-point safety — return last zone
+  return bodyMap[bodyMap.length - 1];
+}

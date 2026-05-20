@@ -31,6 +31,7 @@ function freshPlayer(attrs, bodyType, colorPalette){
     defeatedBoss:false,
     isPlayer:true,
     hitFlash:0,
+    bodyMapKey: 'player_' + (bodyType || 'meso'),  // Phase 1: body map lookup key
   };
   // Starter inventory — each item is its own slot, no stacking
   p.inventory.push({kind:'food', key:'apple', weight:1});

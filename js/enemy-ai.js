@@ -2,7 +2,7 @@
 // End-of-turn processing, monster state machine, movement, and melee.
 
 import { state, worlds, covers, monsters } from './state.js';
-import { DMG, LAYER_META, LAYER_SURFACE } from './constants.js';
+import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone } from './constants.js';
 import { T, isWalkable } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -1088,10 +1088,21 @@ export function monsterMelee(mon){
   if (crit) base = Math.floor(base * monCritMult(mon));
   const effDef = Math.max(0, playerDef(player));
   let dmg = Math.max(1, base - effDef);
+
+  // Zone selection — roll which body zone was hit on the player
+  const playerBodyMap = getBodyMap(player);
+  const hitZone = playerBodyMap ? selectHitZone(playerBodyMap) : null;
+
   state.player.hp -= dmg;
   state.player.hitFlash = 3;
-  if (crit) log(`${mon.name} CRITS you for ${dmg} ${mon.dmgType}!`, 'crit');
-  else log(`${mon.name} hits you for ${dmg} ${mon.dmgType}.`, 'dmg');
+
+  // Combat log with zone name when available
+  const zoneSuffix = hitZone ? ` your ${hitZone.name}` : '';
+  const verb = mon.dmgType === DMG.BLUNT ? 'crushes' :
+               mon.dmgType === DMG.BLADE ? 'strikes' :
+               mon.dmgType === DMG.POISON ? 'stings' : 'hits';
+  if (crit) log(`${mon.name} CRITS — ${verb}${zoneSuffix}! ${dmg} ${mon.dmgType}.`, 'crit');
+  else log(`${mon.name} ${verb}${zoneSuffix}. ${dmg} ${mon.dmgType}.`, 'dmg');
   // Poison application — probability reduced by 75% CON / 25% STR
   if (mon.dmgType === DMG.POISON){
     const poisonResist = poisonResistance(player);

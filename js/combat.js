@@ -2,7 +2,7 @@
 import { render } from './rendering.js';
 import { monsterMelee } from './enemy-ai.js';
 import { state, worlds, monsters } from './state.js';
-import { DMG, GOLD_DROP_MUL, resistMult } from './constants.js';
+import { DMG, GOLD_DROP_MUL, resistMult, getBodyMap, selectHitZone } from './constants.js';
 import { T, coverBonus } from './terrain.js';
 import { rand, randi, randRange, roll100 } from './rng.js';
 import { playerMelee, playerAcc, playerDodge, playerDef, playerCritChance,
@@ -65,10 +65,19 @@ function playerAttack(mon){
   }
   if (crit) suffix += ' ‼';
 
+  // Zone selection — roll which body zone was hit
+  const monBodyMap = getBodyMap(mon);
+  const hitZone = monBodyMap ? selectHitZone(monBodyMap) : null;
+
   mon.hp -= dmg;
   if (dmg > 0){ mon.hitFlash = 3; mon.damageTaken = (mon.damageTaken||0) + dmg; }
-  if (crit) log(`CRIT! ${mon.name} takes ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
-  else log(`You hit ${mon.name} for ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+
+  // Combat log with zone name when available
+  const zoneSuffix = hitZone ? `'s ${hitZone.name}` : '';
+  const verb = state.player.weapon.type === DMG.BLUNT ? 'crush' :
+               state.player.weapon.type === DMG.BLADE ? 'strike' : 'hit';
+  if (crit) log(`CRIT! You ${verb} ${mon.name}${zoneSuffix}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
+  else log(`You ${verb} ${mon.name}${zoneSuffix}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
 
   // Elemental bonus
   if (state.player.weapon.elem && mon.hp > 0){
