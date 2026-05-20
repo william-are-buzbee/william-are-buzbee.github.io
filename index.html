@@ -18,7 +18,6 @@
     --device-dark:#0a0a0c;
     --accent:#b8a870;
     --empty:#555;
-    --sidebar-bg:#0c0c10;
     --pixel-font:'Press Start 2P', 'Courier New', monospace;
     --rpg-border:#4a4a5a;
     --rpg-border-hi:#6a6a7a;
@@ -100,7 +99,6 @@
     overflow:hidden;
   }
 
-
   /* ─── Canvas — fills the entire screen, world renders edge-to-edge ─── */
   #viewport{
     display:block;
@@ -125,7 +123,6 @@
     z-index:4;
     display:flex;
     flex-direction:column;
-    /* RPG double-border dialog box — pixel art style */
     background:#08080c;
     border:3px solid var(--rpg-border);
     outline:2px solid #000;
@@ -160,200 +157,6 @@
   .log .warn{color:#d4a050;}
   .log .book{color:#a8c8e0;font-style:italic;}
 
-  /* ═══════════════════════════════════════════════════
-     SIDEBAR — Icon strip floats over the world canvas
-     ═══════════════════════════════════════════════════ */
-  .sidebar{
-    position:absolute;
-    right:6px;
-    top:6px;
-    display:flex;
-    flex-direction:row;
-    align-items:flex-start;
-    overflow:visible;
-    font-size:10px;
-    z-index:5;
-  }
-
-  /* ─── Icon strip: always visible, vertical column ─── */
-  .sidebar-tabs{
-    display:flex;
-    flex-direction:column;
-    flex-shrink:0;
-    gap:2px;
-    z-index:6;
-  }
-  .sidebar-tab{
-    width:32px;
-    height:32px;
-    background:#08080c;
-    border:2px solid var(--rpg-border);
-    padding:0;
-    font-family:inherit;
-    font-size:10px;
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    color:#999;
-    image-rendering:pixelated;
-  }
-  .sidebar-tab:hover{
-    border-color:var(--rpg-border-hi);
-    background:#141428;
-  }
-  .sidebar-tab.active{
-    border-color:#888;
-    background:#1e1e32;
-  }
-  .sidebar-tab svg{
-    width:18px;
-    height:18px;
-    fill:currentColor;
-  }
-
-  /* Colorful storybook icon tints */
-  .sidebar-tab[data-tab="status"]    { color:#d4a0a0; }
-  .sidebar-tab[data-tab="character"] { color:#a0c4d8; }
-  .sidebar-tab[data-tab="equipment"] { color:#c8b070; }
-  .sidebar-tab[data-tab="inventory"] { color:#a0b880; }
-  .sidebar-tab[data-action="toggle-log"] { color:#b0a0c8; }
-  .sidebar-tab[data-tab="status"].active    { color:#e8b8b8; }
-  .sidebar-tab[data-tab="character"].active { color:#b8d8ec; }
-  .sidebar-tab[data-tab="equipment"].active { color:#dcc880; }
-  .sidebar-tab[data-tab="inventory"].active { color:#b8d098; }
-  .sidebar-tab[data-action="toggle-log"].active { color:#c8b8e0; }
-
-  /* ─── Panel: slides out to the left of the icon strip ─── */
-  .sidebar-panel{
-    display:none;
-    width:240px;
-    background:#08080c;
-    border:2px solid var(--rpg-border);
-    outline:2px solid #000;
-    margin-right:2px;
-    max-height:500px;
-    overflow-y:auto;
-    scrollbar-width:thin;
-    scrollbar-color:#333 #08080c;
-  }
-  .sidebar-panel::-webkit-scrollbar{width:5px;}
-  .sidebar-panel::-webkit-scrollbar-thumb{background:#333;}
-  .sidebar-panel.open{display:block;}
-
-  /* ─── Tab content ─── */
-  .tab-content{
-    padding:10px 12px;
-    line-height:1.7;
-  }
-  .tab-content.hidden{display:none;}
-
-  /* ─── Section headers ─── */
-  .sect-h{
-    color:var(--fg-dim);
-    font-size:7px;
-    letter-spacing:2px;
-    border-bottom:1px dashed var(--fg-dark);
-    padding:4px 0 4px;
-    margin:8px 0 5px;
-    text-transform:uppercase;
-    font-weight:normal;
-  }
-  .sect-h:first-child{margin-top:0;}
-
-  /* ─── Key-value rows ─── */
-  .kv{
-    display:flex;
-    justify-content:space-between;
-    padding:3px 0;
-    font-size:8px;
-  }
-  .kv .k{color:var(--fg-dim);}
-  .kv .v{color:var(--fg);font-weight:bold;}
-  .kv .v.dim{color:var(--fg-dim);font-weight:normal;}
-  .kv .v.warn{color:#d4a050;}
-
-  /* ─── Attribute grid ─── */
-  .attr-grid{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:3px 8px;
-    padding:3px 0;
-  }
-  .attr-grid .attr{
-    display:flex;
-    justify-content:space-between;
-    font-size:8px;
-  }
-  .attr-grid .attr .n{color:var(--fg-dim);}
-  .attr-grid .attr .v{color:var(--fg);font-weight:bold;}
-  .attr-grid .attr .v.hi{color:var(--accent);}
-
-  /* ─── Stat bars ─── */
-  .bar{
-    position:relative;
-    height:8px;
-    background:#141414;
-    border:2px solid var(--fg-dark);
-    overflow:hidden;
-    margin:3px 0;
-  }
-  .bar > span{
-    display:block;
-    height:100%;
-    background:var(--fg);
-  }
-  .bar.food > span{
-    background:var(--accent);
-  }
-  .bar.xp > span{
-    background:var(--fg-dim);
-  }
-
-  /* ─── Equipment slots ─── */
-  .eq-slot{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:5px 0;
-    border-bottom:1px dotted #1a1a1a;
-    font-size:8px;
-  }
-  .eq-slot:last-child{border-bottom:none;}
-  .eq-slot .slot-label{
-    color:var(--fg-dim);
-    font-size:7px;
-    letter-spacing:1px;
-    text-transform:uppercase;
-    min-width:48px;
-  }
-  .eq-slot .slot-value{
-    color:var(--fg);
-    text-align:right;
-    flex:1;
-    font-size:8px;
-  }
-  .eq-slot .slot-value.empty{
-    color:var(--empty);
-    font-style:italic;
-    font-size:7px;
-  }
-  .eq-slot .slot-tag{
-    color:#888;
-    font-size:7px;
-    letter-spacing:1px;
-    margin-left:6px;
-  }
-
-  /* ─── Equipment lines (legacy compat) ─── */
-  .eqline{
-    font-size:8px;
-    color:var(--fg-dim);
-    padding:2px 0;
-  }
-  .eqline b{color:var(--fg);font-weight:normal;}
-  .eqline .tag{color:#888;font-size:7px;letter-spacing:1px;}
-
   /* ─── Effects list ─── */
   .effline{
     font-size:8px;
@@ -383,7 +186,7 @@
     border-left:none !important;
   }
 
-  /* ─── Inventory items ─── */
+  /* ─── Inventory items (kept for modal use) ─── */
   .item-row{
     display:grid;
     grid-template-columns:1fr auto auto;
@@ -538,6 +341,31 @@
   }
   .modal-inner .simple{color:#d4a050;font-size:8px;text-align:center;padding:4px 0;}
 
+  /* ─── Section headers (used in modals) ─── */
+  .sect-h{
+    color:var(--fg-dim);
+    font-size:7px;
+    letter-spacing:2px;
+    border-bottom:1px dashed var(--fg-dark);
+    padding:4px 0 4px;
+    margin:8px 0 5px;
+    text-transform:uppercase;
+    font-weight:normal;
+  }
+  .sect-h:first-child{margin-top:0;}
+
+  /* ─── Key-value rows (used in modals/chargen) ─── */
+  .kv{
+    display:flex;
+    justify-content:space-between;
+    padding:3px 0;
+    font-size:8px;
+  }
+  .kv .k{color:var(--fg-dim);}
+  .kv .v{color:var(--fg);font-weight:bold;}
+  .kv .v.dim{color:var(--fg-dim);font-weight:normal;}
+  .kv .v.warn{color:#d4a050;}
+
   /* ─── Buttons ─── */
   .btn{
     background:#000;
@@ -688,9 +516,6 @@
     display:flex;justify-content:space-between;gap:10px;margin-top:10px;
   }
 
-  /* Hidden action buttons for JS event compatibility */
-  .hidden-compat{display:none;}
-
   /* ─── Title screen buttons ─── */
   .title-buttons{
     display:flex;
@@ -760,103 +585,6 @@
     <div class="screen">
       <canvas id="viewport"></canvas>
 
-      <aside class="sidebar" id="hud-sidebar">
-        <!-- Panel area (appears left of icons) -->
-        <div class="sidebar-panel" id="sidebar-panel">
-          <!-- Status tab -->
-          <div class="tab-content" id="tab-status">
-            <div class="kv"><span class="k">LEVEL</span><span class="v" id="s-lvl">1</span></div>
-            <div class="kv"><span class="k">XP</span><span class="v dim" id="s-xp">0 / 10</span></div>
-            <div class="bar xp"><span id="b-xp" style="width:0%"></span></div>
-            <div class="kv" style="margin-top:4px;"><span class="k">HP</span><span class="v" id="s-hp">—</span></div>
-            <div class="bar"><span id="b-hp" style="width:100%"></span></div>
-            <div class="kv"><span class="k">FED</span><span class="v" id="s-food">FULL</span></div>
-            <div class="bar food"><span id="b-food" style="width:100%"></span></div>
-          </div>
-
-          <!-- Character tab -->
-          <div class="tab-content hidden" id="tab-character">
-            <div class="sect-h" style="margin-top:0;">Attributes</div>
-            <div class="attr-grid">
-              <div class="attr"><span class="n">STR</span><span class="v" id="a-str">1</span></div>
-              <div class="attr"><span class="n">CON</span><span class="v" id="a-con">1</span></div>
-              <div class="attr"><span class="n">DEX</span><span class="v" id="a-dex">1</span></div>
-              <div class="attr"><span class="n">INT</span><span class="v" id="a-int">1</span></div>
-              <div class="attr"><span class="n">PER</span><span class="v" id="a-per">1</span></div>
-            </div>
-
-            <div class="sect-h">Combat</div>
-            <div class="kv"><span class="k">Melee</span><span class="v" id="d-atk">—</span></div>
-            <div class="kv"><span class="k">Defense</span><span class="v" id="d-def">—</span></div>
-            <div class="kv"><span class="k">Accuracy</span><span class="v" id="d-acc">—</span></div>
-            <div class="kv"><span class="k">Dodge</span><span class="v" id="d-dodge">—</span></div>
-            <div class="kv"><span class="k">Crit Chance</span><span class="v" id="d-crit-chance">—</span></div>
-            <div class="kv"><span class="k">Crit Damage</span><span class="v" id="d-crit-dmg">—</span></div>
-
-            <div class="sect-h">Passives</div>
-            <div id="perks-list"><div class="empty-state">— None —</div></div>
-          </div>
-
-          <!-- Equipment tab — wealth section removed -->
-          <div class="tab-content hidden" id="tab-equipment">
-            <div class="eq-slot">
-              <span class="slot-label">WPN</span>
-              <span class="slot-value" id="eq-wpn">—</span>
-              <span class="slot-tag" id="eq-wpn-tag"></span>
-            </div>
-            <div class="eq-slot">
-              <span class="slot-label">ARM</span>
-              <span class="slot-value" id="eq-arm">—</span>
-            </div>
-            <div class="eq-slot">
-              <span class="slot-label">HELM</span>
-              <span class="slot-value empty">— empty —</span>
-            </div>
-            <div class="eq-slot">
-              <span class="slot-label">BOOTS</span>
-              <span class="slot-value empty">— empty —</span>
-            </div>
-            <div class="eq-slot">
-              <span class="slot-label">RING</span>
-              <span class="slot-value empty">— empty —</span>
-            </div>
-          </div>
-
-          <!-- Inventory tab — gold is now shown here -->
-          <div class="tab-content hidden" id="tab-inventory">
-            <div id="items-list"></div>
-          </div>
-        </div>
-
-        <!-- 5 icon buttons — floating over the world -->
-        <div class="sidebar-tabs">
-          <button class="sidebar-tab" data-tab="status" title="Status">
-            <svg viewBox="0 0 16 16"><circle cx="8" cy="3" r="2.5"/><path d="M4 7.5C4 6.5 5.5 6 8 6s4 .5 4 1.5V10c0 .5-.3 1-.8 1.2L10 14H6l-1.2-2.8C4.3 11 4 10.5 4 10V7.5z"/></svg>
-          </button>
-          <button class="sidebar-tab" data-tab="character" title="Character">
-            <svg viewBox="0 0 16 16"><circle cx="8" cy="5.5" r="4"/><path d="M4 5c0-2.5 1.5-4.5 4-4.5S12 2.5 12 5" fill="none" stroke="currentColor" stroke-width="1.2"/><circle cx="6.5" cy="5.5" r="0.7"/><circle cx="9.5" cy="5.5" r="0.7"/><path d="M6.5 7.5Q8 9 9.5 7.5" fill="none" stroke="currentColor" stroke-width="0.7"/><path d="M3 12c0-2 2.2-3 5-3s5 1 5 3v1.5H3V12z"/></svg>
-          </button>
-          <button class="sidebar-tab" data-tab="equipment" title="Equipment">
-            <svg viewBox="0 0 16 16"><path d="M3 4l1-2h8l1 2v3l-2 1v5H5V8L3 7V4z"/><path d="M5 3h6v2H5z" fill="#000"/><rect x="6" y="6" width="4" height="1" rx="0.3"/></svg>
-          </button>
-          <button class="sidebar-tab" data-tab="inventory" title="Inventory">
-            <svg viewBox="0 0 16 16"><path d="M4 6h8v7c0 1-1 2-2 2H6c-1 0-2-1-2-2V6z"/><path d="M5.5 6V4c0-1.5 1-2.5 2.5-2.5S10.5 2.5 10.5 4v2" fill="none" stroke="currentColor" stroke-width="1.2"/><rect x="6" y="8" width="4" height="1" rx="0.3"/><rect x="7.5" y="7" width="1" height="3" rx="0.3"/></svg>
-          </button>
-          <button class="sidebar-tab" data-action="toggle-log" id="toggle-log-btn" title="Toggle Log">
-            <svg viewBox="0 0 16 16"><path d="M2 3h12v8H6l-3 2.5V11H2V3z"/><rect x="4" y="5" width="8" height="1.2" fill="#000"/><rect x="4" y="7.2" width="5" height="1.2" fill="#000"/></svg>
-          </button>
-        </div>
-      </aside>
-
-      <!-- Hidden action buttons for JS event compatibility -->
-      <div class="hidden-compat">
-        <button id="act-rest"></button>
-        <button id="act-eat"></button>
-        <button id="act-stealth"></button>
-        <button id="act-use"></button>
-        <button id="act-help"></button>
-      </div>
-
       <div class="log-wrapper" id="log-wrapper">
         <div class="log" id="log"></div>
       </div>
@@ -921,23 +649,12 @@
   </div>
 
   <div class="controls">
-    <div><b>WASD</b>·Move <b>SPACE</b>·Wait <b>F</b>·Sneak <b>R</b>·Use <b>E</b>·Eat <b>G</b>·Get <b>L</b>·Look <b>M</b>·Map <b>N</b>·New <b>?</b>·Help</div>
+    <div><b>WASD</b>·Move <b>SPACE</b>·Wait <b>F</b>·Sneak <b>R</b>·Use <b>E</b>·Eat <b>G</b>·Get <b>L</b>·Look <b>M</b>·Map <b>N</b>·New <b>TAB</b>·Log <b>?</b>·Help</div>
     <div>&nbsp;</div>
   </div>
 </div>
 
 <script>
-  // Prevent HUD sidebar clicks from passing through to the canvas
-  document.getElementById('hud-sidebar').addEventListener('mousedown', function(e){
-    e.stopPropagation();
-  });
-  document.getElementById('hud-sidebar').addEventListener('click', function(e){
-    e.stopPropagation();
-  });
-  document.getElementById('hud-sidebar').addEventListener('contextmenu', function(e){
-    e.stopPropagation();
-  });
-
   // Prevent log wrapper clicks from passing through to the canvas
   document.getElementById('log-wrapper').addEventListener('mousedown', function(e){
     e.stopPropagation();
@@ -945,16 +662,6 @@
   document.getElementById('log-wrapper').addEventListener('click', function(e){
     e.stopPropagation();
   });
-
-  // 5th sidebar button: toggle log visibility
-  document.getElementById('toggle-log-btn').addEventListener('click', function(){
-    var w = document.getElementById('log-wrapper');
-    var btn = document.getElementById('toggle-log-btn');
-    w.classList.toggle('minimized');
-    btn.classList.toggle('active', !w.classList.contains('minimized'));
-  });
-  // Start with log visible and button showing active
-  document.getElementById('toggle-log-btn').classList.add('active');
 </script>
 <script type="module" src="js/main.js"></script>
 </body>

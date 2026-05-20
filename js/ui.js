@@ -1,6 +1,6 @@
 // ==================== UI REFRESH ====================
-// Refactored: 5-button HUD system (Status, Character, Equipment, Inventory, Log Toggle)
-// with pixel-art RPG styling. Gold now displayed in Inventory tab.
+// Stripped: sidebar panels removed. DOM writes that targeted removed
+// elements are gutted. Data computation kept for future modal/HUD use.
 
 import { state, worlds, features, monsters } from './state.js';
 import { DMG, LAYER_SURFACE, LAYER_UNDER } from './constants.js';
@@ -191,7 +191,6 @@ function buildEffectsHTML(player) {
 
 function buildInventoryHTML(player, totalWt, cap) {
   const overwt = totalWt > cap;
-  // Gold is now shown here in the inventory header
   let html = `<div class="inv-header">
     <span>GOLD <b class="gold-val">${player.gold}</b></span>
     <span>SLOTS <b>${player.inventory.length}/${INV_SLOTS}</b></span>
@@ -280,59 +279,14 @@ function corpseRow(it, idx) {
 
 
 // ───────────────────────────────────────────────────────
-//  §4  DOM WRITER  (no logic — just assignments)
+//  §4  DOM WRITER  (sidebar removed — no-op for now)
 // ───────────────────────────────────────────────────────
 
 function applyToDOM(d) {
-  // Vitals (Status tab)
-  $('s-lvl').textContent  = d.level;
-  $('s-xp').textContent   = d.xpText;
-  $('b-xp').style.width   = d.xpPct + '%';
-  $('s-hp').textContent   = d.hpText;
-  $('b-hp').style.width   = d.hpPct + '%';
-
-  // Hunger (Status tab)
-  const fedEl = $('s-food');
-  fedEl.textContent = d.fedLabel;
-  fedEl.className   = 'v' + (d.fedWarn ? ' warn' : '');
-  $('b-food').style.width = d.fedPct + '%';
-
-  // Attributes (Character tab) — highlight ≥ 7
-  const hi = (el, val) => { el.textContent = val; el.className = 'v' + (val >= 7 ? ' hi' : ''); };
-  hi($('a-str'), d.str);
-  hi($('a-con'), d.con);
-  hi($('a-dex'), d.dex);
-  hi($('a-int'), d.int);
-  hi($('a-per'), d.per);
-
-  // Combat (Character tab)
-  $('d-atk').textContent   = d.atkText;
-  $('d-def').textContent   = d.defVal;
-  $('d-acc').textContent   = d.accVal;
-  $('d-dodge').textContent = d.dodgeText + d.dexSuffix;
-  $('d-crit-chance').textContent = d.critChanceText;
-  $('d-crit-dmg').textContent  = d.critDmgText;
-
-  // Passives (Character tab)
-  $('perks-list').innerHTML = buildPerksHTML(d._player);
-
-  // Equipment tab (wealth section removed — gold now in inventory)
-  $('eq-wpn').textContent     = d.wpnName;
-  $('eq-wpn-tag').textContent = d.wpnTag;
-  $('eq-arm').textContent     = d.armText;
-
-  // Inventory tab (gold is embedded in the inventory header)
-  $('items-list').innerHTML = buildInventoryHTML(d._player, d._tWt, d._cap);
-
-  // Stealth toggle on hidden action button (for JS compat)
-  const stealthBtn = $('act-stealth');
-  if (stealthBtn) stealthBtn.classList.toggle('on', d.stealth);
-
-  // Use button disable state (for JS compat)
-  const here = getFeature(d._player.layer, d._player.x, d._player.y);
-  const adj  = adjacentFeature();
-  const useBtn = $('act-use');
-  if (useBtn) useBtn.disabled = !(here && interactable(here)) && !(adj && interactable(adj.f));
+  // Sidebar panels have been removed from the DOM.
+  // All previous writes to s-hp, s-lvl, a-str, eq-wpn, items-list,
+  // etc. are intentionally skipped. This function is kept as a
+  // hook for future HUD implementations (prompt 2+).
 }
 
 
@@ -345,24 +299,22 @@ let _rafPending = false;
 /**
  * Main UI refresh.  Safe to call at any frequency — successive
  * calls within the same frame are coalesced via requestAnimationFrame
- * so the browser only paints once, eliminating flicker during
- * rapid movement or batch state changes.
+ * so the browser only paints once.
  */
 function updateUI() {
-  if (_rafPending) return;          // already scheduled
+  if (_rafPending) return;
   _rafPending = true;
 
   requestAnimationFrame(() => {
     _rafPending = false;
     const data = computeUIData();
-    if (!data) return;              // player / world not ready
+    if (!data) return;
     applyToDOM(data);
   });
 }
 
 /**
- * Synchronous variant for moments that must reflect immediately
- * (e.g. right before opening a modal that reads DOM values).
+ * Synchronous variant for moments that must reflect immediately.
  */
 function updateUISync() {
   const data = computeUIData();
@@ -379,12 +331,10 @@ function getRegionName() {
   const p = state.player;
   if (!p) return '';
 
-  // World tile lookup — guard against unloaded worlds
   const row = worlds[p.layer]?.[p.y];
   if (!row) return 'unknown';
   const t = row[p.x];
 
-  // Inside the surface town compound (WOOD_FLOOR or WALL ground on surface)
   if (p.layer === LAYER_SURFACE && (t === T.WOOD_FLOOR || t === T.WALL)) {
     return 'Millhaven';
   }
@@ -416,84 +366,20 @@ function getRegionName() {
 
 
 // ───────────────────────────────────────────────────────
-//  §7  TAB TOGGLE & SWITCHING
-// ───────────────────────────────────────────────────────
-
-const TAB_IDS = ['status', 'character', 'equipment', 'inventory'];
-
-/**
- * Toggle a tab: if it's already active, close the panel entirely.
- * If another tab is active (or none), open this one.
- */
-function switchTab(tabName) {
-  if (!TAB_IDS.includes(tabName)) return;
-
-  const panel = document.getElementById('sidebar-panel');
-  const isAlreadyActive = state.uiActiveTab === tabName;
-
-  if (isAlreadyActive) {
-    // Close panel
-    state.uiActiveTab = null;
-    document.querySelectorAll('.sidebar-tab[data-tab]').forEach(btn => {
-      btn.classList.remove('active');
-    });
-    TAB_IDS.forEach(id => {
-      const el = document.getElementById('tab-' + id);
-      if (el) el.classList.add('hidden');
-    });
-    if (panel) panel.classList.remove('open');
-  } else {
-    // Open this tab
-    state.uiActiveTab = tabName;
-    document.querySelectorAll('.sidebar-tab[data-tab]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === tabName);
-    });
-    TAB_IDS.forEach(id => {
-      const el = document.getElementById('tab-' + id);
-      if (el) el.classList.toggle('hidden', id !== tabName);
-    });
-    if (panel) panel.classList.add('open');
-  }
-}
-
-/** Restore HUD state on load (call once after DOM ready). */
-function restoreHUDState() {
-  if (state.uiActiveTab && TAB_IDS.includes(state.uiActiveTab)) {
-    switchTab(state.uiActiveTab);
-  }
-}
-
-// Wire up click handlers once the DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', _initHUD);
-} else {
-  _initHUD();
-}
-
-function _initHUD() {
-  // Tab buttons — toggle behavior (only data-tab buttons, not toggle-log)
-  document.querySelectorAll('.sidebar-tab[data-tab]').forEach(tab => {
-    tab.addEventListener('click', () => {
-      switchTab(tab.dataset.tab);
-    });
-  });
-
-  restoreHUDState();
-}
-
-
-// ───────────────────────────────────────────────────────
-//  §8  EXPORTS
+//  §7  EXPORTS
 // ───────────────────────────────────────────────────────
 
 export {
   updateUI,
   updateUISync,
+  computeUIData,
+  buildInventoryHTML,
+  buildPerksHTML,
+  buildEffectsHTML,
   interactable,
   adjacentFeature,
   effectLabel,
   getRegionName,
   monsterAt,
   chebyshev,
-  restoreHUDState,
 };

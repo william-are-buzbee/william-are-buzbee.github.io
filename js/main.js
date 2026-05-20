@@ -23,24 +23,21 @@ setOnVictoryCallback(() => { deleteSave(); onVictory(); });
 setGroundModalCallbacks(openModal, closeModal);
 
 // ==================== SAFE DISPATCH ====================
-// Wraps every player action so one bad throw doesn't brick the game.
 function safeDispatch(fn, ...args) {
   if (state.gameState !== 'play') return;
   if (modalEl.classList.contains('show')) return;
-  if (isMapOpen()) return;                 // ← world map blocks input
-  if (state.inputLocked) return;          // ← prevents double-fire
+  if (isMapOpen()) return;
+  if (state.inputLocked) return;
   try {
     fn(...args);
-    markCurrentCell();                     // ← track exploration
+    markCurrentCell();
   } catch (err) {
     console.error('[OverWorld Zero] Action failed:', err);
-    // Unlock input so the player isn't softlocked
     state.inputLocked = false;
   }
 }
 
 // ==================== COORDINATE HELPERS ====================
-// Centering offsets (must match rendering.js)
 const VIEW_OFS_X = (canvas.width  - VIEW_W * TILE) >> 1;
 const VIEW_OFS_Y = (canvas.height - VIEW_H * TILE) >> 1;
 
@@ -78,7 +75,6 @@ canvas.addEventListener('click', (ev) => {
     return;
   }
 
-  // Far click: step one tile in the dominant direction
   const sx = Math.sign(dx);
   const sy = Math.sign(dy);
   if (adx > ady)      safeDispatch(attemptMove, sx, 0);
@@ -97,6 +93,12 @@ canvas.addEventListener('contextmenu', (ev) => {
   }
 });
 
+// ==================== LOG TOGGLE (TAB key) ====================
+function toggleLog() {
+  const w = document.getElementById('log-wrapper');
+  if (w) w.classList.toggle('minimized');
+}
+
 // ==================== INPUT: KEYBOARD ====================
 const KEY_MAP = {
   'w': () => attemptMove(0, -1),
@@ -107,7 +109,6 @@ const KEY_MAP = {
   'arrowleft': () => attemptMove(-1, 0),
   'd': () => attemptMove(1, 0),
   'arrowright': () => attemptMove(1, 0),
-  // Numpad diagonals (NumLock ON = digit, NumLock OFF = nav key)
   '7': () => attemptMove(-1, -1),
   'home': () => attemptMove(-1, -1),
   '9': () => attemptMove(1, -1),
@@ -116,12 +117,10 @@ const KEY_MAP = {
   'end': () => attemptMove(-1, 1),
   '3': () => attemptMove(1, 1),
   'pagedown': () => attemptMove(1, 1),
-  // Numpad cardinals (digits; arrow keys already handled above)
   '8': () => attemptMove(0, -1),
   '4': () => attemptMove(-1, 0),
   '6': () => attemptMove(1, 0),
   '2': () => attemptMove(0, 1),
-  // Numpad 5 (Clear) = rest/wait
   '5': restAction,
   'clear': restAction,
   ' ': restAction,
@@ -164,6 +163,13 @@ document.addEventListener('keydown', (ev) => {
 
   if (state.gameState !== 'play') return;
 
+  // TAB key: toggle log visibility
+  if (ev.key === 'Tab') {
+    ev.preventDefault();
+    toggleLog();
+    return;
+  }
+
   // World map overlay: M toggles, Escape closes, all else blocked while open
   if (ev.key.toLowerCase() === 'm') {
     ev.preventDefault();
@@ -172,7 +178,7 @@ document.addEventListener('keydown', (ev) => {
   }
   if (isMapOpen()) {
     if (ev.key === 'Escape') { closeMap(); ev.preventDefault(); }
-    return;   // block everything else while map is showing
+    return;
   }
 
   // N key: open restart confirmation
@@ -199,35 +205,10 @@ document.addEventListener('keydown', (ev) => {
   }
 });
 
-// ==================== SIDEBAR TABS ====================
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    const target = tab.dataset.tab;
-    document.querySelectorAll('.tab').forEach(t =>
-      t.classList.toggle('active', t === tab)
-    );
-    document.querySelectorAll('.tab-content').forEach(c =>
-      c.classList.toggle('hidden', c.id !== 'tab-' + target)
-    );
-  });
-});
-
-// ==================== ACTION BAR ====================
-const ACTION_BINDINGS = {
-  'act-rest':    restAction,
-  'act-eat':     eatBest,
-  'act-stealth': toggleStealth,
-  'act-use':     useAction,
-};
-for (const [id, fn] of Object.entries(ACTION_BINDINGS)) {
-  document.getElementById(id).addEventListener('click', () => safeDispatch(fn));
-}
-// Help works even outside 'play' state
-document.getElementById('act-help').addEventListener('click', () => {
-  try { showHelp(); } catch (e) { console.error(e); }
-});
-
 // ==================== INVENTORY DELEGATION ====================
+// Items-list element no longer exists in the sidebar, but inventory
+// buttons still appear inside modals (ground loot, shops). We attach
+// the listener to the modal-inner instead so those buttons keep working.
 const INV_ACTIONS = {
   eat:        (i) => eatItem(i),
   drop:       (i) => dropItem(i),
@@ -238,12 +219,14 @@ const INV_ACTIONS = {
   eatCorpse:  (i) => eatCorpseFromInv(i),
 };
 
-document.getElementById('items-list').addEventListener('click', (ev) => {
+document.getElementById('modal-inner').addEventListener('click', (ev) => {
   for (const [key, fn] of Object.entries(INV_ACTIONS)) {
     const raw = ev.target.dataset[key];
     if (raw != null) {
       const idx = parseInt(raw, 10);
-      if (Number.isFinite(idx)) safeDispatch(fn, idx);
+      if (Number.isFinite(idx)) {
+        try { fn(idx); } catch (err) { console.error(err); }
+      }
       return;
     }
   }
@@ -263,7 +246,6 @@ function showScreen(id) {
     document.getElementById(s).style.display = s === id ? 'flex' : 'none';
   }
   state.gameState = id === 'title' ? 'title' : state.gameState;
-  // Update title screen to reflect save availability
   if (id === 'title') updateTitleButtons();
 }
 
@@ -281,7 +263,6 @@ function updateTitleButtons() {
   }
 }
 
-// Continue button: load save
 titleContinueBtn.addEventListener('click', (ev) => {
   ev.stopPropagation();
   if (hasSave()) {
@@ -297,19 +278,16 @@ titleContinueBtn.addEventListener('click', (ev) => {
   }
 });
 
-// New Game button: delete save and start chargen
 titleNewGameBtn.addEventListener('click', (ev) => {
   ev.stopPropagation();
   deleteSave();
   openCharGen();
 });
 
-// Prevent stray clicks on the title background from doing anything
 titleEl.addEventListener('click', (ev) => {
   // Only buttons above should act
 });
 
-// Death / Victory: delete save, return to title
 document.getElementById('death').addEventListener('click', () => {
   deleteSave();
   showScreen('title');
@@ -339,7 +317,6 @@ document.getElementById('restart-no').addEventListener('click', (ev) => {
   hideRestartConfirm();
 });
 
-// Prevent background clicks on the confirm overlay from leaking
 restartConfirmEl.addEventListener('click', (ev) => {
   ev.stopPropagation();
 });
@@ -355,5 +332,5 @@ function drawTitleBackdrop() {
 }
 drawTitleBackdrop();
 
-// ==================== STARTUP: CHECK FOR SAVED GAME ====================
+// ==================== STARTUP ====================
 updateTitleButtons();
