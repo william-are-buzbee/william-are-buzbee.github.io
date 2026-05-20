@@ -424,6 +424,110 @@ const VISION_PROFILES = {
   lava_fiend:  { visionType: 'cone', coneAngle: 120 },
 };
 
+// ==================== CLADE TRAIT DATA ====================
+// Biological clade identity and trait properties for surface fauna.
+// Data-only — no AI behavior changes.  Read by future ecology systems.
+//
+// Keys match MON keys.  Only creatures with defined clade biology are
+// listed; legacy/undead/elemental creatures have no clade assignment.
+//
+//   id              'A' or 'B'
+//   cognition       'centralized' | 'distributed'
+//   sensing         'chemical' | 'vibration'
+//   memory          'episodic' | 'pattern'
+//   sync            true if capable of inter-organism synchronization
+//   syncRange       tile radius for sync signal propagation (0 if sync false)
+//   territorial     true if effectiveness scales with home-range familiarity
+//   territoryRadius home range radius in tiles (0 if not territorial)
+//   integument      'skin' | 'plates'
+//   reproduction    'sequential' | 'simultaneous'
+const CLADE_DATA = {
+  // Clade A — centralized, chemical-sensing, episodic memory, skin integument
+  wolf: {
+    id: 'A',
+    cognition: 'centralized',
+    sensing: 'chemical',
+    memory: 'episodic',
+    sync: false,
+    syncRange: 0,
+    territorial: false,
+    territoryRadius: 0,
+    integument: 'skin',
+    reproduction: 'sequential',
+  },
+  dire_wolf: {
+    id: 'A',
+    cognition: 'centralized',
+    sensing: 'chemical',
+    memory: 'episodic',
+    sync: false,
+    syncRange: 0,
+    territorial: false,
+    territoryRadius: 0,
+    integument: 'skin',
+    reproduction: 'sequential',
+  },
+  cave_crab: {
+    id: 'A',
+    cognition: 'centralized',
+    sensing: 'chemical',
+    memory: 'episodic',
+    sync: false,
+    syncRange: 0,
+    territorial: false,
+    territoryRadius: 0,
+    integument: 'skin',
+    reproduction: 'sequential',
+  },
+
+  // Clade B — distributed, vibration-sensing, pattern memory, plated integument
+  hare: {
+    id: 'B',
+    cognition: 'distributed',
+    sensing: 'vibration',
+    memory: 'pattern',
+    sync: true,           // mild flee-synchronization via alarm signal bleed
+    syncRange: 4,
+    territorial: true,    // home-patch familiarity improves detection & escape
+    territoryRadius: 8,
+    integument: 'plates',
+    reproduction: 'simultaneous',
+  },
+  mushroom: {
+    id: 'B',
+    cognition: 'distributed',
+    sensing: 'vibration',
+    memory: 'pattern',
+    sync: true,           // full inter-node synchronization — the core mechanic
+    syncRange: 6,
+    territorial: true,    // colony bound to mineral substrate patch
+    territoryRadius: 12,
+    integument: 'plates',
+    reproduction: 'simultaneous',
+  },
+  ambush_pred: {
+    id: 'B',
+    cognition: 'distributed',
+    sensing: 'vibration',
+    memory: 'pattern',
+    sync: false,          // synchronization suppressed in this lineage
+    syncRange: 0,
+    territorial: true,    // effectiveness scales sharply with home-range familiarity
+    territoryRadius: 10,
+    integument: 'plates',
+    reproduction: 'simultaneous',
+  },
+};
+
+/*
+  getCladeData(monsterKey)
+  Returns the clade trait object for a creature key, or null if the
+  creature has no clade assignment (legacy/undead/elemental).
+*/
+function getCladeData(key) {
+  return CLADE_DATA[key] || null;
+}
+
 function spawnMonster(key){
   let d;
   if (key === 'dread_king') d = DREAD_KING;
@@ -537,6 +641,8 @@ function spawnMonster(key){
     m.visionType = vp.visionType;
     if (vp.coneAngle != null) m.coneAngle = vp.coneAngle;
   }
+  // Attach clade trait data (null for creatures without clade biology)
+  m.clade = getCladeData(key);
   m.hpMax = monHP(m);
   m.hp = m.hpMax;
   return m;
@@ -579,5 +685,5 @@ const SPAWN_BLACKLIST = new Set([
 ]);
 
 // Re-export everything that other modules need
-export { MON, DREAD_KING, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES };
-export { rollPersonality, monHP, monDodge, monAcc, monCritChance, monCritMult, monDamage, spawnMonster, getSpawnRules };
+export { MON, DREAD_KING, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES, CLADE_DATA };
+export { rollPersonality, monHP, monDodge, monAcc, monCritChance, monCritMult, monDamage, spawnMonster, getSpawnRules, getCladeData };
