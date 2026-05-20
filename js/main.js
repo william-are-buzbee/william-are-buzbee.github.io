@@ -5,7 +5,7 @@
 import { state } from './state.js';
 import { TILE, VIEW_W, VIEW_H } from './constants.js';
 import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js';
-import { updateUI } from './ui.js';
+import { updateUI, hideHud } from './ui.js';
 import { canvas, ctx } from './rendering.js';
 
 import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks } from './player-actions.js';
@@ -139,6 +139,7 @@ const KEY_MAP = {
   'r': useAction,
   'l': lookAtGround,
   'g': pickUpFromGround,
+  'e': eatBest,
   '?': showHelp,
   '/': showHelp,
 };
@@ -174,7 +175,7 @@ document.addEventListener('keydown', (ev) => {
   if (state.gameState !== 'play') return;
 
   // ── Overlay panel handling ──
-  const PANEL_KEYS = { s: 'status', c: 'character', i: 'inventory', e: 'equipment' };
+  const PANEL_KEYS = { s: 'status', i: 'inventory' };
   const kLow = ev.key.toLowerCase();
 
   if (isOverlayOpen()) {
@@ -208,13 +209,6 @@ document.addEventListener('keydown', (ev) => {
   }
   if (isMapOpen()) {
     if (ev.key === 'Escape') { closeMap(); ev.preventDefault(); }
-    return;
-  }
-
-  // N key: open restart confirmation
-  if (ev.key.toLowerCase() === 'n') {
-    ev.preventDefault();
-    showRestartConfirm();
     return;
   }
 
@@ -276,7 +270,8 @@ function showScreen(id) {
     document.getElementById(s).style.display = s === id ? 'flex' : 'none';
   }
   state.gameState = id === 'title' ? 'title' : state.gameState;
-  if (id === 'title') updateTitleButtons();
+  if (id === 'title') { updateTitleButtons(); hideHud(); }
+  if (id === 'death' || id === 'victory') hideHud();
 }
 
 // ---- Save-aware title screen ----

@@ -1,5 +1,6 @@
 // ==================== OVERLAY PANELS ====================
-// Full-screen keyboard-driven panels: S(tatus), C(haracter), I(nventory), E(quipment).
+// Full-screen keyboard-driven panels: S(tatus), I(nventory).
+// Status merges the old Character panel; Inventory merges Equipment.
 // Only one overlay open at a time. ESC or the same key closes it.
 
 import { state } from './state.js';
@@ -28,7 +29,7 @@ const overlayBody  = document.getElementById('overlay-body');
 //  STATE
 // ───────────────────────────────────────────────────────
 
-let _activePanel = null;   // 'status' | 'character' | 'inventory' | 'equipment' | null
+let _activePanel = null;   // 'status' | 'inventory' | null
 
 export function isOverlayOpen() { return _activePanel !== null; }
 export function activePanel()   { return _activePanel; }
@@ -58,9 +59,7 @@ export function togglePanel(key) {
 
   const renderers = {
     status:    renderStatus,
-    character: renderCharacter,
     inventory: renderInventory,
-    equipment: renderEquipment,
   };
   const fn = renderers[key];
   if (fn) openOverlay(key, fn);
@@ -86,17 +85,8 @@ function hint(text) {
   return `<div class="ov-hint">${text}</div>`;
 }
 
-// Pretty name for body types
-const BODY_LABELS = { meso: 'Mesomorph', apex: 'Apex', grazer: 'Grazer' };
-
-// Pretty name for color palettes
-function paletteName(key) {
-  if (!key) return '???';
-  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
-
 // ───────────────────────────────────────────────────────
-//  PANEL: STATUS  (S)
+//  PANEL: STATUS  (S) — includes attributes, combat, perks
 // ───────────────────────────────────────────────────────
 
 function renderStatus(container) {
@@ -109,14 +99,13 @@ function renderStatus(container) {
   const hpColor  = d.hpPct > 50 ? '#7a9a5a' : (d.hpPct > 25 ? '#d4a050' : '#c86a5a');
 
   let html = `<div class="ov-title">STATUS</div>`;
-  html += row('Body', BODY_LABELS[p.bodyType] || p.bodyType);
-  html += row('Palette', paletteName(p.colorPalette));
+
+  // ── Vitals ──
   html += sectionHead('VITALS');
   html += row('HP', d.hpText);
   html += bar(d.hpPct, hpColor);
   html += row('Food', `${Math.round(p.fed)}% · ${d.fedLabel}`, d.fedWarn ? 'warn' : '');
   html += bar(d.fedPct, fedColor);
-  html += sectionHead('PROGRESS');
   html += row('Level', d.level);
   html += row('XP', d.xpText);
   html += bar(d.xpPct, '#6a7a9a');
@@ -124,26 +113,7 @@ function renderStatus(container) {
   html += row('Region', d.regionName);
   html += row('Layer', d.layerLabel);
 
-  // Active effects
-  const effHtml = buildEffectsHTML(p);
-  html += sectionHead('EFFECTS');
-  html += `<div class="ov-block">${effHtml}</div>`;
-
-  html += hint('[S] or [ESC] to close');
-  container.innerHTML = html;
-}
-
-// ───────────────────────────────────────────────────────
-//  PANEL: CHARACTER  (C)
-// ───────────────────────────────────────────────────────
-
-function renderCharacter(container) {
-  const p = state.player;
-  if (!p) return;
-  const d = computeUIData();
-  if (!d) return;
-
-  let html = `<div class="ov-title">CHARACTER</div>`;
+  // ── Attributes (merged from Character) ──
   html += sectionHead('ATTRIBUTES');
   html += row('STR', p.str);
   html += row('CON', p.con);
@@ -151,6 +121,7 @@ function renderCharacter(container) {
   html += row('INT', p.int);
   html += row('PER', p.per);
 
+  // ── Combat (merged from Character) ──
   html += sectionHead('COMBAT');
   html += row('Melee', d.atkText);
   html += row('Defense', d.defVal);
@@ -159,22 +130,22 @@ function renderCharacter(container) {
   html += row('Crit Chance', d.critChanceText);
   html += row('Crit Damage', d.critDmgText);
 
-  html += sectionHead('WEIGHT');
-  html += row('Slots', `${p.inventory.length} / ${INV_SLOTS}`);
-  const tw = totalWeight(p), cap = carryCapacity(p);
-  html += row('Weight', `${tw} / ${cap}`, tw > cap ? 'warn' : '');
+  // ── Active effects ──
+  const effHtml = buildEffectsHTML(p);
+  html += sectionHead('EFFECTS');
+  html += `<div class="ov-block">${effHtml}</div>`;
 
-  // Perks
+  // ── Perks (merged from Character) ──
   const perksHtml = buildPerksHTML(p);
   html += sectionHead('PERKS');
   html += `<div class="ov-block">${perksHtml}</div>`;
 
-  html += hint('[C] or [ESC] to close');
+  html += hint('[S] or [ESC] to close');
   container.innerHTML = html;
 }
 
 // ───────────────────────────────────────────────────────
-//  PANEL: INVENTORY  (I)
+//  PANEL: INVENTORY  (I) — includes equipment slots
 // ───────────────────────────────────────────────────────
 
 function renderInventory(container) {
@@ -183,6 +154,19 @@ function renderInventory(container) {
 
   const tw = totalWeight(p), cap = carryCapacity(p);
   let html = `<div class="ov-title">INVENTORY</div>`;
+
+  // ── Equipment slots (merged from Equipment panel) ──
+  html += sectionHead('EQUIPPED');
+  const elemTag = p.weapon.elem ? '+' + p.weapon.elem : '';
+  html += row('WPN', `${p.weapon.name}  [${p.weapon.type}${elemTag}]`);
+  const dodgePen = p.armor.dodgePenalty ? ` (-${p.armor.dodgePenalty}% dodge)` : '';
+  html += row('ARM', `${p.armor.name}  DEF+${p.armor.def}${dodgePen}`);
+  html += row('HELM', '— empty —', 'dim');
+  html += row('BOOTS', '— empty —', 'dim');
+  html += row('RING', '— empty —', 'dim');
+
+  // ── Bag contents ──
+  html += sectionHead('BAG');
   html += `<div class="ov-inv-header">`;
   html += `<span>GOLD <b class="accent">${p.gold}</b></span>`;
   html += `<span>SLOTS <b>${p.inventory.length}/${INV_SLOTS}</b></span>`;
@@ -309,30 +293,4 @@ function handleInventoryClick(ev) {
   }
 }
 
-// ───────────────────────────────────────────────────────
-//  PANEL: EQUIPMENT  (E)
-// ───────────────────────────────────────────────────────
 
-function renderEquipment(container) {
-  const p = state.player;
-  if (!p) return;
-
-  let html = `<div class="ov-title">EQUIPMENT</div>`;
-  html += sectionHead('EQUIPPED');
-
-  // Weapon
-  const elemTag = p.weapon.elem ? '+' + p.weapon.elem : '';
-  html += row('WPN', `${p.weapon.name}  [${p.weapon.type}${elemTag}]`);
-
-  // Armor
-  const dodgePen = p.armor.dodgePenalty ? ` (-${p.armor.dodgePenalty}% dodge)` : '';
-  html += row('ARM', `${p.armor.name}  DEF+${p.armor.def}${dodgePen}`);
-
-  // Placeholder slots
-  html += row('HELM', '— empty —', 'dim');
-  html += row('BOOTS', '— empty —', 'dim');
-  html += row('RING', '— empty —', 'dim');
-
-  html += hint('[E] or [ESC] to close');
-  container.innerHTML = html;
-}

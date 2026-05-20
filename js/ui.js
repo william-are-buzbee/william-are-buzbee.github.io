@@ -284,9 +284,41 @@ function corpseRow(it, idx) {
 
 function applyToDOM(d) {
   // Sidebar panels have been removed from the DOM.
-  // All previous writes to s-hp, s-lvl, a-str, eq-wpn, items-list,
-  // etc. are intentionally skipped. This function is kept as a
-  // hook for future HUD implementations (prompt 2+).
+  // Update the minimal always-visible HUD instead.
+  updateHud(d);
+}
+
+// ───────────────────────────────────────────────────────
+//  §4b  MINIMAL HUD  (HP + food bars, top-right)
+// ───────────────────────────────────────────────────────
+
+const _hudEl      = document.getElementById('hud');
+const _hudHpBar   = document.getElementById('hud-hp');
+const _hudFoodBar = document.getElementById('hud-food');
+const _hudHpNum   = document.getElementById('hud-hp-num');
+const _hudFoodNum = document.getElementById('hud-food-num');
+
+function updateHud(d) {
+  if (!_hudEl) return;
+  if (!d || state.gameState !== 'play') { _hudEl.classList.remove('show'); return; }
+
+  _hudEl.classList.add('show');
+
+  // HP bar
+  const hpPct = Math.max(0, Math.min(100, d.hpPct));
+  _hudHpBar.style.width = hpPct + '%';
+  _hudHpBar.className = 'hud-bar-fill hp' + (hpPct > 50 ? ' ok' : '');
+  _hudHpNum.textContent = d.hpText;
+
+  // Food bar
+  const fedPct = Math.max(0, Math.min(100, d.fedPct));
+  _hudFoodBar.style.width = fedPct + '%';
+  _hudFoodBar.className = 'hud-bar-fill food' + (d.fedWarn ? ' warn' : '');
+  _hudFoodNum.textContent = Math.round(state.player.fed) + '%';
+}
+
+function hideHud() {
+  if (_hudEl) _hudEl.classList.remove('show');
 }
 
 
@@ -382,4 +414,5 @@ export {
   getRegionName,
   monsterAt,
   chebyshev,
+  hideHud,
 };

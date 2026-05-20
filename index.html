@@ -157,6 +157,48 @@
   .log .warn{color:#d4a050;}
   .log .book{color:#a8c8e0;font-style:italic;}
 
+  /* ─── Minimal HUD (always-visible HP/food bars) ─── */
+  .hud{
+    position:absolute;
+    top:6px;
+    right:6px;
+    z-index:4;
+    display:none;
+    flex-direction:column;
+    gap:3px;
+    pointer-events:none;
+  }
+  .hud.show{display:flex;}
+  .hud-row{
+    display:flex;
+    align-items:center;
+    gap:4px;
+  }
+  .hud-bar{
+    width:68px;
+    height:6px;
+    background:#1a1a1a;
+    border:2px solid #111;
+    overflow:hidden;
+    image-rendering:pixelated;
+  }
+  .hud-bar-fill{
+    height:100%;
+    transition:none;
+  }
+  .hud-bar-fill.hp{background:#b86a5a;}
+  .hud-bar-fill.hp.ok{background:#9a9080;}
+  .hud-bar-fill.food{background:#b89a50;}
+  .hud-bar-fill.food.warn{background:#c86a5a;}
+  .hud-num{
+    font-family:var(--pixel-font);
+    font-size:7px;
+    color:#666;
+    min-width:36px;
+    text-align:right;
+    letter-spacing:0;
+  }
+
   /* ─── Effects list ─── */
   .effline{
     font-size:8px;
@@ -724,6 +766,17 @@
         <div class="log" id="log"></div>
       </div>
 
+      <div class="hud" id="hud">
+        <div class="hud-row">
+          <div class="hud-bar"><div class="hud-bar-fill hp ok" id="hud-hp" style="width:100%"></div></div>
+          <span class="hud-num" id="hud-hp-num"></span>
+        </div>
+        <div class="hud-row">
+          <div class="hud-bar"><div class="hud-bar-fill food" id="hud-food" style="width:100%"></div></div>
+          <span class="hud-num" id="hud-food-num"></span>
+        </div>
+      </div>
+
       <div class="game-overlay" id="game-overlay">
         <div class="ov-body" id="overlay-body"></div>
       </div>
@@ -788,7 +841,7 @@
   </div>
 
   <div class="controls">
-    <div><b>WASD</b>·Move <b>SPACE</b>·Wait <b>F</b>·Sneak <b>R</b>·Use <b>G</b>·Get <b>L</b>·Look <b>S</b>·Status <b>C</b>·Char <b>I</b>·Items <b>E</b>·Equip <b>M</b>·Map <b>N</b>·New <b>?</b>·Help</div>
+    <div><b>WASD</b>·Move <b>SPACE</b>·Wait <b>F</b>·Sneak <b>E</b>·Eat <b>G</b>·Get <b>L</b>·Look <b>S</b>·Status <b>I</b>·Items <b>M</b>·Map <b>TAB</b>·Log <b>?</b>·Help</div>
     <div>&nbsp;</div>
   </div>
 </div>
