@@ -90,18 +90,13 @@
     background:#000;
     padding:10px;
     border-radius:6px;
-    box-shadow:
-      inset 0 0 0 2px #000,
-      inset 0 0 0 4px #1d1d1d,
-      inset 0 0 20px rgba(0,0,0,0.9),
-      0 0 0 1px #2a2a2a;
+    border:2px solid #1d1d1d;
   }
   .screen{
     position:relative;
     background:#000;
     width:var(--vp-w, 992px);
     height:var(--vp-h, 672px);
-    border-radius:3px;
     overflow:hidden;
   }
 
@@ -130,13 +125,11 @@
     z-index:4;
     display:flex;
     flex-direction:column;
-    /* RPG double-border dialog box */
-    background:rgba(0,0,10,0.88);
+    /* RPG double-border dialog box — pixel art style */
+    background:#08080c;
     border:3px solid var(--rpg-border);
     outline:2px solid #000;
-    box-shadow:
-      inset 0 0 0 1px var(--rpg-border-lo),
-      0 0 12px rgba(0,0,0,0.8);
+    outline-offset:0px;
   }
   .log-wrapper.minimized{
     display:none;
@@ -149,7 +142,7 @@
     line-height:1.7;
     overflow-y:auto;
     scrollbar-width:thin;
-    scrollbar-color:#333 transparent;
+    scrollbar-color:#333 #08080c;
     color:var(--fg);
     white-space:pre-wrap;
     pointer-events:auto;
@@ -158,7 +151,7 @@
   .log::-webkit-scrollbar-thumb{background:#222;}
   .log .muted{color:var(--fg-dim);}
   .log .hit{color:#fff;}
-  .log .crit{color:#fff;text-shadow:0 0 4px rgba(255,255,255,0.5);font-weight:bold;}
+  .log .crit{color:#fff;font-weight:bold;}
   .log .dmg{color:#c88;}
   .log .dead{color:#666;font-style:italic;}
   .log .gold{color:var(--accent);}
@@ -193,7 +186,7 @@
   .sidebar-tab{
     width:32px;
     height:32px;
-    background:rgba(0,0,10,0.82);
+    background:#08080c;
     border:2px solid var(--rpg-border);
     padding:0;
     font-family:inherit;
@@ -207,11 +200,11 @@
   }
   .sidebar-tab:hover{
     border-color:var(--rpg-border-hi);
-    background:rgba(20,20,40,0.9);
+    background:#141428;
   }
   .sidebar-tab.active{
     border-color:#888;
-    background:rgba(30,30,50,0.92);
+    background:#1e1e32;
   }
   .sidebar-tab svg{
     width:18px;
@@ -235,15 +228,14 @@
   .sidebar-panel{
     display:none;
     width:240px;
-    background:rgba(0,0,10,0.92);
+    background:#08080c;
     border:2px solid var(--rpg-border);
     outline:2px solid #000;
-    box-shadow:0 0 12px rgba(0,0,0,0.8);
     margin-right:2px;
     max-height:500px;
     overflow-y:auto;
     scrollbar-width:thin;
-    scrollbar-color:#333 transparent;
+    scrollbar-color:#333 #08080c;
   }
   .sidebar-panel::-webkit-scrollbar{width:5px;}
   .sidebar-panel::-webkit-scrollbar-thumb{background:#333;}
@@ -309,13 +301,13 @@
   .bar > span{
     display:block;
     height:100%;
-    background:repeating-linear-gradient(90deg, var(--fg) 0 2px, var(--fg-dim) 2px 3px);
+    background:var(--fg);
   }
   .bar.food > span{
-    background:repeating-linear-gradient(90deg, var(--accent) 0 1px, #8a7a50 1px 2px);
+    background:var(--accent);
   }
   .bar.xp > span{
-    background:repeating-linear-gradient(90deg, var(--fg-dim) 0 2px, var(--fg-dark) 2px 3px);
+    background:var(--fg-dim);
   }
 
   /* ─── Equipment slots ─── */
@@ -455,28 +447,24 @@
   .modal{
     position:absolute;
     inset:0;
-    background:rgba(0,0,0,0.88);
+    background:#000;
     display:none;
     align-items:center;
     justify-content:center;
     z-index:10;
-    border-radius:3px;
   }
   .modal.show{display:flex;}
   .modal-inner{
-    background:rgba(0,0,10,0.95);
+    background:#08080c;
     border:3px solid var(--rpg-border);
     outline:2px solid #000;
-    box-shadow:
-      inset 0 0 0 1px var(--rpg-border-lo),
-      0 0 30px rgba(255,255,255,0.08);
     padding:18px 24px;
     min-width:380px;
     max-width:660px;
     max-height:92%;
     overflow-y:auto;
     scrollbar-width:thin;
-    scrollbar-color:#444 #000;
+    scrollbar-color:#444 #08080c;
   }
   .modal-inner h2{
     font-size:10px;
@@ -538,7 +526,7 @@
     line-height:1.8;
     padding:12px 18px;
     font-style:italic;
-    background:rgba(168,200,224,0.04);
+    background:#0c1218;
     border-left:3px solid #4a6a8a;
   }
   .modal-inner .speaker{
@@ -579,14 +567,12 @@
     text-align:center;
     padding:20px;
     z-index:20;
-    border-radius:3px;
   }
   .centered-screen h1{
     font-size:24px;
     letter-spacing:8px;
     margin-bottom:6px;
     font-weight:normal;
-    text-shadow:0 0 10px rgba(255,255,255,0.3);
   }
   .centered-screen .sub{
     color:var(--fg-dim);
@@ -661,7 +647,7 @@
     border-bottom:1px dashed #1a1a1a;
     cursor:default;
   }
-  .chargen-row:hover{background:rgba(255,255,255,0.03);}
+  .chargen-row:hover{background:#0e0e0e;}
   .chargen-row .lbl{color:var(--fg);font-weight:bold;font-size:9px;letter-spacing:1px;}
   .chargen-row button{
     background:#000;
@@ -718,7 +704,7 @@
     padding:4px 8px;
   }
   .title-btn:hover{
-    text-shadow:0 0 8px rgba(255,255,255,0.5);
+    color:#fff;
   }
 
   /* ─── Body type selection ─── */
@@ -749,7 +735,6 @@
   }
   .bodytype-option.selected{
     border-color:var(--accent);
-    box-shadow:0 0 8px rgba(184,168,112,0.3);
   }
   .bt-preview{
     image-rendering:pixelated;
@@ -889,7 +874,7 @@
       </div>
 
       <!-- In-game restart confirmation -->
-      <div class="centered-screen" id="restart-confirm" style="display:none;background:rgba(0,0,0,0.92);">
+      <div class="centered-screen" id="restart-confirm" style="display:none;background:#000;">
         <h1 style="font-size:14px;letter-spacing:4px;">NEW GAME?</h1>
         <div class="sub">This will delete your save.</div>
         <div class="title-buttons">
