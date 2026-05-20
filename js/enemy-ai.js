@@ -154,6 +154,38 @@ function nearestHomeTilePos(mon, layer){
   return { x: mon.homeX, y: mon.homeY }; // fallback to spawn
 }
 
+// ==================== CLADE B TERRITORY RADIUS ====================
+// Creatures with clade.territorial = true are leashed to a fixed radius
+// around their spawn point (homeX, homeY).  They will not pursue, wander,
+// or flee beyond this radius.  If the player leaves the radius the creature
+// disengages immediately and returns toward home.
+//
+// ---- FUTURE: TERRITORY EFFECTIVENESS SCALING (not yet implemented) ----
+// Creatures with territorial: true will eventually receive stat bonuses
+// when fighting inside their territory radius and stat penalties outside it.
+// Planned modifiers:
+//   • Inside territory: +10-15% accuracy, +10% damage, +5% dodge
+//   • Outside territory (if somehow forced): -15% accuracy, -15% damage,
+//     -10% dodge, -20% perception
+// The scaling will be continuous, strongest at home and weakening toward
+// the radius edge, not a hard on/off toggle.  This creates a tactical
+// incentive to kite territorial creatures outward.
+// Implementation will go in monAcc/monDodge/monDamage and a new
+// territoryEffectiveness(mon) helper that returns a 0.0–1.0 scalar
+// based on distance from home vs territory radius.
+// ---- END FUTURE SYSTEM ----
+
+/** True if this monster has a clade-based territory radius leash. */
+function hasCladeTerritory(mon){
+  return !!(mon.clade && mon.clade.territorial && mon.territoryRadius > 0);
+}
+
+/** True if position (nx, ny) would be outside this monster's territory radius. */
+function wouldExceedTerritory(mon, nx, ny){
+  if (!hasCladeTerritory(mon)) return false;
+  return chebyshev(nx, ny, mon.homeX, mon.homeY) > mon.territoryRadius;
+}
+
 /** True if the player is adjacent to at least one water tile (reachable attack position). */
 function playerAdjacentToWater(layer){
   const px = state.player.x, py = state.player.y;
@@ -382,6 +414,48 @@ function enemyAct(mon){
     }
   }
 
+  // ====== CLADE B TERRITORY RADIUS ENFORCEMENT ======
+  // Creatures with clade.territorial = true are leashed to a fixed radius
+  // around their home position.  This is separate from the biome-based leash
+  // above — it's a hard spatial boundary centered on spawn point.
+  if (hasCladeTerritory(mon) && !mon.isBoss){
+    const monDistHome = chebyshev(mon.x, mon.y, mon.homeX, mon.homeY);
+    const playerDistHome = chebyshev(state.player.x, state.player.y, mon.homeX, mon.homeY);
+
+    // Monster has strayed too far beyond territory — retreat home immediately
+    if (monDistHome > mon.territoryRadius + 2){
+      mon.aiState = 'idle';
+      mon.alerted = false;
+      mon.chaseTurnsLeft = 0;
+      mon.searchTurnsLeft = 0;
+      if (mon.key === 'mushroom'){
+        mon.swarmPhase = 'passive';
+        mon.coalesceTick = 0;
+      }
+      moveMonsterToward(mon, mon.homeX, mon.homeY);
+      return;
+    }
+
+    // Player left territory — disengage, stop chasing, return home
+    if (playerDistHome > mon.territoryRadius){
+      if (mon.aiState === 'chase' && d <= 10){
+        log(`${mon.name} breaks off and retreats.`, 'muted');
+      }
+      mon.aiState = 'idle';
+      mon.alerted = false;
+      mon.chaseTurnsLeft = 0;
+      mon.searchTurnsLeft = 0;
+      mon.wasAttacked = false;
+      if (mon.key === 'mushroom'){
+        mon.swarmPhase = 'passive';
+        mon.coalesceTick = 0;
+      }
+      if (monDistHome > 2) moveMonsterToward(mon, mon.homeX, mon.homeY);
+      else if (rand() < 0.10) wanderInTerritory(mon);
+      return;
+    }
+  }
+
   // Small grazers — always passive, never aggro. Flee from threats, never chase/attack.
   if (mon.key === 'hare' || (mon.icon && mon.icon === 'HARE')){
     // If player is nearby or grazer was attacked/alerted, flee
@@ -392,7 +466,8 @@ function enemyAct(mon){
       const ny = mon.y + (fdy || (rand()<0.5?1:-1));
       if (inBounds(state.player.layer, nx, ny)
           && isWalkable(worlds[state.player.layer][ny][nx], getCover(state.player.layer, nx, ny))
-          && !monsterAt(nx,ny,state.player.layer) && !(nx===state.player.x && ny===state.player.y)){
+          && !monsterAt(nx,ny,state.player.layer) && !(nx===state.player.x && ny===state.player.y)
+          && !wouldExceedTerritory(mon, nx, ny)){
         mon.x = nx; mon.y = ny;
       } else {
         wanderInTerritory(mon);
@@ -419,38 +494,10 @@ function enemyAct(mon){
   }
 
   // ====== AMBUSH PREDATOR AI ======
-  // Territorial chase: aggressive within homeLeash tiles of home position,
-  // immediately disengages outside that radius. Does not pursue.
-  if (mon.key === 'ambush_pred'){
-    const homeLeash = mon.homeLeash || 10;
-    const playerDistFromHome = chebyshev(state.player.x, state.player.y, mon.homeX, mon.homeY);
-    const monDistFromHome = chebyshev(mon.x, mon.y, mon.homeX, mon.homeY);
-
-    // If monster has wandered too far from home, retreat silently
-    if (monDistFromHome > homeLeash + 2){
-      mon.aiState = 'idle';
-      mon.alerted = false;
-      mon.chaseTurnsLeft = 0;
-      moveMonsterToward(mon, mon.homeX, mon.homeY);
-      return;
-    }
-
-    // Player outside territory — disengage, return home
-    if (playerDistFromHome > homeLeash){
-      if (mon.aiState === 'chase' && d <= 10){
-        log(`${mon.name} breaks off and retreats.`, 'muted');
-      }
-      mon.aiState = 'idle';
-      mon.alerted = false;
-      mon.chaseTurnsLeft = 0;
-      if (monDistFromHome > 2) moveMonsterToward(mon, mon.homeX, mon.homeY);
-      else if (rand() < 0.10) wanderInTerritory(mon);
-      return;
-    }
-
-    // Player inside territory — use standard aggro/chase behavior
-    // (falls through to the normal state machine below)
-  }
+  // Territory leash (disengage + retreat) is handled by the general Clade B
+  // territory radius enforcement above.  If we reach here, the player is
+  // inside the territory — fall through to the normal state machine for
+  // standard aggro/chase behavior.
 
   // ====== WATER-LOCKED AQUATIC AI ======
   // Aquatic enemies never leave water. They attack from
@@ -943,6 +990,8 @@ function wanderInTerritory(mon){
     if (waterLock && !WATER_TILES.has(ground)) continue;
     // Biome leash: never step onto forbidden tiles
     if (isForbiddenTile(mon, state.player.layer, nx, ny)) continue;
+    // Territory radius: never wander beyond home range
+    if (wouldExceedTerritory(mon, nx, ny)) continue;
     if (monsterAt(nx, ny, state.player.layer)) continue;
     if (nx === state.player.x && ny === state.player.y) continue;
     // Prefer staying in home territory — check biome from cover || ground
@@ -970,6 +1019,13 @@ function moveMonsterToward(mon, tx, ty){
     if (waterLock && !WATER_TILES.has(worlds[state.player.layer][ny][nx])) continue;
     // Biome leash: never step onto forbidden tiles
     if (isForbiddenTile(mon, state.player.layer, nx, ny)) continue;
+    // Territory radius: don't step further from home beyond territory boundary.
+    // Retreat toward home is always allowed (newDist <= curDist).
+    if (hasCladeTerritory(mon)){
+      const curDist = chebyshev(mon.x, mon.y, mon.homeX, mon.homeY);
+      const newDist = chebyshev(nx, ny, mon.homeX, mon.homeY);
+      if (newDist > mon.territoryRadius && newDist > curDist) continue;
+    }
     if (monsterAt(nx, ny, state.player.layer)) continue;
     mon.x = nx; mon.y = ny;
     return;
@@ -1023,4 +1079,5 @@ export { endPlayerTurn, enemyAct, playerInTerritory, monInOwnTerritory,
          canSeePlayer, canSeePlayerTile, monsterViewRadius,
          mushroomPackAI, mushroomTouch, wanderInTerritory, moveMonsterToward,
          wanderMonster, moveMonsterTowardPlayer,
+         hasCladeTerritory, wouldExceedTerritory,
          isWaterLocked, isWaterTile };

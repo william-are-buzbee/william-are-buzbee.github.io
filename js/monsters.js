@@ -630,10 +630,10 @@ function spawnMonster(key){
       m.avoidLeash = 4;
     }
   }
-  // Ambush predator: territorial leash to home position (8-10 tiles radius).
-  // Disengages immediately when player leaves that radius.
+  // Ambush predator: personality adjusts territory radius (set from clade data above).
+  // Patient variants patrol a tighter home range.
   if (key === 'ambush_pred'){
-    m.homeLeash = (personality === 'patient') ? 8 : 10;
+    if (personality === 'patient') m.territoryRadius = 8;
   }
   // Apply vision profile from lookup
   const vp = VISION_PROFILES[key];
@@ -643,6 +643,11 @@ function spawnMonster(key){
   }
   // Attach clade trait data (null for creatures without clade biology)
   m.clade = getCladeData(key);
+  // Territory radius from clade data (Clade B territorial creatures).
+  // Creatures with territorial: true are leashed to their home position.
+  if (m.clade && m.clade.territorial && m.clade.territoryRadius > 0) {
+    m.territoryRadius = m.clade.territoryRadius;
+  }
   m.hpMax = monHP(m);
   m.hp = m.hpMax;
   return m;
