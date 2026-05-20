@@ -406,7 +406,7 @@ function enemyAct(mon){
       mon.chaseTurnsLeft = 0;
       mon.searchTurnsLeft = 0;
       mon.wasAttacked = false;
-      if (mon.key === 'mushroom'){
+      if (mon.clade && mon.clade.sync){
         mon.swarmPhase = 'passive';
         mon.coalesceTick = 0;
       }
@@ -428,7 +428,7 @@ function enemyAct(mon){
       mon.alerted = false;
       mon.chaseTurnsLeft = 0;
       mon.searchTurnsLeft = 0;
-      if (mon.key === 'mushroom'){
+      if (mon.clade && mon.clade.sync){
         mon.swarmPhase = 'passive';
         mon.coalesceTick = 0;
       }
@@ -446,7 +446,7 @@ function enemyAct(mon){
       mon.chaseTurnsLeft = 0;
       mon.searchTurnsLeft = 0;
       mon.wasAttacked = false;
-      if (mon.key === 'mushroom'){
+      if (mon.clade && mon.clade.sync){
         mon.swarmPhase = 'passive';
         mon.coalesceTick = 0;
       }
@@ -485,11 +485,11 @@ function enemyAct(mon){
     return;
   }
 
-  // ====== CHEMOTROPH SWARM AI ======
-  // Chemotrophs always use swarm AI — never the normal state machine.
+  // ====== SYNC SWARM AI ======
+  // Creatures with clade.sync === true always use swarm AI — never the normal state machine.
   // This intercept catches them in any aiState (idle, chase from mobbing, etc.)
-  if (mon.key === 'mushroom'){
-    mushroomPackAI(mon);
+  if (mon.clade && mon.clade.sync){
+    syncSwarmAI(mon);
     return;
   }
 
@@ -813,33 +813,53 @@ function enemyAct(mon){
   }
 }
 
-// ==================== COLONIAL CHEMOTROPH SWARM AI ====================
+// ==================== SYNC SWARM AI ====================
+// Generic swarm behavior for any creature with clade.sync === true.
+// Reads syncRange from clade data and counts nearby same-species creatures.
 // Phase 1 — Passive:  wander slowly, ignore player entirely
-// Phase 2 — Coalescing: drift toward player over many turns (organic, not a beeline)
-// Phase 3 — Surround trigger: 8+ nodes within 2 tiles → ALL nearby go hostile
-// Phase 4 — Mobbing: enzyme-touch every turn, chase briefly, reset at 6+ tile distance
+// Phase 2 — Coalescing: drift toward player when enough nearby allies (syncCount >= SYNC_COALESCE_THRESHOLD)
+// Phase 3 — Mobbing: full convergence when packed tight (SYNC_MOB_THRESHOLD within half syncRange)
 
-/** Threshold of mushrooms within 2 tiles of player to trigger the ambush. */
-const SWARM_TRIGGER_COUNT = 8;
-/** Max distance from nearest swarm member before mobbing resets. */
+/** Min same-species neighbors (at full syncRange) to start drifting toward player. */
+const SYNC_COALESCE_THRESHOLD = 3;
+/** Min same-species neighbors (at half syncRange) to trigger full hostile convergence. */
+const SYNC_MOB_THRESHOLD = 5;
+/** Max distance from nearest mobbing ally before a mobbing creature resets. */
 const SWARM_LEASH_DISTANCE = 6;
-/** Radius to count as "local group" for trigger and mobbing. */
+/** Radius to count as "local group" for mobbing transition and reset. */
 const SWARM_GROUP_RADIUS = 8;
 
-function mushroomPackAI(mon){
+/**
+ * Count living creatures with the same species key within `radius` tiles of `mon`.
+ * Does not count `mon` itself.
+ */
+function countSyncNeighbors(mon, radius){
+  let count = 0;
+  for (const m of monstersHere()){
+    if (m === mon || m.hp <= 0 || m.key !== mon.key) continue;
+    if (chebyshev(m.x, m.y, mon.x, mon.y) <= radius) count++;
+  }
+  return count;
+}
+
+function syncSwarmAI(mon){
+  const syncRange = mon.clade.syncRange;
   const d = chebyshev(mon.x, mon.y, state.player.x, state.player.y);
+
+  // ---- Compute sync counts at start of turn ----
+  mon.syncCount = countSyncNeighbors(mon, syncRange);
 
   // ---- MOBBING PHASE ----
   if (mon.swarmPhase === 'mobbing'){
-    // Reset check: if player is 6+ tiles from the nearest mobbing mushroom, disperse
+    // Reset check: if player is beyond leash from ALL mobbing allies, disperse
     const mobbingNearby = monstersHere().filter(m =>
-      m.hp > 0 && m.key === 'mushroom' && m.swarmPhase === 'mobbing'
+      m.hp > 0 && m.key === mon.key && m.swarmPhase === 'mobbing'
       && chebyshev(m.x, m.y, state.player.x, state.player.y) <= SWARM_LEASH_DISTANCE
     );
     if (mobbingNearby.length === 0){
       // Entire group resets — player escaped
       for (const m of monstersHere()){
-        if (m.hp > 0 && m.key === 'mushroom' && m.swarmPhase === 'mobbing'){
+        if (m.hp > 0 && m.key === mon.key && m.swarmPhase === 'mobbing'){
           m.swarmPhase = 'passive';
           m.alerted = false;
           m.aiState = 'idle';
@@ -847,16 +867,17 @@ function mushroomPackAI(mon){
       }
       return;
     }
-    // Individual check: if THIS mushroom is too far, it also resets
+    // Individual check: if THIS creature is too far, it also resets
     if (d > SWARM_LEASH_DISTANCE + 2){
       mon.swarmPhase = 'passive';
       mon.alerted = false;
       mon.aiState = 'idle';
       return;
     }
-    // Adjacent → poison touch
+    // Adjacent → species-specific attack
     if (d <= 1){
-      mushroomTouch(mon);
+      if (mon.key === 'mushroom') mushroomTouch(mon);
+      else monsterMelee(mon);
       return;
     }
     // Close in on the player
@@ -865,22 +886,28 @@ function mushroomPackAI(mon){
   }
 
   // ---- PASSIVE PHASE ----
-  // Far from player or player not in chemotrophic zone — just wander slowly
+  // Far from player or player not in detection zone — just wander slowly
   if (d > 10){
     if (rand() < 0.10) wanderInTerritory(mon);
     mon.swarmPhase = 'passive';
     return;
   }
 
-  // Player is within awareness range — transition to coalescing
+  // Player is within awareness range — transition to coalescing if enough allies nearby
   if (mon.swarmPhase === 'passive'){
     // Don't detect stealth at all — chemotrophs have zero perception
     if (state.player.stealth) {
       if (rand() < 0.10) wanderInTerritory(mon);
       return;
     }
-    mon.swarmPhase = 'coalescing';
-    mon.coalesceTick = 0;
+    // Only begin coalescing if enough same-species are nearby
+    if (mon.syncCount >= SYNC_COALESCE_THRESHOLD){
+      mon.swarmPhase = 'coalescing';
+      mon.coalesceTick = 0;
+    } else {
+      if (rand() < 0.10) wanderInTerritory(mon);
+      return;
+    }
   }
 
   // ---- COALESCING PHASE ----
@@ -892,15 +919,19 @@ function mushroomPackAI(mon){
       return;
     }
 
-    // Check surround trigger BEFORE moving
-    const nearPlayer = monstersHere().filter(m =>
-      m.hp > 0 && m.key === 'mushroom'
-      && chebyshev(m.x, m.y, state.player.x, state.player.y) <= 2
-    );
-    if (nearPlayer.length >= SWARM_TRIGGER_COUNT){
-      // Colony convergence! All chemotrophs in local group go hostile simultaneously
+    // If sync neighbors dropped below coalesce threshold, fall back to passive
+    if (mon.syncCount < SYNC_COALESCE_THRESHOLD){
+      mon.swarmPhase = 'passive';
+      if (rand() < 0.10) wanderInTerritory(mon);
+      return;
+    }
+
+    // Check mob trigger: enough same-species packed within half syncRange
+    const mobCount = countSyncNeighbors(mon, Math.max(1, Math.floor(syncRange / 2)));
+    if (mobCount >= SYNC_MOB_THRESHOLD){
+      // Colony convergence! All same-species in local group go hostile simultaneously
       const localGroup = monstersHere().filter(m =>
-        m.hp > 0 && m.key === 'mushroom'
+        m.hp > 0 && m.key === mon.key
         && chebyshev(m.x, m.y, state.player.x, state.player.y) <= SWARM_GROUP_RADIUS
       );
       for (const m of localGroup){
@@ -909,9 +940,13 @@ function mushroomPackAI(mon){
         m.aiState = 'chase';
       }
       log('The colony converges — you\'re surrounded!', 'warn');
-      // This mushroom acts immediately if adjacent
-      if (d <= 1) mushroomTouch(mon);
-      else moveMonsterToward(mon, state.player.x, state.player.y);
+      // This creature acts immediately if adjacent
+      if (d <= 1){
+        if (mon.key === 'mushroom') mushroomTouch(mon);
+        else monsterMelee(mon);
+      } else {
+        moveMonsterToward(mon, state.player.x, state.player.y);
+      }
       return;
     }
 
@@ -927,7 +962,7 @@ function mushroomPackAI(mon){
     // Drift toward player with angular offset for encirclement feel
     if (d > 2){
       const angle = Math.atan2(state.player.y - mon.y, state.player.x - mon.x);
-      // Each mushroom gets a consistent angular offset based on position hash
+      // Each creature gets a consistent angular offset based on position hash
       const offset = ((mon.x * 31 + mon.y * 17) % 5 - 2) * 0.6;
       const driftAngle = angle + offset;
       // Target a spot 2 tiles from player at that angle
@@ -946,6 +981,9 @@ function mushroomPackAI(mon){
     return;
   }
 }
+
+// Backward-compatible alias — external callers may still reference this name
+const mushroomPackAI = syncSwarmAI;
 
 // Chemotroph enzyme touch — zero physical damage, flat poison chance
 function mushroomTouch(mon){
@@ -1077,7 +1115,7 @@ export function monsterMelee(mon){
 
 export { endPlayerTurn, enemyAct, playerInTerritory, monInOwnTerritory,
          canSeePlayer, canSeePlayerTile, monsterViewRadius,
-         mushroomPackAI, mushroomTouch, wanderInTerritory, moveMonsterToward,
+         syncSwarmAI, mushroomPackAI, mushroomTouch, wanderInTerritory, moveMonsterToward,
          wanderMonster, moveMonsterTowardPlayer,
          hasCladeTerritory, wouldExceedTerritory,
          isWaterLocked, isWaterTile };

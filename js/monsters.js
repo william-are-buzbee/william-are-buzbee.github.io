@@ -486,8 +486,8 @@ const CLADE_DATA = {
     cognition: 'distributed',
     sensing: 'vibration',
     memory: 'pattern',
-    sync: true,           // mild flee-synchronization via alarm signal bleed
-    syncRange: 4,
+    sync: false,          // no synchronization — flees individually via vibration detection
+    syncRange: 0,
     territorial: true,    // home-patch familiarity improves detection & escape
     territoryRadius: 8,
     integument: 'plates',
