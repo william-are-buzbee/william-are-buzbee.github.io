@@ -8,10 +8,11 @@ import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js'
 import { updateUI, hideHud } from './ui.js';
 import { canvas, ctx } from './rendering.js';
 
-import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks } from './player-actions.js';
+import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks, eatAction } from './player-actions.js';
 import { setOnPlayerDeathCallback } from './enemy-ai.js';
 import { setOnVictoryCallback, toggleStealth } from './combat.js';
 import { useAction, showHelp, examineTile, readBook } from './interactions.js';
+import { log } from './log.js';
 import { openCharGen, renderCharGen, randomizeAttrs, beginGame, onPlayerDeath, onVictory } from './chargen.js';
 import { hasSave, tryResume, deleteSave } from './save-load.js';
 import { isMapOpen, toggleMap, closeMap, markCurrentCell } from './worldmap.js';
@@ -39,6 +40,7 @@ function safeDispatch(fn, ...args) {
   if (isMapOpen()) return;
   if (isOverlayOpen()) return;
   if (state.inputLocked) return;
+  if (state.lookMode) return;
   try {
     fn(...args);
     markCurrentCell();
@@ -69,6 +71,7 @@ canvas.addEventListener('click', (ev) => {
   if (isMapOpen()) return;
   if (isOverlayOpen()) return;
   if (restartConfirmEl.style.display === 'flex') return;
+  if (state.lookMode) { exitLookMode(); return; }
 
   const { wx, wy } = canvasToWorld(ev);
 
@@ -112,49 +115,57 @@ function toggleLog() {
 }
 
 // ==================== INPUT: KEYBOARD ====================
-const KEY_MAP = {
-  'w': () => attemptMove(0, -1),
-  'arrowup': () => attemptMove(0, -1),
-  'arrowdown': () => attemptMove(0, 1),
-  'a': () => attemptMove(-1, 0),
-  'arrowleft': () => attemptMove(-1, 0),
-  'd': () => attemptMove(1, 0),
-  'arrowright': () => attemptMove(1, 0),
-  '7': () => attemptMove(-1, -1),
-  'home': () => attemptMove(-1, -1),
-  '9': () => attemptMove(1, -1),
-  'pageup': () => attemptMove(1, -1),
-  '1': () => attemptMove(-1, 1),
-  'end': () => attemptMove(-1, 1),
-  '3': () => attemptMove(1, 1),
-  'pagedown': () => attemptMove(1, 1),
-  '8': () => attemptMove(0, -1),
-  '4': () => attemptMove(-1, 0),
-  '6': () => attemptMove(1, 0),
-  '2': () => attemptMove(0, 1),
-  '5': restAction,
-  'clear': restAction,
-  ' ': restAction,
-  'f': toggleStealth,
-  'r': useAction,
-  'l': lookAtGround,
-  'g': pickUpFromGround,
-  'e': eatBest,
-  '?': showHelp,
-  '/': showHelp,
+
+// ── Direction map: every key that selects a direction ──
+// Used for movement, shift+turn, and look mode.
+const DIR_MAP = {
+  // Left-hand QWEASDZXC (8-directional)
+  'q': [-1, -1], 'w': [0, -1], 'e': [1, -1],
+  'a': [-1,  0],                'd': [1,  0],
+  'z': [-1,  1], 'x': [0,  1], 'c': [1,  1],
+  // Arrow keys (4 cardinal)
+  'arrowup': [0, -1], 'arrowdown': [0, 1],
+  'arrowleft': [-1, 0], 'arrowright': [1, 0],
+  // Numpad (8-directional)
+  '7': [-1, -1], '8': [0, -1], '9': [1, -1],
+  '4': [-1,  0],               '6': [1,  0],
+  '1': [-1,  1], '2': [0,  1], '3': [1,  1],
+  // Legacy numpad names
+  'home': [-1, -1], 'pageup': [1, -1],
+  'end': [-1,  1],  'pagedown': [1,  1],
 };
 
-// ==================== DIRECTION MAP (for shift+turn) ====================
-const DIR_MAP = {
-  'w': [0, -1], 'arrowup': [0, -1], '8': [0, -1],
-  'arrowdown': [0, 1], '2': [0, 1],
-  'a': [-1, 0], 'arrowleft': [-1, 0], '4': [-1, 0],
-  'd': [1, 0],  'arrowright': [1, 0], '6': [1, 0],
-  '7': [-1, -1], 'home': [-1, -1],
-  '9': [1, -1],  'pageup': [1, -1],
-  '1': [-1, 1],  'end': [-1, 1],
-  '3': [1, 1],   'pagedown': [1, 1],
+// Keys that mean "self / wait / center" (for look mode: look at own tile)
+const SELF_KEYS = new Set(['s', '5', 'clear', ' ']);
+
+// ── Action keys (non-movement) ──
+const ACTION_MAP = {
+  'r': () => eatAction(),          // Eat (ground corpses first, then inventory)
+  'f': () => toggleStealth(),      // Sneak toggle
+  'g': () => pickUpFromGround(),   // Get/pickup
+  '?': () => showHelp(),           // Help
+  '/': () => showHelp(),
 };
+
+// ── Look mode helpers ──
+function enterLookMode() {
+  state.lookMode = true;
+  log('Look where?', 'muted');
+  updateUI();
+}
+function exitLookMode() {
+  state.lookMode = false;
+}
+function handleLookDirection(dx, dy) {
+  exitLookMode();
+  const tx = state.player.x + dx;
+  const ty = state.player.y + dy;
+  try { examineTile(tx, ty); } catch (err) { console.error(err); }
+}
+function handleLookSelf() {
+  exitLookMode();
+  try { examineTile(state.player.x, state.player.y); } catch (err) { console.error(err); }
+}
 
 document.addEventListener('keydown', (ev) => {
   // Modal escape
@@ -174,15 +185,25 @@ document.addEventListener('keydown', (ev) => {
 
   if (state.gameState !== 'play') return;
 
+  // ── Look mode: waiting for a direction ──
+  if (state.lookMode) {
+    ev.preventDefault();
+    const kLow = ev.key.toLowerCase();
+    if (ev.key === 'Escape') { exitLookMode(); log('Cancelled.', 'muted'); return; }
+    const dir = DIR_MAP[kLow];
+    if (dir) { handleLookDirection(dir[0], dir[1]); return; }
+    if (SELF_KEYS.has(kLow)) { handleLookSelf(); return; }
+    // Unknown key while in look mode — ignore
+    return;
+  }
+
   // ── Overlay panel handling ──
-  const PANEL_KEYS = { s: 'status', i: 'inventory' };
+  const PANEL_KEYS = { t: 'status', i: 'inventory' };
   const kLow = ev.key.toLowerCase();
 
   if (isOverlayOpen()) {
-    // While an overlay is open: only Escape and panel keys work
     if (ev.key === 'Escape') { closeOverlay(); ev.preventDefault(); return; }
     if (PANEL_KEYS[kLow]) { ev.preventDefault(); togglePanel(PANEL_KEYS[kLow]); return; }
-    // Block all other input while overlay is open
     ev.preventDefault();
     return;
   }
@@ -202,7 +223,7 @@ document.addEventListener('keydown', (ev) => {
   }
 
   // World map overlay: M toggles, Escape closes, all else blocked while open
-  if (ev.key.toLowerCase() === 'm') {
+  if (kLow === 'm') {
     ev.preventDefault();
     toggleMap();
     return;
@@ -212,9 +233,16 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
+  // L key: enter look mode
+  if (kLow === 'l') {
+    ev.preventDefault();
+    enterLookMode();
+    return;
+  }
+
   // Shift+direction: turn in place without moving
   if (ev.shiftKey) {
-    const dir = DIR_MAP[ev.key.toLowerCase()];
+    const dir = DIR_MAP[kLow];
     if (dir) {
       ev.preventDefault();
       safeDispatch(turnInPlace, dir[0], dir[1]);
@@ -222,7 +250,23 @@ document.addEventListener('keydown', (ev) => {
     }
   }
 
-  const action = KEY_MAP[ev.key.toLowerCase()];
+  // Wait/rest: S, Space, numpad 5, Clear
+  if (SELF_KEYS.has(kLow)) {
+    ev.preventDefault();
+    safeDispatch(restAction);
+    return;
+  }
+
+  // Movement (direction keys)
+  const dir = DIR_MAP[kLow];
+  if (dir) {
+    ev.preventDefault();
+    safeDispatch(attemptMove, dir[0], dir[1]);
+    return;
+  }
+
+  // Action keys
+  const action = ACTION_MAP[kLow];
   if (action) {
     ev.preventDefault();
     safeDispatch(action);

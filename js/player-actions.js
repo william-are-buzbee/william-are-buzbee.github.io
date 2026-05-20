@@ -356,4 +356,70 @@ function wireGroundPickupButtons(items, layer, px, py){
   });
 }
 
-export { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, fedDrainFor, dirName, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks };
+// ==================== EAT ACTION (R key) ====================
+// Priority: ground corpses → inventory food/corpses → nothing.
+// Eating from the ground consumes the corpse in place (never enters inventory).
+
+function eatAction(){
+  const px = state.player.x, py = state.player.y;
+  const layer = state.player.layer;
+  const items = getItems(layer, px, py);
+  const corpses = items.filter(it => it.kind === 'corpse' && (it.nutrition || 0) > 0);
+
+  if (corpses.length === 1){
+    eatCorpseFromGround(corpses[0], layer, px, py);
+    return;
+  }
+  if (corpses.length > 1){
+    showGroundCorpseEatPanel(corpses, layer, px, py);
+    return;
+  }
+  // No ground corpses — fall through to inventory
+  eatBest();
+}
+
+function eatCorpseFromGround(groundItem, layer, x, y){
+  const before = state.player.fed;
+  state.player.fed = Math.min(FED_MAX, state.player.fed + (groundItem.nutrition || 0));
+  const gained = state.player.fed - before;
+  removeItem(layer, x, y, groundItem.id);
+  log(`You eat the ${groundItem.name}. [+${gained} FED]`, 'hit');
+  endPlayerTurn('rest');
+}
+
+function showGroundCorpseEatPanel(corpses, layer, px, py){
+  let html = `<h2>Eat</h2>`;
+  html += `<div class="dialogue" style="font-style:normal;font-size:10px;">Corpses at your feet:</div>`;
+  for (let i = 0; i < corpses.length; i++){
+    const it = corpses[i];
+    const nutri = it.nutrition || 0;
+    html += `<div class="row">`;
+    html += `<div class="lbl"><b>${it.name}</b><div class="sub">+${nutri} FED · wt ${it.weight||2}</div></div>`;
+    html += `<button class="btn" data-geat="${i}">EAT</button>`;
+    html += `</div>`;
+  }
+  html += `<div class="close-row"><button class="btn" id="btn-close">CLOSE</button></div>`;
+
+  if (_groundModalOpen){
+    _groundModalOpen(html);
+    wireGroundCorpseEatButtons(corpses, layer, px, py);
+  }
+}
+
+function wireGroundCorpseEatButtons(corpses, layer, px, py){
+  document.getElementById('btn-close').onclick = () => { if (_groundModalClose) _groundModalClose(); };
+  document.querySelectorAll('[data-geat]').forEach(btn => {
+    btn.onclick = () => {
+      const idx = parseInt(btn.dataset.geat, 10);
+      if (idx >= 0 && idx < corpses.length){
+        if (_groundModalClose) _groundModalClose();
+        // Re-verify the corpse is still on the ground
+        const current = getItems(layer, px, py);
+        const found = current.find(it => it.id === corpses[idx].id);
+        if (found) eatCorpseFromGround(found, layer, px, py);
+      }
+    };
+  });
+}
+
+export { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, fedDrainFor, dirName, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks, eatAction };

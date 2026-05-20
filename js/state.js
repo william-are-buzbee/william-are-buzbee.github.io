@@ -15,6 +15,10 @@ export const state = {
   // Persists across layer transitions. A full cycle is 200 ticks.
   worldTick: 0,
 
+  // ---- Look mode ----
+  // When true the game waits for a direction key to examine a tile.
+  lookMode: false,
+
   // ---- Player facing direction ----
   // dx/dy pair representing which way the player is looking.
   // Updated on move and attack; unchanged on rest/wait.
