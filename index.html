@@ -232,6 +232,136 @@
   .inv-header .over{color:#c88;}
   .inv-header .gold-val{color:var(--accent);font-weight:bold;}
 
+  /* ─── Game overlay (full-screen panels) ─── */
+  .game-overlay{
+    position:absolute;
+    inset:0;
+    background:#08080c;
+    z-index:8;
+    display:none;
+    overflow-y:auto;
+    scrollbar-width:thin;
+    scrollbar-color:#333 #08080c;
+  }
+  .game-overlay::-webkit-scrollbar{width:4px;}
+  .game-overlay::-webkit-scrollbar-thumb{background:#222;}
+  .game-overlay.show{display:block;}
+  .game-overlay .ov-body{
+    padding:18px 28px 24px;
+    max-width:520px;
+    margin:0 auto;
+  }
+  .game-overlay .ov-title{
+    font-size:12px;
+    letter-spacing:4px;
+    text-align:center;
+    color:var(--fg);
+    text-transform:uppercase;
+    padding-bottom:10px;
+    border-bottom:2px solid #3a3a4a;
+    margin-bottom:12px;
+    font-weight:normal;
+  }
+  .game-overlay .ov-section{
+    font-size:7px;
+    color:var(--fg-dim);
+    letter-spacing:2px;
+    text-transform:uppercase;
+    border-bottom:2px solid #3a3a4a;
+    padding:4px 0;
+    margin:14px 0 6px;
+  }
+  .game-overlay .ov-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:5px 0;
+    font-size:9px;
+    border-bottom:1px dashed #1e1e28;
+  }
+  .game-overlay .ov-row:last-child{border-bottom:none;}
+  .game-overlay .ov-k{color:var(--fg-dim);}
+  .game-overlay .ov-v{color:var(--fg);font-weight:bold;}
+  .game-overlay .ov-v.accent{color:var(--accent);}
+  .game-overlay .ov-v.dim{color:var(--fg-dim);font-weight:normal;font-style:italic;}
+  .game-overlay .ov-v.warn{color:#d4a050;}
+  .game-overlay .ov-bar{
+    height:4px;
+    background:#1a1a24;
+    margin:2px 0 4px;
+    border:1px solid #2a2a3a;
+  }
+  .game-overlay .ov-bar-fill{
+    height:100%;
+    transition:none;
+  }
+  .game-overlay .ov-block{
+    padding:4px 0;
+  }
+  .game-overlay .ov-hint{
+    text-align:center;
+    font-size:7px;
+    color:#555;
+    letter-spacing:2px;
+    padding:16px 0 4px;
+    text-transform:uppercase;
+  }
+  .game-overlay .ov-empty{
+    color:var(--empty);
+    font-size:8px;
+    font-style:italic;
+    padding:12px 0;
+    text-align:center;
+  }
+  .game-overlay .ov-inv-header{
+    display:flex;
+    justify-content:space-between;
+    font-size:7px;
+    color:var(--fg-dim);
+    padding:4px 0 8px;
+    border-bottom:2px solid #3a3a4a;
+    margin-bottom:8px;
+    letter-spacing:1px;
+  }
+  .game-overlay .ov-inv-header b{color:var(--fg);}
+  .game-overlay .ov-inv-header .accent{color:var(--accent);}
+  .game-overlay .ov-inv-header .warn{color:#c88;}
+  .game-overlay .ov-item-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:5px 4px;
+    font-size:8px;
+    border-bottom:1px dashed #1e1e28;
+    gap:8px;
+  }
+  .game-overlay .ov-item-row:last-child{border-bottom:none;}
+  .game-overlay .ov-iname{color:var(--fg);flex:1;min-width:0;}
+  .game-overlay .ov-itag{font-size:7px;color:var(--fg-dim);}
+  .game-overlay .ov-itag.accent{color:var(--accent);}
+  .game-overlay .ov-itag.book{color:#a8c8e0;}
+  .game-overlay .ov-itag.dim{color:#666;}
+  .game-overlay .ov-iwt{font-size:7px;color:#555;}
+  .game-overlay .ov-ieq{font-size:7px;color:var(--accent);font-weight:bold;}
+  .game-overlay .ov-item-actions{
+    display:flex;
+    gap:4px;
+    flex-shrink:0;
+  }
+  .game-overlay .ov-item-actions button{
+    background:none;
+    border:none;
+    color:var(--fg-dim);
+    font-family:var(--pixel-font);
+    font-size:7px;
+    cursor:pointer;
+    padding:2px 4px;
+    letter-spacing:1px;
+    transition:none;
+  }
+  .game-overlay .ov-item-actions button:hover{color:#fff;}
+  .game-overlay .ov-item-actions button:disabled{opacity:0.25;cursor:not-allowed;}
+
   /* ─── Controls legend ─── */
   .controls{
     margin-top:12px;
@@ -589,6 +719,10 @@
         <div class="log" id="log"></div>
       </div>
 
+      <div class="game-overlay" id="game-overlay">
+        <div class="ov-body" id="overlay-body"></div>
+      </div>
+
       <div class="modal" id="modal">
         <div class="modal-inner" id="modal-inner"></div>
       </div>
@@ -649,7 +783,7 @@
   </div>
 
   <div class="controls">
-    <div><b>WASD</b>·Move <b>SPACE</b>·Wait <b>F</b>·Sneak <b>R</b>·Use <b>E</b>·Eat <b>G</b>·Get <b>L</b>·Look <b>M</b>·Map <b>N</b>·New <b>TAB</b>·Log <b>?</b>·Help</div>
+    <div><b>WASD</b>·Move <b>SPACE</b>·Wait <b>F</b>·Sneak <b>R</b>·Use <b>G</b>·Get <b>L</b>·Look <b>S</b>·Status <b>C</b>·Char <b>I</b>·Items <b>E</b>·Equip <b>M</b>·Map <b>N</b>·New <b>?</b>·Help</div>
     <div>&nbsp;</div>
   </div>
 </div>

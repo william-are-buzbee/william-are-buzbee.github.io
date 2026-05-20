@@ -15,18 +15,29 @@ import { useAction, showHelp, examineTile, readBook } from './interactions.js';
 import { openCharGen, renderCharGen, randomizeAttrs, beginGame, onPlayerDeath, onVictory } from './chargen.js';
 import { hasSave, tryResume, deleteSave } from './save-load.js';
 import { isMapOpen, toggleMap, closeMap, markCurrentCell } from './worldmap.js';
+import { isOverlayOpen, activePanel, togglePanel, closeOverlay, setInventoryActions } from './overlay.js';
 
 // ==================== WIRE CALLBACKS ====================
 setUpdateUICallback(updateUI);
 setOnPlayerDeathCallback(() => { deleteSave(); onPlayerDeath(); });
 setOnVictoryCallback(() => { deleteSave(); onVictory(); });
 setGroundModalCallbacks(openModal, closeModal);
+setInventoryActions({
+  eat:       (i) => eatItem(i),
+  drop:      (i) => dropItem(i),
+  potion:    (i) => usePotion(i),
+  book:      (i) => readBook(i),
+  equipW:    (i) => equipWeaponFromInv(i),
+  equipA:    (i) => equipArmorFromInv(i),
+  eatCorpse: (i) => eatCorpseFromInv(i),
+});
 
 // ==================== SAFE DISPATCH ====================
 function safeDispatch(fn, ...args) {
   if (state.gameState !== 'play') return;
   if (modalEl.classList.contains('show')) return;
   if (isMapOpen()) return;
+  if (isOverlayOpen()) return;
   if (state.inputLocked) return;
   try {
     fn(...args);
@@ -56,6 +67,7 @@ canvas.addEventListener('click', (ev) => {
   if (state.gameState !== 'play' || modalEl.classList.contains('show')) return;
   if (state.inputLocked) return;
   if (isMapOpen()) return;
+  if (isOverlayOpen()) return;
   if (restartConfirmEl.style.display === 'flex') return;
 
   const { wx, wy } = canvasToWorld(ev);
@@ -103,7 +115,6 @@ function toggleLog() {
 const KEY_MAP = {
   'w': () => attemptMove(0, -1),
   'arrowup': () => attemptMove(0, -1),
-  's': () => attemptMove(0, 1),
   'arrowdown': () => attemptMove(0, 1),
   'a': () => attemptMove(-1, 0),
   'arrowleft': () => attemptMove(-1, 0),
@@ -124,7 +135,6 @@ const KEY_MAP = {
   '5': restAction,
   'clear': restAction,
   ' ': restAction,
-  'e': eatBest,
   'f': toggleStealth,
   'r': useAction,
   'l': lookAtGround,
@@ -136,7 +146,7 @@ const KEY_MAP = {
 // ==================== DIRECTION MAP (for shift+turn) ====================
 const DIR_MAP = {
   'w': [0, -1], 'arrowup': [0, -1], '8': [0, -1],
-  's': [0, 1],  'arrowdown': [0, 1], '2': [0, 1],
+  'arrowdown': [0, 1], '2': [0, 1],
   'a': [-1, 0], 'arrowleft': [-1, 0], '4': [-1, 0],
   'd': [1, 0],  'arrowright': [1, 0], '6': [1, 0],
   '7': [-1, -1], 'home': [-1, -1],
@@ -162,6 +172,26 @@ document.addEventListener('keydown', (ev) => {
   }
 
   if (state.gameState !== 'play') return;
+
+  // ── Overlay panel handling ──
+  const PANEL_KEYS = { s: 'status', c: 'character', i: 'inventory', e: 'equipment' };
+  const kLow = ev.key.toLowerCase();
+
+  if (isOverlayOpen()) {
+    // While an overlay is open: only Escape and panel keys work
+    if (ev.key === 'Escape') { closeOverlay(); ev.preventDefault(); return; }
+    if (PANEL_KEYS[kLow]) { ev.preventDefault(); togglePanel(PANEL_KEYS[kLow]); return; }
+    // Block all other input while overlay is open
+    ev.preventDefault();
+    return;
+  }
+
+  // No overlay open — intercept panel keys before movement
+  if (PANEL_KEYS[kLow] && !ev.shiftKey && !isMapOpen()) {
+    ev.preventDefault();
+    togglePanel(PANEL_KEYS[kLow]);
+    return;
+  }
 
   // TAB key: toggle log visibility
   if (ev.key === 'Tab') {
