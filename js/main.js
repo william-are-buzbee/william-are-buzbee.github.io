@@ -2,13 +2,16 @@
 // The conductor: wires modules, binds input, runs the state machine.
 // NO game logic lives here — only delegation.
 
-import { state } from './state.js';
+import { state, worlds } from './state.js';
 import { TILE, VIEW_W, VIEW_H } from './constants.js';
 import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js';
 import { updateUI, hideHud } from './ui.js';
 import { canvas, ctx } from './rendering.js';
 
 import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks, eatAction } from './player-actions.js';
+import { terrainName } from './terrain.js';
+import { inBounds, getCover, monsterAt as worldMonsterAt } from './world-state.js';
+import { getItems } from './ground-items.js';
 import { setOnPlayerDeathCallback } from './enemy-ai.js';
 import { setOnVictoryCallback, toggleStealth } from './combat.js';
 import { useAction, showHelp, examineTile, readBook } from './interactions.js';
@@ -156,15 +159,67 @@ function enterLookMode() {
 function exitLookMode() {
   state.lookMode = false;
 }
+
+function capitalize(s) {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+function articleFor(name) {
+  return /^[aeiou]/i.test(name) ? 'An' : 'A';
+}
+
+/** Log-only tile inspection — never opens a panel or modal. */
+function lookAtTile(tx, ty) {
+  const layer = state.player.layer;
+  if (!inBounds(layer, tx, ty)) {
+    log('Nothing but void.', 'system');
+    return;
+  }
+
+  const ground = worlds[layer]?.[ty]?.[tx];
+  const parts = [];
+
+  // 1. Ground type
+  const gName = terrainName(ground) || 'unknown';
+  parts.push(capitalize(gName) + ' tile.');
+
+  // 2. Cover
+  const cover = getCover(layer, tx, ty);
+  if (cover) {
+    const cName = (cover.name || cover.type || 'obstacle').replace(/_/g, '-');
+    parts.push(`${articleFor(cName)} ${cName} grows here.`);
+  }
+
+  // 3. Ground items
+  const items = getItems(layer, tx, ty);
+  for (const it of items) {
+    parts.push(`${articleFor(it.name)} ${it.name} lies on the ground.`);
+  }
+
+  // 4. Creature
+  const mon = worldMonsterAt(tx, ty, layer);
+  if (mon) {
+    parts.push(`${articleFor(mon.name)} ${mon.name} is here.`);
+  }
+
+  // 5. If own tile and nothing notable
+  const isSelf = tx === state.player.x && ty === state.player.y;
+  if (!cover && items.length === 0 && !mon && isSelf) {
+    parts.push('Nothing else here.');
+  }
+
+  log(parts.join(' '), 'system');
+}
+
 function handleLookDirection(dx, dy) {
   exitLookMode();
   const tx = state.player.x + dx;
   const ty = state.player.y + dy;
-  try { examineTile(tx, ty); } catch (err) { console.error(err); }
+  lookAtTile(tx, ty);
 }
 function handleLookSelf() {
   exitLookMode();
-  try { examineTile(state.player.x, state.player.y); } catch (err) { console.error(err); }
+  lookAtTile(state.player.x, state.player.y);
 }
 
 document.addEventListener('keydown', (ev) => {
