@@ -263,7 +263,7 @@ for (let r = 0; r < BIOME_TARGET.length; r++) {
 
 export const BIOME_PROFILES = {
   plains: {
-    groundPalette: { 0: 0.85, 57: 0.15 },   // grass 85%, dirt 15%
+    groundPalette: { 0: 0.70, 57: 0.08, 55: 0.12, 4: 0.05 },   // grass 70%, dirt 8%, mud 12%, water 5% — damp patches & puddles
     ground: 0,                                // legacy: dominant ground (T.GRASS)
     scatter: 0.10,                            // occasional dirt tiles, mostly grass
     noiseAmp: 0.30,
@@ -279,7 +279,7 @@ export const BIOME_PROFILES = {
     derived: { moisture: 0.35, elevation: 0.30, fungal: 0 },
   },
   forest: {
-    groundPalette: { 0: 0.9, 57: 0.1 },      // grass 90%, dirt 10%
+    groundPalette: { 0: 0.62, 57: 0.08, 55: 0.18, 4: 0.07 },      // grass 62%, dirt 8%, mud 18%, water 7% — saturated forest floor
     ground: 0,
     scatter: 0.08,                             // mostly grass, rare dirt
     noiseAmp: 0.30,
@@ -340,7 +340,7 @@ export const BIOME_PROFILES = {
     derived: { moisture: 0.90, elevation: 0.10, fungal: 0 },
   },
   shallows: {
-    groundPalette: { 4: 0.7, 0: 0.15, 2: 0.15 }, // water 70%, grass 15%, sand 15%
+    groundPalette: { 4: 0.50, 55: 0.20, 0: 0.15, 2: 0.10, 7: 0.05 }, // water 50%, mud 20%, grass 15%, sand 10%, beach 5% — tidal gradient
     ground: 4,
     scatter: 0.15,                             // moderate intermixing at coast
     noiseAmp: 0.30,
@@ -354,7 +354,7 @@ export const BIOME_PROFILES = {
     derived: { moisture: 0.80, elevation: 0.15, fungal: 0 },
   },
   wetland: {
-    groundPalette: { 55: 0.4, 4: 0.3, 0: 0.3 }, // mud 40%, water 30%, grass 30%
+    groundPalette: { 55: 0.35, 4: 0.35, 0: 0.25, 57: 0.05 }, // mud 35%, water 35%, grass 25%, dirt 5% — slightly wetter
     ground: 55,
     scatter: 0.35,                             // heavy speckling — puddles everywhere
     noiseAmp: 0.20,
@@ -368,7 +368,7 @@ export const BIOME_PROFILES = {
     derived: { moisture: 0.70, elevation: 0.25, fungal: 0 },
   },
   fungal: {
-    groundPalette: { 56: 0.9, 55: 0.1 },     // fungal_grass 90%, mud 10%
+    groundPalette: { 56: 0.75, 55: 0.15, 4: 0.05 },     // fungal_grass 75%, mud 15%, water 5% — waterlogged mineral flats
     ground: 56,
     scatter: 0.12,                             // some mud speckling in fungal ground
     noiseAmp: 0.25,
