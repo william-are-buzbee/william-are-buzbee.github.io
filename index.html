@@ -232,33 +232,38 @@
   .inv-header .over{color:#c88;}
   .inv-header .gold-val{color:var(--accent);font-weight:bold;}
 
-  /* ─── Game overlay (full-screen panels) ─── */
+  /* ─── Game overlay (centered panel with dimmed backdrop) ─── */
   .game-overlay{
     position:absolute;
     inset:0;
-    background:#08080c;
+    background:rgba(0,0,0,0.75);
     z-index:8;
     display:none;
+    align-items:center;
+    justify-content:center;
+  }
+  .game-overlay.show{display:flex;}
+  .game-overlay .ov-body{
+    background:#08080c;
+    border:2px solid var(--rpg-border);
+    outline:2px solid #000;
+    width:320px;
+    max-height:70vh;
     overflow-y:auto;
     scrollbar-width:thin;
     scrollbar-color:#333 #08080c;
+    padding:16px 20px 20px;
   }
-  .game-overlay::-webkit-scrollbar{width:4px;}
-  .game-overlay::-webkit-scrollbar-thumb{background:#222;}
-  .game-overlay.show{display:block;}
-  .game-overlay .ov-body{
-    padding:18px 28px 24px;
-    max-width:520px;
-    margin:0 auto;
-  }
+  .game-overlay .ov-body::-webkit-scrollbar{width:4px;}
+  .game-overlay .ov-body::-webkit-scrollbar-thumb{background:#222;}
   .game-overlay .ov-title{
-    font-size:12px;
+    font-size:10px;
     letter-spacing:4px;
     text-align:center;
-    color:var(--fg);
+    color:#fff;
     text-transform:uppercase;
     padding-bottom:10px;
-    border-bottom:2px solid #3a3a4a;
+    border-bottom:2px solid var(--rpg-border);
     margin-bottom:12px;
     font-weight:normal;
   }
@@ -795,6 +800,12 @@
   });
   document.getElementById('log-wrapper').addEventListener('click', function(e){
     e.stopPropagation();
+  });
+  // Close game-overlay when clicking the backdrop (outside the panel)
+  document.getElementById('game-overlay').addEventListener('mousedown', function(e){
+    if (e.target === this) {
+      this.classList.remove('show');
+    }
   });
 </script>
 <script type="module" src="js/main.js"></script>
