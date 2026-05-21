@@ -232,6 +232,7 @@ export const BIOME_TARGET = [
 
 
 
+
 // ---- Target map validation ----
 if (BIOME_TARGET.length !== BIOME_GRID_H) {
   console.warn(`BIOME_TARGET has ${BIOME_TARGET.length} rows but BIOME_GRID_H is ${BIOME_GRID_H}`);
