@@ -1,11 +1,11 @@
 // ==================== WORLD LOGIC — placement, spawning, init ====================
 import { state, worlds, covers, features, monsters, activateLayer } from './state.js';
-import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, ENEMY_HP_MUL, ENEMY_ATK_MUL, LAYER_META, getAtmosphere } from './constants.js';
+import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, ENEMY_HP_MUL, ENEMY_ATK_MUL, LAYER_META, getAtmosphere, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H } from './constants.js';
 import { T, isWalkable, isCover } from './terrain.js';
 import { rand, randi, choice } from './rng.js';
 // DISABLED — town removed (was used for initScholarInventory)
 // import { BOOKS } from './items.js';
-import { spawnMonster, MON, SPAWN_BLACKLIST } from './monsters.js';
+import { spawnMonster, MON, SPAWN_BLACKLIST, HABITAT } from './monsters.js';
 import { SIGN_TEXTS } from './npcs.js';
 import { worldDims, getFeature, setFeature, inBounds, chebyshev, getCover, setCover } from './world-state.js';
 import { generateLayer } from './world-gen.js';
@@ -352,76 +352,119 @@ export function placeStructures(){
 // Global spawn density multiplier — halved to reduce crowding
 const SPAWN_DENSITY_MULT = 0.5;
 
-export function spawnMonstersInWorld(){
+// Cover types that block creature spawning (structures, interactables, etc.)
+const NO_SPAWN_COVERS = new Set([
+  T.STAIRS_DOWN, T.STAIRS_UP, T.GATE, T.NPC, T.SHOP, T.INN,
+  T.HOUSE, T.HOUSE_LG, T.WALL, T.SHOPKEEPER, T.SIGN, T.CHEST,
+  T.BOOK, T.THRONE, T.WELL, T.WELL_TL, T.WELL_TR, T.WELL_BL,
+  T.WELL_BR, T.BARREL, T.CRATE, T.LAMP_POST, T.FOUNTAIN,
+  T.FARM, T.CASTLE, T.BLACKSPIRE, T.TOWN,
+]);
 
-  const surfaceDensity = {
-    [T.GRASS]:    0.008  * SPAWN_DENSITY_MULT,
-    [T.FOREST]:   0.04   * SPAWN_DENSITY_MULT,
-    [T.SAND]:     0.035  * SPAWN_DENSITY_MULT,
-    [T.ROCK]:     0.035  * SPAWN_DENSITY_MULT,
-    [T.BEACH]:    0.003  * SPAWN_DENSITY_MULT,
-    [T.CAVE_FLOOR]:0.03  * SPAWN_DENSITY_MULT,
-    [T.MUSHFOREST]:0.05  * SPAWN_DENSITY_MULT,
-    [T.FUNGAL_GRASS]:0.04 * SPAWN_DENSITY_MULT,
-    [T.MUD]:      0.01   * SPAWN_DENSITY_MULT,
-    [T.DIRT]:     0.008  * SPAWN_DENSITY_MULT,
-  };
-  const spawnedWolves = [];
-  for (let y=0;y<H_SURF;y++){
-    for (let x=0;x<W_SURF;x++){
-      const ground = worlds[LAYER_SURFACE][y][x];
-      const cover = covers[LAYER_SURFACE] ? covers[LAYER_SURFACE][y][x] : 0;
-      if (!isWalkable(ground, cover)) continue;
-      // Skip town interior tiles and notable cover features
-      if (ground === T.WOOD_FLOOR) continue;
-      if (cover && (cover === T.TOWN || cover === T.CASTLE || cover === T.BLACKSPIRE ||
-          cover === T.SIGN || cover === T.NPC || cover === T.HOUSE || cover === T.SHOP ||
-          cover === T.INN || cover === T.STAIRS_DOWN || cover === T.STAIRS_UP ||
-          cover === T.CHEST || cover === T.BOOK || cover === T.SHOPKEEPER ||
-          cover === T.FOUNTAIN || cover === T.LAMP_POST)) continue;
-      const safeZone = Math.max(3, Math.round(Math.min(W_SURF, H_SURF) * 0.063));
-      const startX = state.player.startX || Math.floor(W_SURF * 0.50);
-      const startY = state.player.startY || Math.floor(H_SURF * 0.56);
-      if (Math.abs(x - startX) < safeZone && Math.abs(y - startY) < safeZone) continue;
-      // Use cover type for biome if present, otherwise ground
-      const biomeKey = cover || ground;
-      const density = surfaceDensity[biomeKey] || 0;
-      if (rand() >= density) continue;
-      let eligible = Object.keys(MON).filter(k => {
-        if (SPAWN_BLACKLIST.has(k)) return false;
-        const d = MON[k];
-        return d[13].includes(biomeKey) && d[14] === LAYER_SURFACE;
-      });
-      if (cover === T.MUSHFOREST){
-        eligible = ['mushroom'];
-      }
-      // Atmosphere-driven: high elevation + dry → rock golems only
-      {
-        const atmo = getAtmosphere(x, y);
-        if (atmo.elevation > 0.68 && atmo.moisture < 0.35 &&
-            (ground === T.ROCK || ground === T.CAVE_FLOOR)){
-          eligible = ['rock_golem'];
-        }
-      }
-      if (cover === T.FOREST && eligible.includes('wolf')){
-        eligible.push('dire_wolf');
-        eligible.push('wolf');
-      }
-      // Safety: re-filter after overrides that may reintroduce blacklisted creatures
-      eligible = eligible.filter(k => !SPAWN_BLACKLIST.has(k));
-      if (!eligible.length) continue;
-      const picked = choice(eligible);
-      const m = spawnMonster(picked);
-      m.x = x; m.y = y;
-      m.homeX = x; m.homeY = y;
-      m.hpMax = Math.round(m.hpMax * ENEMY_HP_MUL);
-      m.hp = m.hpMax;
-      m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
-      monsters[LAYER_SURFACE].push(m);
-      if (picked === 'wolf' || picked === 'dire_wolf') spawnedWolves.push(m);
+// Check whether any water tile (T.WATER or T.DEEP_WATER) exists within
+// `dist` Chebyshev distance of (cx, cy) on the surface grid.
+function hasNearbyWater(cx, cy, dist) {
+  const grid = worlds[LAYER_SURFACE];
+  const h = grid.length, w = grid[0].length;
+  const x0 = Math.max(0, cx - dist);
+  const x1 = Math.min(w - 1, cx + dist);
+  const y0 = Math.max(0, cy - dist);
+  const y1 = Math.min(h - 1, cy + dist);
+  for (let sy = y0; sy <= y1; sy++) {
+    for (let sx = x0; sx <= x1; sx++) {
+      const t = grid[sy][sx];
+      if (t === T.WATER || t === T.DEEP_WATER) return true;
     }
   }
-  // Wolf pair bonding
+  return false;
+}
+
+export function spawnMonstersInWorld(){
+
+  // ---- Build the list of surface habitat candidates (non-blacklisted) ----
+  const habitatKeys = Object.keys(HABITAT).filter(k => !SPAWN_BLACKLIST.has(k));
+
+  // ---- Per-cell spawn counters: cellCounters["cx,cy"][monKey] → count ----
+  const cellCounters = {};
+  function getCellKey(x, y) {
+    return Math.floor(x / CELL_TILE_W) + ',' + Math.floor(y / CELL_TILE_H);
+  }
+  function getCellCount(cellKey, monKey) {
+    const bucket = cellCounters[cellKey];
+    return bucket ? (bucket[monKey] || 0) : 0;
+  }
+  function incCellCount(cellKey, monKey) {
+    if (!cellCounters[cellKey]) cellCounters[cellKey] = {};
+    cellCounters[cellKey][monKey] = (cellCounters[cellKey][monKey] || 0) + 1;
+  }
+
+  // ---- Safe zone around player start ----
+  const safeZone = Math.max(3, Math.round(Math.min(W_SURF, H_SURF) * 0.063));
+  const startX = state.player.startX || Math.floor(W_SURF * 0.50);
+  const startY = state.player.startY || Math.floor(H_SURF * 0.56);
+
+  const spawnedWolves = [];
+
+  for (let y = 0; y < H_SURF; y++) {
+    for (let x = 0; x < W_SURF; x++) {
+      const ground = worlds[LAYER_SURFACE][y][x];
+      const cover = covers[LAYER_SURFACE] ? covers[LAYER_SURFACE][y][x] : 0;
+
+      // Skip non-walkable tiles
+      if (!isWalkable(ground, cover)) continue;
+      // Skip town interiors
+      if (ground === T.WOOD_FLOOR) continue;
+      // Skip special cover tiles (structures, interactables)
+      if (cover && NO_SPAWN_COVERS.has(cover)) continue;
+      // Skip player safe zone
+      if (Math.abs(x - startX) < safeZone && Math.abs(y - startY) < safeZone) continue;
+
+      // ---- Determine biome from target map ----
+      const cellX = Math.floor(x / CELL_TILE_W);
+      const cellY = Math.floor(y / CELL_TILE_H);
+      const clampedCX = Math.min(cellX, BIOME_TARGET[0].length - 1);
+      const clampedCY = Math.min(cellY, BIOME_TARGET.length - 1);
+      const biome = BIOME_TARGET[clampedCY][clampedCX].biome;
+
+      const cellKey = clampedCX + ',' + clampedCY;
+
+      // ---- Find creatures whose habitat includes this biome ----
+      for (let i = 0; i < habitatKeys.length; i++) {
+        const key = habitatKeys[i];
+        const hab = HABITAT[key];
+
+        // Biome check
+        if (!hab.biomes.includes(biome)) continue;
+
+        // maxPerCell check
+        if (getCellCount(cellKey, key) >= hab.maxPerCell) continue;
+
+        // nearWater proximity check
+        if (hab.nearWater && !hasNearbyWater(x, y, hab.nearWaterDist)) continue;
+
+        // Roll independently against spawnWeight (modulated by density mult)
+        if (rand() >= hab.spawnWeight * SPAWN_DENSITY_MULT) continue;
+
+        // Spawn this creature
+        const m = spawnMonster(key);
+        if (!m) continue;
+
+        m.x = x; m.y = y;
+        m.homeX = x; m.homeY = y;
+        m.hpMax = Math.round(m.hpMax * ENEMY_HP_MUL);
+        m.hp = m.hpMax;
+        m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
+
+        if (!monsters[LAYER_SURFACE]) monsters[LAYER_SURFACE] = [];
+        monsters[LAYER_SURFACE].push(m);
+        incCellCount(cellKey, key);
+
+        if (key === 'wolf' || key === 'dire_wolf') spawnedWolves.push(m);
+      }
+    }
+  }
+
+  // Wolf pair bonding (unchanged)
   const pairBonders = spawnedWolves.filter(w => w.personality === 'pair_bond' && !w.bondPartner);
   for (let i=0; i<pairBonders.length-1; i+=2){
     const a = pairBonders[i], b = pairBonders[i+1];
@@ -430,6 +473,68 @@ export function spawnMonstersInWorld(){
       b.bondPartner = a;
     }
   }
+
+  // ==== OLD TILE-TYPE SURFACE SPAWN LOGIC (replaced by habitat system above) ====
+  // const surfaceDensity = {
+  //   [T.GRASS]:    0.008  * SPAWN_DENSITY_MULT,
+  //   [T.FOREST]:   0.04   * SPAWN_DENSITY_MULT,
+  //   [T.SAND]:     0.035  * SPAWN_DENSITY_MULT,
+  //   [T.ROCK]:     0.035  * SPAWN_DENSITY_MULT,
+  //   [T.BEACH]:    0.003  * SPAWN_DENSITY_MULT,
+  //   [T.CAVE_FLOOR]:0.03  * SPAWN_DENSITY_MULT,
+  //   [T.MUSHFOREST]:0.05  * SPAWN_DENSITY_MULT,
+  //   [T.FUNGAL_GRASS]:0.04 * SPAWN_DENSITY_MULT,
+  //   [T.MUD]:      0.01   * SPAWN_DENSITY_MULT,
+  //   [T.DIRT]:     0.008  * SPAWN_DENSITY_MULT,
+  // };
+  // for (let y=0;y<H_SURF;y++){
+  //   for (let x=0;x<W_SURF;x++){
+  //     const ground = worlds[LAYER_SURFACE][y][x];
+  //     const cover = covers[LAYER_SURFACE] ? covers[LAYER_SURFACE][y][x] : 0;
+  //     if (!isWalkable(ground, cover)) continue;
+  //     if (ground === T.WOOD_FLOOR) continue;
+  //     if (cover && (cover === T.TOWN || cover === T.CASTLE || cover === T.BLACKSPIRE ||
+  //         cover === T.SIGN || cover === T.NPC || cover === T.HOUSE || cover === T.SHOP ||
+  //         cover === T.INN || cover === T.STAIRS_DOWN || cover === T.STAIRS_UP ||
+  //         cover === T.CHEST || cover === T.BOOK || cover === T.SHOPKEEPER ||
+  //         cover === T.FOUNTAIN || cover === T.LAMP_POST)) continue;
+  //     const safeZone = Math.max(3, Math.round(Math.min(W_SURF, H_SURF) * 0.063));
+  //     const startX = state.player.startX || Math.floor(W_SURF * 0.50);
+  //     const startY = state.player.startY || Math.floor(H_SURF * 0.56);
+  //     if (Math.abs(x - startX) < safeZone && Math.abs(y - startY) < safeZone) continue;
+  //     const biomeKey = cover || ground;
+  //     const density = surfaceDensity[biomeKey] || 0;
+  //     if (rand() >= density) continue;
+  //     let eligible = Object.keys(MON).filter(k => {
+  //       if (SPAWN_BLACKLIST.has(k)) return false;
+  //       const d = MON[k];
+  //       return d[13].includes(biomeKey) && d[14] === LAYER_SURFACE;
+  //     });
+  //     if (cover === T.MUSHFOREST) eligible = ['mushroom'];
+  //     {
+  //       const atmo = getAtmosphere(x, y);
+  //       if (atmo.elevation > 0.68 && atmo.moisture < 0.35 &&
+  //           (ground === T.ROCK || ground === T.CAVE_FLOOR)){
+  //         eligible = ['rock_golem'];
+  //       }
+  //     }
+  //     if (cover === T.FOREST && eligible.includes('wolf')){
+  //       eligible.push('dire_wolf');
+  //       eligible.push('wolf');
+  //     }
+  //     eligible = eligible.filter(k => !SPAWN_BLACKLIST.has(k));
+  //     if (!eligible.length) continue;
+  //     const picked = choice(eligible);
+  //     const m = spawnMonster(picked);
+  //     m.x = x; m.y = y;
+  //     m.homeX = x; m.homeY = y;
+  //     m.hpMax = Math.round(m.hpMax * ENEMY_HP_MUL);
+  //     m.hp = m.hpMax;
+  //     m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
+  //     monsters[LAYER_SURFACE].push(m);
+  //     if (picked === 'wolf' || picked === 'dire_wolf') spawnedWolves.push(m);
+  //   }
+  // }
 
   // Underground
   const underDensity = {

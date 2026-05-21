@@ -690,6 +690,68 @@ const SPAWN_BLACKLIST = new Set([
   'treant',        // legacy — not part of current fauna
 ]);
 
+// ==================== HABITAT DEFINITIONS ====================
+// Biome-based spawn rules for surface creatures.  Replaces the old
+// tile-type matching in index 12 of MON arrays.
+//
+//   biomes       — biome NAME strings from BIOME_TARGET, not tile types
+//   spawnWeight  — base probability per valid tile
+//   nearWater    — if true, only spawn within nearWaterDist of a water tile
+//   nearWaterDist— radius to scan for water proximity
+//   maxPerCell   — max spawns of this creature per target-map cell
+//
+// Only surface creatures that are NOT in SPAWN_BLACKLIST need entries.
+const HABITAT = {
+  // Meso-predator: generalist, crosses biomes freely.  Common but not everywhere.
+  wolf: {
+    biomes: ['plains', 'forest', 'wetland', 'fungal', 'beach'],
+    spawnWeight: 0.012,
+    nearWater: false,
+    nearWaterDist: 0,
+    maxPerCell: 4,
+  },
+  // Large predator (apex): rare, prefers dense cover and wet terrain.
+  dire_wolf: {
+    biomes: ['forest', 'wetland'],
+    spawnWeight: 0.003,
+    nearWater: false,
+    nearWaterDist: 0,
+    maxPerCell: 1,
+  },
+  // Small herbivore: the most common creature.  Found everywhere with vegetation.
+  hare: {
+    biomes: ['plains', 'forest', 'wetland', 'beach', 'fungal'],
+    spawnWeight: 0.025,
+    nearWater: false,
+    nearWaterDist: 0,
+    maxPerCell: 10,
+  },
+  // Large herbivore (amphibious grazer): spawns on walkable land near water.
+  cave_crab: {
+    biomes: ['plains', 'wetland', 'shallows', 'beach'],
+    spawnWeight: 0.006,
+    nearWater: true,
+    nearWaterDist: 8,
+    maxPerCell: 2,
+  },
+  // Colonial chemotroph: only in fungal zones, spawns in clusters.
+  mushroom: {
+    biomes: ['fungal'],
+    spawnWeight: 0.030,
+    nearWater: false,
+    nearWaterDist: 0,
+    maxPerCell: 15,
+  },
+  // Solitary ambush predator: uncommon, prefers dense cover and biome edges.
+  ambush_pred: {
+    biomes: ['forest', 'fungal'],
+    spawnWeight: 0.005,
+    nearWater: false,
+    nearWaterDist: 0,
+    maxPerCell: 2,
+  },
+};
+
 // Re-export everything that other modules need
-export { MON, DREAD_KING, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES, CLADE_DATA };
+export { MON, DREAD_KING, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES, CLADE_DATA, HABITAT };
 export { rollPersonality, monHP, monDodge, monAcc, monCritChance, monCritMult, monDamage, spawnMonster, getSpawnRules, getCladeData };
