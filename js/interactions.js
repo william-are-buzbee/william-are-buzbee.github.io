@@ -312,6 +312,11 @@ function openProfileShop(shopKey){
 
 
 function useStairs(f){
+  // Safety: skip if target layer or coordinates are missing (e.g. removed structures)
+  if (f.targetLayer == null || f.targetX == null || f.targetY == null) {
+    log('These stairs lead nowhere.', 'muted');
+    return;
+  }
   teleportPlayer(f.targetLayer, f.targetX, f.targetY);
   log(f.dir === 'down' ? 'You descend into the dark.' : 'You climb up to the world.', 'warn');
   updatePlayerFOV();  // compute FOV for new layer before render

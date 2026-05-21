@@ -460,13 +460,14 @@ export const FOOD_DROP_MUL   = 1.30;
 // bounding box from the cells, clears cover in that footprint, and calls
 // the generator to stamp its tiles.
 export const LANDMARKS = [
-  {
-    type: 'village',
-    cells: [
-      { x: 4, y: 4 }, { x: 5, y: 4 },
-      { x: 4, y: 5 }, { x: 5, y: 5 },
-    ],
-  },
+  // DISABLED — legacy content
+  // {
+  //   type: 'village',
+  //   cells: [
+  //     { x: 4, y: 4 }, { x: 5, y: 4 },
+  //     { x: 4, y: 5 }, { x: 5, y: 5 },
+  //   ],
+  // },
 ];
 
 // ==================== BODY MAPS ====================

@@ -670,6 +670,7 @@ function getSpawnRules(key){
 // Creatures whose definitions are kept but should never appear in the world.
 // World-gen spawner must skip any key in this set.
 const SPAWN_BLACKLIST = new Set([
+  'dread_king',    // DISABLED — legacy content (boss)
   'ice_wraith',    // removed from rotation — too punishing
   'magma_hound',   // lava monsters disabled
   'lava_fiend',    // lava monsters disabled
