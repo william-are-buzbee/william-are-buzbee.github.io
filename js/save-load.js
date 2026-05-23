@@ -10,7 +10,7 @@ import { log } from './log.js';
 import { updatePlayerFOV } from './fov.js';
 
 const SAVE_KEY = 'overworld_zero_save';
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;
 
 // ==================== HELPERS ====================
 
@@ -41,6 +41,55 @@ function deserializeExplored(raw) {
   return out;
 }
 
+// ==================== STAT MIGRATION (v1 → v2) ====================
+// Converts old 5-stat system (str/con/dex/int/per) to new 7-stat system
+// (siz/strength/chem/vib/vis/central/distributed).
+// Applied to both player and monster data when loading old saves.
+
+function migratePlayerStats(p) {
+  if (p.str != null || p.con != null || p.dex != null || p.per != null) {
+    // Player migration: use formula shims
+    p.siz = p.con || 1;           // CON → Size
+    p.strength = p.str || 1;      // STR → Strength
+    p.chem = p.per || 1;          // PER → Chemical
+    p.vib = 0;                    // new stat
+    p.vis = p.per || 1;           // PER → Visual
+    p.central = p.int || 1;       // INT → Central
+    p.distributed = 0;            // new stat
+    delete p.str; delete p.con; delete p.dex; delete p.int; delete p.per;
+  }
+  return p;
+}
+
+function migrateMonsterStats(mon) {
+  if (mon.str != null || mon.con != null || mon.dex != null || mon.per != null) {
+    mon.siz = mon.con || 1;
+    mon.strength = mon.str || 1;
+    mon.chem = mon.per || 1;
+    mon.vib = 0;
+    mon.vis = mon.per || 1;
+    mon.central = mon.int || 1;
+    mon.distributed = 0;
+    delete mon.str; delete mon.con; delete mon.dex; delete mon.int; delete mon.per;
+  }
+  return mon;
+}
+
+function migrateCgAttrs(attrs) {
+  if (attrs && (attrs.str != null || attrs.con != null)) {
+    return {
+      siz: attrs.con || 1,
+      strength: attrs.str || 1,
+      chem: attrs.per || 1,
+      vib: attrs.dex || 1,
+      vis: attrs.per || 1,
+      central: attrs.int || 1,
+      distributed: 0,
+    };
+  }
+  return attrs;
+}
+
 // ==================== SERIALIZATION ====================
 
 /** Serialize a player object into a plain JSON-safe structure. */
@@ -69,8 +118,16 @@ function deserializePlayer(raw) {
   p.armor  = findArmor(raw._armorKey)   || findArmor('rags');
   delete p._weaponKey;
   delete p._armorKey;
-  // Backwards compat: PER attribute added post-launch
-  if (p.per == null) p.per = 1;
+  // Backwards compat: migrate old 5-stat system to new 7-stat system
+  migratePlayerStats(p);
+  // Backwards compat: ensure all new stats have defaults
+  if (p.siz == null) p.siz = 1;
+  if (p.strength == null) p.strength = 1;
+  if (p.chem == null) p.chem = 1;
+  if (p.vib == null) p.vib = 0;
+  if (p.vis == null) p.vis = 1;
+  if (p.central == null) p.central = 1;
+  if (p.distributed == null) p.distributed = 0;
   // Backwards compat: colorPalette added post-launch
   if (p.colorPalette == null) p.colorPalette = 'meso_predator';
   // Reconstruct Sets
@@ -236,7 +293,8 @@ export function hasSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
-    return data && data.version === SAVE_VERSION && data.state && data.state.player;
+    // Accept current version AND previous version (will be migrated on load)
+    return data && (data.version === SAVE_VERSION || data.version === 1) && data.state && data.state.player;
   } catch {
     return false;
   }
@@ -262,11 +320,16 @@ export function loadGame() {
 
     const data = JSON.parse(raw);
 
-    // Version check
-    if (!data || data.version !== SAVE_VERSION) {
+    // Version check — accept v1 (will migrate) and current version
+    if (!data || (data.version !== SAVE_VERSION && data.version !== 1)) {
       console.warn('[Save] Incompatible save version, discarding.');
       deleteSave();
       return false;
+    }
+
+    const needsMigration = data.version === 1;
+    if (needsMigration) {
+      console.log('[Save] Migrating v1 save to v2 (stat system rename).');
     }
 
     // Validate critical data
@@ -285,7 +348,9 @@ export function loadGame() {
     state.gameState   = 'play';
     state.inputLocked = false;
     if (savedState.worldSeed != null) state.worldSeed = savedState.worldSeed;
-    if (savedState.cgAttrs) state.cgAttrs = savedState.cgAttrs;
+    if (savedState.cgAttrs) {
+      state.cgAttrs = needsMigration ? migrateCgAttrs(savedState.cgAttrs) : savedState.cgAttrs;
+    }
 
     // --- Restore world grids (Object keyed by layerIndex) ---
     for (const key of Object.keys(worlds)) delete worlds[key];
@@ -308,6 +373,16 @@ export function loadGame() {
       const restored = deserializeMonsters(data.monsters);
       for (const [key, value] of Object.entries(restored)) {
         monsters[key] = value;
+      }
+    }
+
+    // --- Migrate monster stats if loading old save ---
+    if (needsMigration) {
+      for (const li of Object.keys(monsters)) {
+        if (!monsters[li]) continue;
+        for (const mon of monsters[li]) {
+          if (mon) migrateMonsterStats(mon);
+        }
       }
     }
 

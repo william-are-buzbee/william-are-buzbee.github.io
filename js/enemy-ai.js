@@ -238,7 +238,7 @@ function playerAdjacentToWater(layer){
     state.player.starveTurns = 0;
   }
 
-  // Passive regen — scales linearly with CON, all values get regen
+  // Passive regen — scales linearly with Size, all values get regen
   // Passive healing does NOT drain FED
   const iv = passiveRegenInterval(player);
   if (state.player.fed > 0 && state.player.hp < state.player.hpMax){
@@ -319,8 +319,8 @@ function monInOwnTerritory(mon){
 
 // ==================== ENEMY VISION ====================
 // Monster vision radius — delegates to the shared creatureViewRadius in player.js
-// so that PER-to-depth scaling is defined in exactly one place.
-// PER 1 = 3 tiles (day), PER 10 = 7 tiles (day).
+// so that Visual-to-depth scaling is defined in exactly one place.
+// Visual 1 = 3 tiles (day), Visual 10 = 7 tiles (day).
 // Night / underground = hard 1 tile cone depth, unless nightVision (full daytime base).
 // Blindsight creatures bypass vision entirely (proximity-only detection).
 function monsterViewRadius(mon){
@@ -328,12 +328,12 @@ function monsterViewRadius(mon){
   if (mon.mods && mon.mods.blindsight != null) return 0;
 
   const nightVision = !!(mon.mods && mon.mods.nightVision);
-  return creatureViewRadius(mon.per, state.player.layer, { nightVision });
+  return creatureViewRadius(mon.vis, state.player.layer, { nightVision });
 }
 
 // Can the monster see the player's tile?  (vision range + LOS, no stealth check)
 // Used by idle-state aggro logic which handles stealth separately.
-// Trees are probabilistically transparent based on the monster's PER.
+// Trees are probabilistically transparent based on the monster's Visual.
 function canSeePlayerTile(mon){
   const d = chebyshev(mon.x, mon.y, state.player.x, state.player.y);
 
@@ -348,8 +348,8 @@ function canSeePlayerTile(mon){
 
   // LOS raycast with probabilistic tree transparency.
   // Each tree tile in the line independently rolls against the monster's
-  // PER-based chance. A failed roll blocks the sightline.
-  return hasLOS(state.player.layer, mon.x, mon.y, state.player.x, state.player.y, mon.per);
+  // Visual-based chance. A failed roll blocks the sightline.
+  return hasLOS(state.player.layer, mon.x, mon.y, state.player.x, state.player.y, mon.vis);
 }
 
 // Full detection check: can the monster see the player's tile AND detect them
@@ -655,7 +655,7 @@ function enemyAct(mon){
         mon.lastSeenX = state.player.x; mon.lastSeenY = state.player.y;
         // fall through to chase logic
       } else {
-      // Treants regen in forest when idle and not alerted (CON-based rest healing)
+      // Treants regen in forest when idle and not alerted (Size-based rest healing)
       // T.FOREST is now a cover type — check cover layer
       if (mon.key === 'treant' && !mon.alerted && mon.hp < mon.hpMax){
         const mc = getCover(state.player.layer, mon.x, mon.y);
@@ -1103,7 +1103,7 @@ export function monsterMelee(mon){
                mon.dmgType === DMG.POISON ? 'stings' : 'hits';
   if (crit) log(`${mon.name} CRITS — ${verb}${zoneSuffix}! ${dmg} ${mon.dmgType}.`, 'crit');
   else log(`${mon.name} ${verb}${zoneSuffix}. ${dmg} ${mon.dmgType}.`, 'dmg');
-  // Poison application — probability reduced by 75% CON / 25% STR
+  // Poison application — probability reduced by 75% Size / 25% Strength
   if (mon.dmgType === DMG.POISON){
     const poisonResist = poisonResistance(player);
     const baseChance = 60;  // base 60% chance to poison

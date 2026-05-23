@@ -117,12 +117,12 @@ export const BIOME = {
 };
 
 // ==================== PRICE CATEGORIES ====================
-// Tiered INT-discount brackets.  Each item is tagged (or derived)
+// Tiered Central-discount brackets.  Each item is tagged (or derived)
 // into one of these so buyPriceMul / sellValueMul can apply the
-// correct per-INT scaling.
-//   staple   — food, basic supplies.          1% per INT above 1 (max ~9%).
-//   standard — basic weapons, basic armor.    2% per INT above 1 (max ~18%).
-//   luxury   — books, potions, high-end gear. 3% per INT above 1 (max ~27%).
+// correct per-Central scaling.
+//   staple   — food, basic supplies.          1% per Central above 1 (max ~9%).
+//   standard — basic weapons, basic armor.    2% per Central above 1 (max ~18%).
+//   luxury   — books, potions, high-end gear. 3% per Central above 1 (max ~27%).
 export const PRICE_CAT = { STAPLE:'staple', STANDARD:'standard', LUXURY:'luxury' };
 
 // ==================== FED MAX ====================

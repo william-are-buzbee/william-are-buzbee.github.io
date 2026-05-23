@@ -17,7 +17,7 @@ function getCGPool(){ return STARTING_POINTS; }
 function openCharGen(){
   document.getElementById('title').style.display = 'none';
   document.getElementById('chargen-screen').style.display = 'flex';
-  state.cgAttrs = {str:1, con:1, dex:1, int:1, per:1};
+  state.cgAttrs = {siz:1, strength:1, chem:1, vib:1, vis:1, central:1, distributed:1};
   state.selectedBodyType = null;
   state.selectedColorPalette = null;
   renderCharGen();
@@ -37,25 +37,29 @@ function openCharGen(){
 
 function renderCharGen(){
   const rows = document.getElementById('chargen-rows');
-  const total = state.cgAttrs.str + state.cgAttrs.con + state.cgAttrs.dex + state.cgAttrs.int + state.cgAttrs.per;
-  const remaining = getCGPool() - (total - 5);  // start 1/1/1/1/1 = 5, distribute pool
+  const total = state.cgAttrs.siz + state.cgAttrs.strength + state.cgAttrs.chem + state.cgAttrs.vib + state.cgAttrs.vis + state.cgAttrs.central + state.cgAttrs.distributed;
+  const remaining = getCGPool() - (total - 7);  // start 1/1/1/1/1/1/1 = 7, distribute pool
   document.getElementById('cg-pool').textContent = remaining;
 
   // Which derived stats each attribute affects
   const attrDerived = {
-    str: ['melee','carry','bluntap','critdmg','hp','poison'],
-    con: ['hp','hplvl','resthp','regen','poison'],
-    dex: ['dodge','crit','stealth'],
-    int: ['xp','critdmg','shop','sell'],
-    per: ['acc','vision'],
+    siz: ['hp','hplvl','resthp','regen','poison','dodge','crit','stealth'],
+    strength: ['melee','carry','bluntap','critdmg','hp','poison'],
+    chem: [],
+    vib: [],
+    vis: ['acc','vision'],
+    central: ['xp','critdmg','shop','sell'],
+    distributed: [],
   };
 
   const attrs = [
-    {key:'str', name:'STR'},
-    {key:'con', name:'CON'},
-    {key:'dex', name:'DEX'},
-    {key:'int', name:'INT'},
-    {key:'per', name:'PER'},
+    {key:'siz', name:'SIZE'},
+    {key:'strength', name:'STR'},
+    {key:'chem', name:'CHEM'},
+    {key:'vib', name:'VIB'},
+    {key:'vis', name:'VIS'},
+    {key:'central', name:'CEN'},
+    {key:'distributed', name:'DIST'},
   ];
   rows.innerHTML = attrs.map(a => {
     const v = state.cgAttrs[a.key];
@@ -100,45 +104,45 @@ function renderCharGen(){
   const startArmor = findArmor('rags');
   const armorDodgePen = startArmor.dodgePenalty || 0;
   const armorAccPen = armorDodgePen / 2;
-  const hp = 10 + state.cgAttrs.con*4 + state.cgAttrs.str;
-  const carry = 4 + state.cgAttrs.str*2;
-  const melee = 2 + Math.round(state.cgAttrs.str*0.6);  // +2 from dagger, approximate
-  const avgAP = ((state.cgAttrs.str - 1) * (3 / 9));
-  // Hit chance: 35 + PER*4 + weapon.acc (5 for dagger) − armor accPenalty, clamped 5–95
-  const rawAcc = 35 + state.cgAttrs.per*4 + 5 - armorAccPen;
+  const hp = 10 + state.cgAttrs.siz*4 + state.cgAttrs.strength;
+  const carry = 4 + state.cgAttrs.strength*2;
+  const melee = 2 + Math.round(state.cgAttrs.strength*0.6);  // +2 from dagger, approximate
+  const avgAP = ((state.cgAttrs.strength - 1) * (3 / 9));
+  // Hit chance: 35 + Visual*4 + weapon.acc (5 for dagger) − armor accPenalty, clamped 5–95
+  const rawAcc = 35 + state.cgAttrs.vis*4 + 5 - armorAccPen;
   const hitChance = Math.min(95, Math.max(5, rawAcc));
-  // Dodge: DEX only, minus armor dodgePenalty (flat), floor 0
-  const dodge = Math.max(0, (state.cgAttrs.dex-1)*3.5 - armorDodgePen);
-  // Crit: DEX only, always enabled
-  const crit = Math.min(60, (state.cgAttrs.dex - 1) * 4.5) + 3;
-  // Crit mult: 50/50 STR and INT
-  const critMult = 1.5 + state.cgAttrs.str*0.02 + state.cgAttrs.int*0.02;
-  const xpM = 0.043 + (state.cgAttrs.int - 1) * 0.0168;
-  const xpBaseline = 0.043; // INT 1 baseline
+  // Dodge: Size only (temporary shim), minus armor dodgePenalty (flat), floor 0
+  const dodge = Math.max(0, (state.cgAttrs.siz-1)*3.5 - armorDodgePen);
+  // Crit: Size only (temporary shim), always enabled
+  const crit = Math.min(60, (state.cgAttrs.siz - 1) * 4.5) + 3;
+  // Crit mult: 50/50 Strength and Central
+  const critMult = 1.5 + state.cgAttrs.strength*0.02 + state.cgAttrs.central*0.02;
+  const xpM = 0.043 + (state.cgAttrs.central - 1) * 0.0168;
+  const xpBaseline = 0.043; // Central 1 baseline
   const xpBonusPct = Math.round(((xpM / xpBaseline) - 1) * 100);
   const xpDisplay = xpBonusPct > 0 ? `100% +${xpBonusPct}%` : '100%';
   // HP per level
-  const totalGain = 18 + (state.cgAttrs.con-1)*3;
+  const totalGain = 18 + (state.cgAttrs.siz-1)*3;
   const hpLvlLo = Math.floor(totalGain / 9);
   const hpLvlHi = hpLvlLo + (totalGain % 9 > 0 ? 1 : 0);
   const hpLvl = hpLvlLo === hpLvlHi ? `+${hpLvlLo}` : `+${hpLvlLo}–${hpLvlHi}`;
   // Rest HP
-  const maxRest = Math.max(1, 1 + Math.floor((state.cgAttrs.con-1)*0.55));
+  const maxRest = Math.max(1, 1 + Math.floor((state.cgAttrs.siz-1)*0.55));
   // Passive regen interval
-  const regenIv = Math.round(55 + (state.cgAttrs.con-1) * (5-55)/9);
+  const regenIv = Math.round(55 + (state.cgAttrs.siz-1) * (5-55)/9);
   // Stealth
-  const stealth = state.cgAttrs.dex * 4;
+  const stealth = state.cgAttrs.siz * 4;
   // Shop discount (mirrors buyPriceMul)
-  let disc = (state.cgAttrs.int - 1) * 0.02;
-  if (state.cgAttrs.int >= 8) disc += 0.06;
-  if (state.cgAttrs.int >= 9) disc += 0.04;
-  if (state.cgAttrs.int >= 10) disc += 0.04;
+  let disc = (state.cgAttrs.central - 1) * 0.02;
+  if (state.cgAttrs.central >= 8) disc += 0.06;
+  if (state.cgAttrs.central >= 9) disc += 0.04;
+  if (state.cgAttrs.central >= 10) disc += 0.04;
   disc = Math.min(disc, 0.30);
   const shopStr = disc > 0 ? `−${Math.round(disc*100)}%` : '—';
   // Sell value
-  const sellPct = Math.round((0.25 + (state.cgAttrs.int-1) * (0.35/9))*100);
+  const sellPct = Math.round((0.25 + (state.cgAttrs.central-1) * (0.35/9))*100);
   // Vision radius (mirrors playerViewRadius)
-  const visionR = Math.round(4 + (state.cgAttrs.per - 1) * (4 / 9));
+  const visionR = Math.round(4 + (state.cgAttrs.vis - 1) * (4 / 9));
 
   document.getElementById('cg-derived').innerHTML = `
     <div class="kv" id="cg-d-hp"><span class="k">Health</span><span class="v">${hp}</span></div>
@@ -157,16 +161,16 @@ function renderCharGen(){
     <div class="kv" id="cg-d-vision"><span class="k">Vision Radius</span><span class="v">${visionR} tiles</span></div>
     <div class="kv" id="cg-d-shop"><span class="k">Shop Discount</span><span class="v">${shopStr}</span></div>
     <div class="kv" id="cg-d-sell"><span class="k">Sell Value</span><span class="v">${sellPct}%</span></div>
-    <div class="kv" id="cg-d-poison"><span class="k">Poison Resist</span><span class="v">${Math.round(poisonResistance({con:state.cgAttrs.con,str:state.cgAttrs.str,level:1,perks:{}}).damageReduction*100)}%</span></div>
+    <div class="kv" id="cg-d-poison"><span class="k">Poison Resist</span><span class="v">${Math.round(poisonResistance({siz:state.cgAttrs.siz,strength:state.cgAttrs.strength,level:1,perks:{}}).damageReduction*100)}%</span></div>
   `;
 
   document.getElementById('cg-begin').disabled = remaining !== 0;
 }
 
 function randomizeAttrs(){
-  state.cgAttrs = {str:1, con:1, dex:1, int:1, per:1};
+  state.cgAttrs = {siz:1, strength:1, chem:1, vib:1, vis:1, central:1, distributed:1};
   let pool = getCGPool();
-  const keys = ['str','con','dex','int','per'];
+  const keys = ['siz','strength','chem','vib','vis','central','distributed'];
   while (pool > 0){
     const k = choice(keys);
     if (state.cgAttrs[k] < 10){ state.cgAttrs[k]++; pool--; }

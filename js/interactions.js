@@ -144,7 +144,7 @@ function openProfileShop(shopKey){
     const f = FOOD[foodKey];
     if (!f) return 0;
     if (shopFedRatio){
-      // Price = fed * ratio, then INT discount for staples, then mercantile
+      // Price = fed * ratio, then Central discount for staples, then mercantile
       const rawCost = f.fed * shopFedRatio;
       return Math.max(1, Math.round(rawCost * mercMod * buyPriceMul(player, PRICE_CAT.STAPLE)));
     }
@@ -343,12 +343,12 @@ function openBook(bookKey, fromInventory, invIdx){
   const b = BOOKS[bookKey];
   let html = `<h2>${b.name}</h2>`;
   html += `<div class="book-text">${b.text}</div>`;
-  if (fromInventory && state.player.int >= b.intReq && !state.player.booksRead.has(bookKey)){
+  if (fromInventory && state.player.central >= b.intReq && !state.player.booksRead.has(bookKey)){
     html += `<div class="shop-h">Knowledge</div>`;
     html += `<div class="dialogue" style="font-style:normal;font-size:10px;color:#a8c8e0;">${b.summary}</div>`;
   }
   html += `<div class="close-row">`;
-  if (fromInventory && state.player.int >= b.intReq && !state.player.booksRead.has(bookKey)){
+  if (fromInventory && state.player.central >= b.intReq && !state.player.booksRead.has(bookKey)){
     html += `<button class="btn primary" id="btn-read">ABSORB</button> `;
   }
   html += `<button class="btn" id="btn-close">CLOSE</button></div>`;
@@ -451,7 +451,7 @@ function showHelp(){
     <b>RIGHT-CLICK</b> · examine tile/monster<br>
     <b>SPACE</b> · wait/rest (converts FED to HP)<br>
     <b>E</b> · eat best food (fills FED only)<br>
-    <b>F</b> · toggle stealth (DEX drives it)<br>
+    <b>F</b> · toggle stealth (Size drives it)<br>
     <b>R</b> · use stairs/sign/NPC/chest/town<br>
     <b>G</b> · pick up item from ground<br>
     <b>L</b> · look at items on ground<br>
@@ -459,7 +459,7 @@ function showHelp(){
   html += `<div class="shop-h">FED & Healing</div>`;
   html += `<div class="dialogue" style="font-style:normal;font-size:10px;line-height:1.7;">
     <b>FED is a second HP bar.</b> Food fills FED — it doesn't heal HP directly.<br>
-    <b>Resting</b> converts FED → HP (CON controls the rate and reduces hunger cost).<br>
+    <b>Resting</b> converts FED → HP (Size controls the rate and reduces hunger cost).<br>
     Every action drains FED. Resting drains it slowly, moving more, attacking the most.<br>
     Passive regen does not drain FED. At FED 0 you start losing HP. Eat, or visit an inn for a full restore.<br>
     Potions are the only consumable that heals HP directly — use them sparingly.
@@ -467,22 +467,25 @@ function showHelp(){
   html += `<div class="shop-h">Inventory</div>`;
   html += `<div class="dialogue" style="font-style:normal;font-size:10px;line-height:1.7;">
     Bag is <b>10 slots, no stacking.</b> Each item has a <b>weight</b>.<br>
-    <b>STR</b> determines carry capacity (4 + STR×2). Overweight pickups are blocked.<br>
+    <b>Strength</b> determines carry capacity (4 + Strength×2). Overweight pickups are blocked.<br>
     Weapons and armor go into your bag — equip from the Items tab.<br>
     Dropping items (×) places them on the ground — pick them up later with <b>G</b>.
   </div>`;
   html += `<div class="shop-h">Attributes</div>`;
   html += `<div class="dialogue" style="font-style:normal;font-size:10px;line-height:1.7;">
-    <b>STR</b>: melee dmg (probabilistic), carry weight, blunt AP (scales gradually), crit dmg (50%), +1 HP per point.<br>
-    <b>CON</b>: HP, per-level HP scaling. Rest heals random HP based on CON. Passive regen at all CON levels. Reduces rest hunger cost. Poison resistance (75% weight, scales with level).<br>
-    <b>DEX</b>: dodge, accuracy, crit chance, stealth. All scale linearly.<br>
-    <b>INT</b>: XP gain (scales with INT, no level cap), crit dmg (50%), shop prices, sell value. 1 stunts speech.
+    <b>Size</b>: HP, per-level HP scaling. Rest heals random HP based on Size. Passive regen at all Size levels. Reduces rest hunger cost. Poison resistance (75% weight, scales with level). Dodge, crit chance, stealth (temporary).<br>
+    <b>Strength</b>: melee dmg (probabilistic), carry weight, blunt AP (scales gradually), crit dmg (50%), +1 HP per point.<br>
+    <b>Chemical</b>: chemoreception (smell/taste). Future use.<br>
+    <b>Vibration</b>: mechanoreception (ground-feel, tremors). Future use.<br>
+    <b>Visual</b>: eyesight, accuracy, vision radius.<br>
+    <b>Central</b>: centralized processing. XP gain, crit dmg (50%), shop prices, sell value. 1 stunts speech.<br>
+    <b>Distributed</b>: multi-node processing (reflexes). Future use.
   </div>`;
   html += `<div class="shop-h">Damage Types</div>`;
   html += `<div class="dialogue" style="font-style:normal;font-size:10px;line-height:1.7;">
     BLADE cuts flesh but <b>resists</b> on armored, shelled, scaled, and stone foes. BLUNT breaks bone/armor/stone.<br>
     FIRE ruins plants, ice, mummies. COLD cracks fire-things but does NOTHING to undead/bone/ice.<br>
-    ELECTRIC devastates aquatic foes. POISON useless on undead/bone/stone/fungal. Poison stacks and deals %HP+flat, resisted by CON/STR.
+    ELECTRIC devastates aquatic foes. POISON useless on undead/bone/stone/fungal. Poison stacks and deals %HP+flat, resisted by Size/Strength.
   </div>`;
   html += `<div class="shop-h">Enemy Behavior</div>`;
   html += `<div class="dialogue" style="font-style:normal;font-size:10px;line-height:1.7;">
@@ -493,7 +496,7 @@ function showHelp(){
     <b>Wolves</b> roam forests and mountains. Dire wolves are rarer but stronger. Both may hunt in pairs or small packs.<br>
     <b>Goblins</b> vary in personality — some are aggressive, others wary without allies, and some lead packs.<br>
     <b>Aquatic enemies</b> near eastern shorelines approach from the water to fight.<br>
-    <b>Poison</b> stacks and deals % max HP + flat damage per turn, reduced by CON (75%) and STR (25%). Antidotes clear all stacks.
+    <b>Poison</b> stacks and deals % max HP + flat damage per turn, reduced by Size (75%) and Strength (25%). Antidotes clear all stacks.
   </div>`;
   html += `<div class="close-row"><button class="btn" id="btn-close">CLOSE</button></div>`;
   openModal(html);
@@ -576,7 +579,7 @@ function hpBar(hp, hpMax, width){
 
 // ==================== STAT CARD: MONSTER (INT-GATED) ====================
 function buildMonsterCard(mon, player, ground, cover){
-  const pInt = player.int;
+  const pCentral = player.central;
   let h = cardCSS();
   h += `<div class="ex-card">`;
 
@@ -592,15 +595,17 @@ function buildMonsterCard(mon, player, ground, cover){
   h += `<span><span class="ex-dim">DEF</span> <span class="ex-val">${mon.def}</span></span>`;
   h += `</div>`;
 
-  // --- INT 3+: attributes, accuracy, dodge ---
-  if (pInt >= 3){
+  // --- Central 3+: attributes, accuracy, dodge ---
+  if (pCentral >= 3){
     h += `<div class="ex-sep"></div>`;
     h += `<div class="ex-attrs">`;
-    h += `<span><span class="ex-dim">STR</span> ${mon.str}</span>`;
-    h += `<span><span class="ex-dim">CON</span> ${mon.con}</span>`;
-    h += `<span><span class="ex-dim">DEX</span> ${mon.dex}</span>`;
-    h += `<span><span class="ex-dim">INT</span> ${mon.int}</span>`;
-    h += `<span><span class="ex-dim">PER</span> ${mon.per}</span>`;
+    h += `<span><span class="ex-dim">Size</span> ${mon.siz}</span>`;
+    h += `<span><span class="ex-dim">Str</span> ${mon.strength}</span>`;
+    h += `<span><span class="ex-dim">Chem</span> ${mon.chem}</span>`;
+    h += `<span><span class="ex-dim">Vib</span> ${mon.vib}</span>`;
+    h += `<span><span class="ex-dim">Vis</span> ${mon.vis}</span>`;
+    h += `<span><span class="ex-dim">Cen</span> ${mon.central}</span>`;
+    h += `<span><span class="ex-dim">Dist</span> ${mon.distributed}</span>`;
     h += `</div>`;
     h += `<div class="ex-sep"></div>`;
     h += `<div class="ex-pair">`;
@@ -609,8 +614,8 @@ function buildMonsterCard(mon, player, ground, cover){
     h += `</div>`;
   }
 
-  // --- INT 5+: crit, AP, stealth, specials ---
-  if (pInt >= 5){
+  // --- Central 5+: crit, AP, stealth, specials ---
+  if (pCentral >= 5){
     h += `<div class="ex-sep"></div>`;
     const critCh = monCritChance(mon);
     const critMl = monCritMult(mon);
@@ -648,8 +653,8 @@ function buildMonsterCard(mon, player, ground, cover){
     }
   }
 
-  // --- INT 7+: behavior, leash, biome, night vision ---
-  if (pInt >= 7){
+  // --- Central 7+: behavior, leash, biome, night vision ---
+  if (pCentral >= 7){
     h += `<div class="ex-sep"></div>`;
     const hostNames = ['Passive','Territorial','Aggressive'];
     const traits = [];
@@ -671,12 +676,12 @@ function buildMonsterCard(mon, player, ground, cover){
     h += `<div class="ex-row"><span class="ex-dim">Speed</span> <span class="ex-val">${mon.speed || 60}</span></div>`;
   }
 
-  // --- INT 9+: exact damage range, loot hints ---
-  if (pInt >= 9){
+  // --- Central 9+: exact damage range, loot hints ---
+  if (pCentral >= 9){
     h += `<div class="ex-sep"></div>`;
     const baseDmg = monDamage(mon);
-    const low = Math.max(1, baseDmg - Math.floor(mon.str * 0.25));
-    const high = baseDmg + Math.floor(mon.str * 0.25);
+    const low = Math.max(1, baseDmg - Math.floor(mon.strength * 0.25));
+    const high = baseDmg + Math.floor(mon.strength * 0.25);
     h += `<div class="ex-row"><span class="ex-dim">Dmg Range</span> <span class="ex-val">${low}–${high} ${mon.dmgType}</span></div>`;
     if (mon.goldRange){
       h += `<div class="ex-row"><span class="ex-dim">Loot</span> <span class="ex-val">${mon.goldRange[0]}–${mon.goldRange[1]} gold</span></div>`;
@@ -718,11 +723,13 @@ function buildPlayerCard(p){
   // Attributes
   h += `<div class="ex-sep"></div>`;
   h += `<div class="ex-attrs">`;
-  h += `<span><span class="ex-dim">STR</span> ${p.str}</span>`;
-  h += `<span><span class="ex-dim">CON</span> ${p.con}</span>`;
-  h += `<span><span class="ex-dim">DEX</span> ${p.dex}</span>`;
-  h += `<span><span class="ex-dim">INT</span> ${p.int}</span>`;
-  h += `<span><span class="ex-dim">PER</span> ${p.per}</span>`;
+  h += `<span><span class="ex-dim">Size</span> ${p.siz}</span>`;
+  h += `<span><span class="ex-dim">Str</span> ${p.strength}</span>`;
+  h += `<span><span class="ex-dim">Chem</span> ${p.chem}</span>`;
+  h += `<span><span class="ex-dim">Vib</span> ${p.vib}</span>`;
+  h += `<span><span class="ex-dim">Vis</span> ${p.vis}</span>`;
+  h += `<span><span class="ex-dim">Cen</span> ${p.central}</span>`;
+  h += `<span><span class="ex-dim">Dist</span> ${p.distributed}</span>`;
   h += `</div>`;
 
   // Equipment
@@ -749,7 +756,7 @@ function buildPlayerCard(p){
   // Armor piercing (only if weapon has any)
   const ap = p.weapon.ap || 0;
   let displayAP = ap;
-  if (p.weapon.type === DMG.BLUNT) displayAP += (p.str - 1) * (3 / 9);
+  if (p.weapon.type === DMG.BLUNT) displayAP += (p.strength - 1) * (3 / 9);
   if (displayAP > 0){
     h += `<div class="ex-row"><span class="ex-dim">Armor Pierce</span> <span class="ex-val">~${displayAP.toFixed(1)}</span></div>`;
   }
@@ -791,8 +798,8 @@ function readBook(idx){
   const it = state.player.inventory[idx];
   if (!it || it.kind !== 'book') return;
   const b = BOOKS[it.key];
-  if (state.player.int < b.intReq){
-    log(`You can't make sense of it. (INT ${b.intReq}+ required)`, 'warn');
+  if (state.player.central < b.intReq){
+    log(`You can't make sense of it. (Central ${b.intReq}+ required)`, 'warn');
     return;
   }
   openBook(it.key, true, idx);

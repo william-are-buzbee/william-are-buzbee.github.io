@@ -6,7 +6,7 @@ export const state = {
   player: null,
   gameState: 'title',
   turnCount: 0,
-  cgAttrs: { str: 1, con: 1, dex: 1, int: 1, per: 1 },
+  cgAttrs: { siz: 1, strength: 1, chem: 1, vib: 1, vis: 1, central: 1, distributed: 1 },
   npcTurnIdx: {},
   shopTab: 'buy',
 

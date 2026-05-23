@@ -84,7 +84,7 @@ function computeUIData() {
   // Weapon tooltip pieces
   let displayAP = p.weapon.ap || 0;
   if (p.weapon.type === DMG.BLUNT) {
-    displayAP += (p.str - 1) * (3 / 9);
+    displayAP += (p.strength - 1) * (3 / 9);
   }
   const elemTag = p.weapon.elem ? '+' + p.weapon.elem : '';
   const apStr   = displayAP > 0 ? ` ap~${displayAP.toFixed(1)}` : '';
@@ -103,7 +103,7 @@ function computeUIData() {
     fedWarn:  p.fed <= 40,
 
     // attributes
-    str: p.str, con: p.con, dex: p.dex, int: p.int, per: p.per,
+    siz: p.siz, strength: p.strength, chem: p.chem, vib: p.vib, vis: p.vis, central: p.central, distributed: p.distributed,
     gold: p.gold,
     slotsText: `${p.inventory.length}/${INV_SLOTS} · ${tWt}/${cap}wt`,
 
@@ -162,7 +162,7 @@ function buildPerksHTML(player) {
   if (all.length === 0) return EMPTY_HTML;
 
   return all.map(line =>
-    `<div class="perkline">${line.replace(/^(STR|CON|DEX|INT|PER) (\d+):/, '<b>$1 $2:</b>')}</div>`
+    `<div class="perkline">${line.replace(/^(Size|Strength|Chemical|Vibration|Visual|Central|Distributed) (\d+):/, '<b>$1 $2:</b>')}</div>`
   ).join('');
 }
 
@@ -238,9 +238,9 @@ function potionRow(it, idx) {
 
 function bookRow(it, idx, player) {
   const b = BOOKS[it.key];
-  const canRead = player.int >= b.intReq;
+  const canRead = player.central >= b.intReq;
   return `<div class="item-row">
-    <span class="iname">${b.name} <span class="ibook">INT ${b.intReq}+</span> <span class="iwt">wt ${it.weight || 1}</span></span>
+    <span class="iname">${b.name} <span class="ibook">Central ${b.intReq}+</span> <span class="iwt">wt ${it.weight || 1}</span></span>
     <button data-book="${idx}" ${canRead ? '' : 'disabled'}>READ</button>
     <button data-drop="${idx}">×</button>
   </div>`;
