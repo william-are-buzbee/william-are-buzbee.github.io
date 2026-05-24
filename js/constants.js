@@ -454,6 +454,15 @@ export const ENEMY_ATK_MUL   = 0.70;
 export const GOLD_DROP_MUL   = 1.30;
 export const FOOD_DROP_MUL   = 1.30;
 
+// ==================== GAMEPLAY FORMULA CONSTANTS ====================
+// Size & Strength driven formulas (Prompt 2).
+export const HP_PER_SIZE           = 10;   // maxHp = Size * HP_PER_SIZE
+export const HP_PER_LEVEL_FACTOR   = 0.5;  // hpPerLevel = Math.ceil(Size * HP_PER_LEVEL_FACTOR)
+export const DODGE_PER_SIZE_POINT  = 3;    // dodgeChance = (11 - Size) * DODGE_PER_SIZE_POINT
+export const BASE_ACCURACY         = 70;
+export const ACC_PER_VISUAL        = 3;    // accuracy = BASE_ACCURACY + (Visual * ACC_PER_VISUAL)
+export const STEALTH_PER_SIZE_POINT = 4;   // stealthEffectiveness = (11 - Size) * STEALTH_PER_SIZE_POINT
+
 // ==================== LANDMARKS ====================
 // Structures placed at biome-target-map scale.  Each entry defines:
 //   type  — identifier string matching a generator in LANDMARK_GENERATORS

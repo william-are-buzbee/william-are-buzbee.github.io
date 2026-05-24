@@ -1,5 +1,7 @@
 // ==================== PLAYER ====================
-import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META } from './constants.js';
+import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META,
+         HP_PER_SIZE, HP_PER_LEVEL_FACTOR, DODGE_PER_SIZE_POINT,
+         BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_PER_SIZE_POINT } from './constants.js';
 import { getTimePhase } from './time-cycle.js';
 import { state } from './state.js';
 import { rand, randomRound } from './rng.js';
@@ -42,29 +44,14 @@ function freshPlayer(attrs, bodyType, colorPalette){
   return p;
 }
 
-// === Derived stats — attributes move the needle a LOT ===
-// Max HP: base + Size*4 + Strength at character creation,
-// plus per-level growth that scales with EVERY point of Size.
-// Total HP gain over 9 level-ups (levels 2-10):
-//   Size 1 → 18 (avg 2/lvl), Size 4 → 27 (avg 3), Size 7 → 36 (avg 4), Size 10 → 45 (avg 5).
-// Each Size point adds +3 total HP across the 9 levels.
-// Growth alternates between two values to hit the target exactly at level 10.
-// e.g. Size 2 → 2,2,3,2,2,3,2,2,3; Size 5 → 3,3,4,3,3,4,3,3,4.
+// === Derived stats — Size & Strength driven ===
+// Max HP: Size * HP_PER_SIZE at level 1, plus per-level growth.
+// hpGainPerLevel = Math.ceil(Size * HP_PER_LEVEL_FACTOR).
+// A Size 4 player has 40 HP at level 1, gaining 2 HP per level.
 function deriveHP(p){
-  const totalGain9 = 18 + (p.siz - 1) * 3;  // total HP gained from 9 level-ups (levels 2-10)
-  const currentLevels = p.level - 1;         // number of level-ups completed
-
-  let hpFromLevels;
-  if (currentLevels <= 9){
-    // Distribute gains evenly using integer division — produces natural alternation
-    hpFromLevels = Math.floor(totalGain9 * currentLevels / 9);
-  } else {
-    // Beyond level 10 (Central 8+ builds): continue at the same average rate
-    const extra = currentLevels - 9;
-    hpFromLevels = totalGain9 + Math.floor(totalGain9 * extra / 9);
-  }
-
-  let hp = 10 + p.siz * 4 + p.strength + hpFromLevels;
+  let hp = p.siz * HP_PER_SIZE;
+  const hpPerLevel = Math.ceil(p.siz * HP_PER_LEVEL_FACTOR);
+  hp += (p.level - 1) * hpPerLevel;
   if (p.perks && p.perks.hp_bonus) hp += 8;
   return hp;
 }
@@ -77,9 +64,9 @@ function totalWeight(p){ return p.inventory.reduce((s,it) => s + (it.weight||1),
 function bagFull(p){ return p.inventory.length >= INV_SLOTS; }
 function overWeight(p, extra=0){ return (totalWeight(p)+extra) > carryCapacity(p); }
 
-// Melee dmg: weapon + 60% Strength (probabilistic) + small level bonus
+// Melee dmg: baseDamage = floor(Size * 1.5) + Strength, plus weapon + level bonus
 function playerMelee(p){
-  let base = p.weapon.atk + randomRound(p.strength*0.6) + Math.floor((p.level-1)*0.5);
+  let base = Math.floor(p.siz * 1.5) + p.strength + (p.weapon.atk || 0) + Math.floor((p.level-1)*0.5);
   if (p.perks && p.perks.blade_bonus && p.weapon.type === DMG.BLADE) base += 1;
   if (p.perks && p.perks.blunt_bonus && p.weapon.type === DMG.BLUNT) base += 1;
   return base;
@@ -98,15 +85,16 @@ function effectiveAP(p){
 
 function playerDef(p){ return p.armor.def; }
 
-// Accuracy: Visual only (moved from DEX)
+// Accuracy: BASE_ACCURACY + Visual * ACC_PER_VISUAL
 // Armor accPenalty = dodgePenalty / 2, applied as flat subtraction.
 function playerAcc(p){
   const accPen = (p.armor.dodgePenalty || 0) / 2;
-  return 35 + Math.round(p.vis*4) + (p.weapon.acc||0) - accPen;
+  return BASE_ACCURACY + (p.vis * ACC_PER_VISUAL) + (p.weapon.acc||0) - accPen;
 }
-// Dodge: Size only (temporary shim — will be rewired), minus armor dodgePenalty (flat subtraction, floor 0).
+// Dodge: (11 - Size) * DODGE_PER_SIZE_POINT, minus armor dodgePenalty (flat subtraction, floor 0).
+// Smaller creatures dodge more effectively.
 function playerDodge(p){
-  const raw = (p.siz-1) * 3.5;
+  const raw = (11 - p.siz) * DODGE_PER_SIZE_POINT;
   return Math.max(0, raw - (p.armor.dodgePenalty || 0));
 }
 // Crit: scales linearly with Size (temporary shim). Always enabled (no gate).
@@ -173,11 +161,12 @@ function sellValueMul(p, category){
 // Food FED multiplier — Old Physicians book grants +50%
 function foodFedMul(p){ return ((p.perks && p.perks.food_bonus) ? 1.5 : 1.0) * 1.25; }
 
-// Stealth effectiveness — scales linearly with Size (temporary shim)
+// Stealth effectiveness — smaller creatures hide better
+// (11 - Size) * STEALTH_PER_SIZE_POINT
 function stealthBonus(p){
-  let b = p.siz*4;
+  let b = (11 - p.siz) * STEALTH_PER_SIZE_POINT;
   if (p.perks && p.perks.stealth_bonus) b += 20;
-  return b;
+  return Math.max(0, b);
 }
 
 // Perception check — roll modified by Visual. Used for detecting hidden things,
@@ -328,18 +317,16 @@ function restHealAmount(p){
 // ==================== ATTRIBUTE PERK DESCRIPTIONS (for UI) ====================
 function describeAttributePerks(p){
   const lines = [];
-  // Strength: HP bonus
-  if (p.strength > 1){
-    lines.push(`Strength ${p.strength}: +${p.strength} starting HP`);
-  }
-  // Strength: blunt AP scales linearly
-  if (p.strength > 1 && p.weapon && p.weapon.type === DMG.BLUNT){
-    const avgAP = ((p.strength - 1) * (3 / 9));
-    lines.push(`Strength ${p.strength}: blunt AP ~+${avgAP.toFixed(1)} avg`);
-  }
+  // Size: HP
+  lines.push(`Size ${p.siz}: ${p.siz * HP_PER_SIZE} base HP, +${Math.ceil(p.siz * HP_PER_LEVEL_FACTOR)} HP/level`);
+  // Size: base damage contribution
+  lines.push(`Size ${p.siz}: base melee +${Math.floor(p.siz * 1.5)}`);
+  // Size: dodge
+  lines.push(`Size ${p.siz}: dodge ${(11 - p.siz) * DODGE_PER_SIZE_POINT}%`);
+  // Size: stealth
+  lines.push(`Size ${p.siz}: stealth ${(11 - p.siz) * STEALTH_PER_SIZE_POINT}%`);
   // Size: rest heals random amount
   if (p.siz >= 1){
-    const maxHeal = 1 + Math.floor((p.siz - 1) * 0.4 * 1.5);
     lines.push(`Size ${p.siz}: rest heals 1–${Math.max(1,1+Math.floor((p.siz-1)*0.55))} HP (random)`);
   }
   // Size: rest hunger reduction
@@ -355,6 +342,15 @@ function describeAttributePerks(p){
     const pr = poisonResistance(p);
     lines.push(`Size ${p.siz}: poison dmg -${Math.round(pr.damageReduction*100)}%`);
   }
+  // Strength: melee damage contribution
+  if (p.strength > 0){
+    lines.push(`Strength ${p.strength}: melee +${p.strength}`);
+  }
+  // Strength: blunt AP scales linearly
+  if (p.strength > 1 && p.weapon && p.weapon.type === DMG.BLUNT){
+    const avgAP = ((p.strength - 1) * (3 / 9));
+    lines.push(`Strength ${p.strength}: blunt AP ~+${avgAP.toFixed(1)} avg`);
+  }
   // Central: crit damage contribution
   if (p.central >= 2){
     lines.push(`Central ${p.central}: crit dmg ×${(1.5 + p.strength*0.02 + p.central*0.02).toFixed(2)}`);
@@ -369,9 +365,9 @@ function describeAttributePerks(p){
     lines.push(`Central 1: speech stunted — folk speak simply`);
   }
   // Visual: accuracy
-  if (p.vis >= 2){
+  if (p.vis >= 1){
     const accPen = (p.armor.dodgePenalty || 0) / 2;
-    const acc = 35 + Math.round(p.vis*4) + (p.weapon.acc||0) - accPen;
+    const acc = BASE_ACCURACY + (p.vis * ACC_PER_VISUAL) + (p.weapon.acc||0) - accPen;
     lines.push(`Visual ${p.vis}: accuracy ${acc}%`);
   }
   return lines;

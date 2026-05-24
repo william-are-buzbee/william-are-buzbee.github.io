@@ -1,5 +1,6 @@
 // ==================== MONSTER DATA ====================
-import { DMG, LAYER_SURFACE, LAYER_UNDER } from './constants.js';
+import { DMG, LAYER_SURFACE, LAYER_UNDER,
+         HP_PER_SIZE, DODGE_PER_SIZE_POINT, BASE_ACCURACY, ACC_PER_VISUAL } from './constants.js';
 import { T } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 
@@ -250,8 +251,8 @@ const DREAD_KING = ['The Dread King','DREAD_KING',
                '#6a6080',
                {critMul:2.0, nightVision:true}];
 
-// Monster derived stats — mirrors player math where sensible
-function monHP(mon){ return 10 + mon.siz * 4 + (mon.tier||0) * 3; }
+// Monster derived stats — Size & Strength driven (Prompt 2)
+function monHP(mon){ return mon.siz * HP_PER_SIZE; }
 
 // ==================== MONSTER SPEED ====================
 // Speed determines action frequency. 100 = every turn. Lower = skip turns.
@@ -365,11 +366,11 @@ MON.ambush_pred = ['Ambush Predator', 'AMBUSH_PRED',
                '#5a5048',           // dark mottled gray-brown, blends with terrain
                null];
 function monDodge(mon){
-  const raw = (mon.siz - 1) * 2.5 + (mon.central - 1) * 0.8;
+  const raw = (11 - mon.siz) * DODGE_PER_SIZE_POINT;
   const m = (mon.mods && mon.mods.dodgeMul) || 1;
   return Math.max(0, raw * m);
 }
-function monAcc(mon){ return 30 + mon.siz * 3 + mon.central * 1; }
+function monAcc(mon){ return BASE_ACCURACY + (mon.vis * ACC_PER_VISUAL); }
 function monCritChance(mon){
   if (mon.siz < 2) return 0;
   const base = (mon.siz - 2) * 3 + (mon.central - 1) * 1;
@@ -378,8 +379,8 @@ function monCritChance(mon){
 }
 function monCritMult(mon){ return 1.5 + mon.strength * 0.03; }
 function monDamage(mon){
-  // Base swing: weaponAtk + 0.5 Strength + small tier bonus
-  return (mon.weaponAtk || 1) + Math.floor(mon.strength * 0.5);
+  // baseDamage = floor(Size * 1.5) + Strength
+  return Math.floor(mon.siz * 1.5) + mon.strength;
 }
 
 // ==================== VISION PROFILES ====================
