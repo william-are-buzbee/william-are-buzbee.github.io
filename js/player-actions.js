@@ -77,7 +77,7 @@ function restAction(){
     const want = Math.min(state.player.hpMax - state.player.hp, amt);
     const actual = Math.min(want, state.player.fed);
     state.player.hp += actual;
-    const hungerReduction = 1 - (state.player.con * 0.05);
+    const hungerReduction = 1 - (state.player.siz * 0.05);
     const hungerCost = randomRound(actual * hungerReduction);
     state.player.fed -= Math.min(hungerCost, state.player.fed);
     if (actual > 0) log(`You rest. [+${actual} HP · -${hungerCost} FED]`, 'muted');
