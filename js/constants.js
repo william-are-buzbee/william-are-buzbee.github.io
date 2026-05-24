@@ -447,7 +447,7 @@ export function getAtmosphere(x, y) {
 
 // ==================== BALANCE CONSTANTS ====================
 // Single balance curve (formerly "easy" difficulty).
-export const STARTING_POINTS = 16;
+export const STARTING_POINTS = 22;  // Math.round(16 * 1.4) — scaled from 5-stat to 7-stat system
 export const STARTING_GOLD   = 60;
 export const ENEMY_HP_MUL    = 0.75;
 export const ENEMY_ATK_MUL   = 0.70;

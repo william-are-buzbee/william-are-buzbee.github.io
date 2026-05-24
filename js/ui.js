@@ -359,6 +359,106 @@ function updateUISync() {
 //  §6  REGION NAME RESOLVER
 // ───────────────────────────────────────────────────────
 
+// ───────────────────────────────────────────────────────
+//  §6b  STAT GROUP BUILDERS (for status overlay + examine)
+// ───────────────────────────────────────────────────────
+
+/**
+ * Build HTML for player stats in three groups (Physical / Senses / Processing).
+ * For the player's own status overlay: always show Physical, hide sense/processing
+ * stats that are 0.
+ */
+function buildPlayerStatGroupsHTML(p) {
+  let html = '';
+
+  // Physical — always show
+  html += `<div class="ov-section">PHYSICAL</div>`;
+  html += `<div class="ov-row"><span class="ov-k">Size</span><span class="ov-v">${p.siz}</span></div>`;
+  html += `<div class="ov-row"><span class="ov-k">Strength</span><span class="ov-v">${p.strength}</span></div>`;
+
+  // Senses — only show stats > 0
+  const senses = [];
+  if (p.chem > 0)  senses.push({name:'Chemical',  val:p.chem});
+  if (p.vib > 0)   senses.push({name:'Vibration', val:p.vib});
+  if (p.vis > 0)   senses.push({name:'Visual',    val:p.vis});
+  if (senses.length > 0) {
+    html += `<div class="ov-section">SENSES</div>`;
+    for (const s of senses) {
+      html += `<div class="ov-row"><span class="ov-k">${s.name}</span><span class="ov-v">${s.val}</span></div>`;
+    }
+  }
+
+  // Processing — only show stats > 0
+  const proc = [];
+  if (p.central > 0)      proc.push({name:'Central',     val:p.central});
+  if (p.distributed > 0)  proc.push({name:'Distributed', val:p.distributed});
+  if (proc.length > 0) {
+    html += `<div class="ov-section">PROCESSING</div>`;
+    for (const s of proc) {
+      html += `<div class="ov-row"><span class="ov-k">${s.name}</span><span class="ov-v">${s.val}</span></div>`;
+    }
+  }
+
+  return html;
+}
+
+/**
+ * Build HTML for examining a creature's stats in groups.
+ * Gated by the player's Central value — only show stats the player can perceive.
+ * centralThreshold: the minimum Central to reveal stat details.
+ *   Central 1–3: no stat details shown
+ *   Central 4–5: Physical stats only
+ *   Central 6–7: Physical + Senses
+ *   Central 8+:  All stats
+ * If examining self: always full detail (pass fullDetail=true).
+ */
+function buildExamineStatGroupsHTML(target, playerCentral, fullDetail) {
+  if (!fullDetail) {
+    if (playerCentral < 4) return '';  // too low to perceive any stats
+  }
+
+  let html = '';
+  const showPhysical = fullDetail || playerCentral >= 4;
+  const showSenses   = fullDetail || playerCentral >= 6;
+  const showProc     = fullDetail || playerCentral >= 8;
+
+  // Physical
+  if (showPhysical && (target.siz > 0 || target.strength > 0)) {
+    html += `<div class="ov-section">PHYSICAL</div>`;
+    if (target.siz > 0)      html += `<div class="ov-row"><span class="ov-k">Size</span><span class="ov-v">${target.siz}</span></div>`;
+    if (target.strength > 0) html += `<div class="ov-row"><span class="ov-k">Strength</span><span class="ov-v">${target.strength}</span></div>`;
+  }
+
+  // Senses
+  if (showSenses) {
+    const senses = [];
+    if (target.chem > 0)  senses.push({name:'Chemical',  val:target.chem});
+    if (target.vib > 0)   senses.push({name:'Vibration', val:target.vib});
+    if (target.vis > 0)   senses.push({name:'Visual',    val:target.vis});
+    if (senses.length > 0) {
+      html += `<div class="ov-section">SENSES</div>`;
+      for (const s of senses) {
+        html += `<div class="ov-row"><span class="ov-k">${s.name}</span><span class="ov-v">${s.val}</span></div>`;
+      }
+    }
+  }
+
+  // Processing
+  if (showProc) {
+    const proc = [];
+    if (target.central > 0)      proc.push({name:'Central',     val:target.central});
+    if (target.distributed > 0)  proc.push({name:'Distributed', val:target.distributed});
+    if (proc.length > 0) {
+      html += `<div class="ov-section">PROCESSING</div>`;
+      for (const s of proc) {
+        html += `<div class="ov-row"><span class="ov-k">${s.name}</span><span class="ov-v">${s.val}</span></div>`;
+      }
+    }
+  }
+
+  return html;
+}
+
 function getRegionName() {
   const p = state.player;
   if (!p) return '';
@@ -408,6 +508,8 @@ export {
   buildInventoryHTML,
   buildPerksHTML,
   buildEffectsHTML,
+  buildPlayerStatGroupsHTML,
+  buildExamineStatGroupsHTML,
   interactable,
   adjacentFeature,
   effectLabel,

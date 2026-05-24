@@ -3,14 +3,14 @@
 // Handles circular references (bondPartner), Set objects, and item registry refs.
 
 import { state, worlds, covers, monsters, features, groundItems } from './state.js';
-import { LAYER_META } from './constants.js';
+import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR } from './constants.js';
 import { findWeapon, findArmor } from './items.js';
 import { render } from './rendering.js';
 import { log } from './log.js';
 import { updatePlayerFOV } from './fov.js';
 
 const SAVE_KEY = 'overworld_zero_save';
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 // ==================== HELPERS ====================
 
@@ -293,8 +293,8 @@ export function hasSave() {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return false;
     const data = JSON.parse(raw);
-    // Accept current version AND previous version (will be migrated on load)
-    return data && (data.version === SAVE_VERSION || data.version === 1) && data.state && data.state.player;
+    // Accept current version AND previous versions (will be migrated on load)
+    return data && (data.version === SAVE_VERSION || data.version === 2 || data.version === 1) && data.state && data.state.player;
   } catch {
     return false;
   }
@@ -320,16 +320,19 @@ export function loadGame() {
 
     const data = JSON.parse(raw);
 
-    // Version check — accept v1 (will migrate) and current version
-    if (!data || (data.version !== SAVE_VERSION && data.version !== 1)) {
+    // Version check — accept v1, v2 (will migrate) and current version
+    if (!data || (data.version !== SAVE_VERSION && data.version !== 2 && data.version !== 1)) {
       console.warn('[Save] Incompatible save version, discarding.');
       deleteSave();
       return false;
     }
 
-    const needsMigration = data.version === 1;
-    if (needsMigration) {
-      console.log('[Save] Migrating v1 save to v2 (stat system rename).');
+    const needsStatMigration = data.version === 1;   // v1 → rename old stat keys
+    const needsHPRecalc = data.version <= 2;          // v1 & v2 → recalc HP with new formula
+    if (needsStatMigration) {
+      console.log('[Save] Migrating v1 save to v3 (stat system rename + HP recalc).');
+    } else if (data.version === 2) {
+      console.log('[Save] Migrating v2 save to v3 (HP recalc).');
     }
 
     // Validate critical data
@@ -349,7 +352,7 @@ export function loadGame() {
     state.inputLocked = false;
     if (savedState.worldSeed != null) state.worldSeed = savedState.worldSeed;
     if (savedState.cgAttrs) {
-      state.cgAttrs = needsMigration ? migrateCgAttrs(savedState.cgAttrs) : savedState.cgAttrs;
+      state.cgAttrs = needsStatMigration ? migrateCgAttrs(savedState.cgAttrs) : savedState.cgAttrs;
     }
 
     // --- Restore world grids (Object keyed by layerIndex) ---
@@ -377,11 +380,36 @@ export function loadGame() {
     }
 
     // --- Migrate monster stats if loading old save ---
-    if (needsMigration) {
+    if (needsStatMigration) {
       for (const li of Object.keys(monsters)) {
         if (!monsters[li]) continue;
         for (const mon of monsters[li]) {
           if (mon) migrateMonsterStats(mon);
+        }
+      }
+    }
+
+    // --- Recalculate HP for v1/v2 saves using new Size-based formula ---
+    if (needsHPRecalc) {
+      // Recalc player HP
+      const p = state.player;
+      if (p) {
+        const newMax = p.siz * HP_PER_SIZE + (p.level - 1) * Math.ceil(p.siz * HP_PER_LEVEL_FACTOR)
+                       + (p.perks && p.perks.hp_bonus ? 8 : 0);
+        p.hpMax = newMax;
+        p.hp = Math.min(p.hp, p.hpMax);  // clamp current HP to new max
+      }
+      // Recalc monster HP where applicable
+      for (const li of Object.keys(monsters)) {
+        if (!monsters[li]) continue;
+        for (const mon of monsters[li]) {
+          if (!mon) continue;
+          // Monsters have hpMax set from their template; recalc using Size
+          if (mon.siz != null) {
+            const newMax = mon.siz * HP_PER_SIZE + ((mon.level || 1) - 1) * Math.ceil(mon.siz * HP_PER_LEVEL_FACTOR);
+            mon.hpMax = newMax;
+            mon.hp = Math.min(mon.hp, mon.hpMax);
+          }
         }
       }
     }

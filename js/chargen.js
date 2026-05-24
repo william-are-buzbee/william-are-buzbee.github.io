@@ -52,26 +52,40 @@ function renderCharGen(){
     distributed: [],
   };
 
-  const attrs = [
-    {key:'siz', name:'SIZE'},
-    {key:'strength', name:'STR'},
-    {key:'chem', name:'CHEM'},
-    {key:'vib', name:'VIB'},
-    {key:'vis', name:'VIS'},
-    {key:'central', name:'CEN'},
-    {key:'distributed', name:'DIST'},
+  // Stats organized into three visual groups with descriptions
+  const statGroups = [
+    { label: 'PHYSICAL', attrs: [
+      {key:'siz',      name:'SIZE',  desc:'Body mass. More HP, harder to hide, easier to hit.'},
+      {key:'strength', name:'STR',   desc:'Muscular force. Hit harder. Secondary to mass.'},
+    ]},
+    { label: 'SENSES', attrs: [
+      {key:'chem', name:'CHEM', desc:'Scent and taste. Track creatures by chemical trail.'},
+      {key:'vib',  name:'VIB',  desc:'Ground-feel. Detect movement through tremors.'},
+      {key:'vis',  name:'VIS',  desc:'Eyesight. See further, identify more detail.'},
+    ]},
+    { label: 'PROCESSING', attrs: [
+      {key:'central',     name:'CEN',  desc:'Single-brain processing. Memory, reasoning, aimed strikes.'},
+      {key:'distributed', name:'DIST', desc:'Multi-node processing. Reflexes, parallel action.'},
+    ]},
   ];
-  rows.innerHTML = attrs.map(a => {
-    const v = state.cgAttrs[a.key];
-    const dec = v <= 1 ? 'disabled' : '';
-    const inc = (v >= 10 || remaining <= 0) ? 'disabled' : '';
-    return `<div class="chargen-row" data-attr="${a.key}">
-      <span class="lbl">${a.name}</span>
-      <button data-dec="${a.key}" ${dec}>−</button>
-      <span class="val">${v}</span>
-      <button data-inc="${a.key}" ${inc}>+</button>
-    </div>`;
-  }).join('');
+
+  let html = '';
+  for (const group of statGroups) {
+    html += `<div class="chargen-group-label">${group.label}</div>`;
+    for (const a of group.attrs) {
+      const v = state.cgAttrs[a.key];
+      const dec = v <= 1 ? 'disabled' : '';
+      const inc = (v >= 10 || remaining <= 0) ? 'disabled' : '';
+      html += `<div class="chargen-row" data-attr="${a.key}">
+        <span class="lbl">${a.name}</span>
+        <button data-dec="${a.key}" ${dec}>−</button>
+        <span class="val">${v}</span>
+        <button data-inc="${a.key}" ${inc}>+</button>
+        <span class="chargen-desc">${a.desc}</span>
+      </div>`;
+    }
+  }
+  rows.innerHTML = html;
 
   rows.querySelectorAll('[data-inc]').forEach(b => b.onclick = () => {
     const k = b.dataset.inc;
