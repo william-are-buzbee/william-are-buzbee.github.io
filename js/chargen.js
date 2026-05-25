@@ -1,9 +1,11 @@
 // ==================== CHARACTER CREATION + DEATH/VICTORY ====================
 import { state } from './state.js';
-import { STARTING_POINTS } from './constants.js';
+import { STARTING_POINTS, HP_PER_SIZE, HP_PER_LEVEL_FACTOR,
+         DODGE_PER_SIZE_POINT, BASE_ACCURACY, ACC_PER_VISUAL,
+         STEALTH_PER_SIZE_POINT } from './constants.js';
 import { rand, choice } from './rng.js';
 import { freshPlayer, deriveHP, poisonResistance } from './player.js';
-import { findArmor } from './items.js';
+import { findArmor, findWeapon } from './items.js';
 import { initWorld } from './world-logic.js';
 import { log, logEl } from './log.js';
 import { render } from './rendering.js';
@@ -41,10 +43,10 @@ function renderCharGen(){
   const remaining = getCGPool() - (total - 7);  // start 1/1/1/1/1/1/1 = 7, distribute pool
   document.getElementById('cg-pool').textContent = remaining;
 
-  // Which derived stats each attribute affects
+  // Which derived stats each attribute affects (for hover highlighting)
   const attrDerived = {
-    siz: ['hp','hplvl','resthp','regen','poison','dodge','crit','stealth'],
-    strength: ['melee','carry','bluntap','critdmg','hp','poison'],
+    siz: ['hp','hplvl','melee','resthp','regen','poison','dodge','crit','stealth'],
+    strength: ['melee','carry','bluntap','critdmg','poison'],
     chem: [],
     vib: [],
     vis: ['acc','vision'],
@@ -114,54 +116,70 @@ function renderCharGen(){
     });
   });
 
-  // Derived preview — uses the new combined formulas
+  // Derived preview — mirrors player.js formulas exactly
   const startArmor = findArmor('rags');
+  const startWeapon = findWeapon('dagger');
   const armorDodgePen = startArmor.dodgePenalty || 0;
   const armorAccPen = armorDodgePen / 2;
-  const hp = 10 + state.cgAttrs.siz*4 + state.cgAttrs.strength;
+
+  // HP: siz * HP_PER_SIZE (player.js deriveHP, level 1, no perks)
+  const hp = state.cgAttrs.siz * HP_PER_SIZE;
+
+  // HP per level: Math.ceil(siz * HP_PER_LEVEL_FACTOR)
+  const hpPerLvl = Math.ceil(state.cgAttrs.siz * HP_PER_LEVEL_FACTOR);
+
+  // Melee: floor(siz * 1.5) + strength + weapon.atk (level 1, no perks)
+  const melee = Math.floor(state.cgAttrs.siz * 1.5) + state.cgAttrs.strength + (startWeapon.atk || 0);
+
+  // Carry: 4 + strength*2
   const carry = 4 + state.cgAttrs.strength*2;
-  const melee = 2 + Math.round(state.cgAttrs.strength*0.6);  // +2 from dagger, approximate
+
+  // Armor piercing (blunt only, avg): (strength-1) * (3/9)
   const avgAP = ((state.cgAttrs.strength - 1) * (3 / 9));
-  // Hit chance: 35 + Visual*4 + weapon.acc (5 for dagger) − armor accPenalty, clamped 5–95
-  const rawAcc = 35 + state.cgAttrs.vis*4 + 5 - armorAccPen;
+
+  // Accuracy: BASE_ACCURACY + vis * ACC_PER_VISUAL + weapon.acc − armor accPenalty
+  const rawAcc = BASE_ACCURACY + state.cgAttrs.vis * ACC_PER_VISUAL + (startWeapon.acc || 0) - armorAccPen;
   const hitChance = Math.min(95, Math.max(5, rawAcc));
-  // Dodge: Size only (temporary shim), minus armor dodgePenalty (flat), floor 0
-  const dodge = Math.max(0, (state.cgAttrs.siz-1)*3.5 - armorDodgePen);
-  // Crit: Size only (temporary shim), always enabled
-  const crit = Math.min(60, (state.cgAttrs.siz - 1) * 4.5) + 3;
-  // Crit mult: 50/50 Strength and Central
+
+  // Dodge: (11 - siz) * DODGE_PER_SIZE_POINT − armor dodgePenalty, floor 0
+  // Smaller = more dodge. Size 1 = 30%, Size 10 = 3%.
+  const dodge = Math.max(0, (11 - state.cgAttrs.siz) * DODGE_PER_SIZE_POINT - armorDodgePen);
+
+  // Crit chance: (siz-1) * 4.5, capped at 60, + weapon crit
+  const crit = Math.min(60, (state.cgAttrs.siz - 1) * 4.5) + (startWeapon.crit || 0);
+
+  // Crit mult: 1.5 + strength*0.02 + central*0.02
   const critMult = 1.5 + state.cgAttrs.strength*0.02 + state.cgAttrs.central*0.02;
-  const xpM = 0.043 + (state.cgAttrs.central - 1) * 0.0168;
-  const xpBaseline = 0.043; // Central 1 baseline
+
+  // XP multiplier
+  const xpM = 0.0573 + (state.cgAttrs.central - 1) * 0.0224;
+  const xpBaseline = 0.0573;
   const xpBonusPct = Math.round(((xpM / xpBaseline) - 1) * 100);
   const xpDisplay = xpBonusPct > 0 ? `100% +${xpBonusPct}%` : '100%';
-  // HP per level
-  const totalGain = 18 + (state.cgAttrs.siz-1)*3;
-  const hpLvlLo = Math.floor(totalGain / 9);
-  const hpLvlHi = hpLvlLo + (totalGain % 9 > 0 ? 1 : 0);
-  const hpLvl = hpLvlLo === hpLvlHi ? `+${hpLvlLo}` : `+${hpLvlLo}–${hpLvlHi}`;
-  // Rest HP
+
+  // Rest HP: random 1 to max, where max = 1 + floor((siz-1)*0.55)
   const maxRest = Math.max(1, 1 + Math.floor((state.cgAttrs.siz-1)*0.55));
-  // Passive regen interval
+
+  // Passive regen interval: Size 1 = every 55 turns, Size 10 = every 5 turns
   const regenIv = Math.round(55 + (state.cgAttrs.siz-1) * (5-55)/9);
-  // Stealth
-  const stealth = state.cgAttrs.siz * 4;
-  // Shop discount (mirrors buyPriceMul)
-  let disc = (state.cgAttrs.central - 1) * 0.02;
-  if (state.cgAttrs.central >= 8) disc += 0.06;
-  if (state.cgAttrs.central >= 9) disc += 0.04;
-  if (state.cgAttrs.central >= 10) disc += 0.04;
-  disc = Math.min(disc, 0.30);
-  const shopStr = disc > 0 ? `−${Math.round(disc*100)}%` : '—';
+
+  // Stealth: (11 - siz) * STEALTH_PER_SIZE_POINT. Smaller = stealthier.
+  const stealth = (11 - state.cgAttrs.siz) * STEALTH_PER_SIZE_POINT;
+
+  // Shop discount (mirrors buyPriceMul — standard category)
+  const shopDisc = Math.min(0.18, (state.cgAttrs.central - 1) * 0.02);
+  const shopStr = shopDisc > 0 ? `−${Math.round(shopDisc*100)}%` : '—';
+
   // Sell value
-  const sellPct = Math.round((0.25 + (state.cgAttrs.central-1) * (0.35/9))*100);
-  // Vision radius (mirrors playerViewRadius)
-  const visionR = Math.round(4 + (state.cgAttrs.vis - 1) * (4 / 9));
+  const sellPct = Math.round((0.25 + (state.cgAttrs.central-1) * 0.02)*100);
+
+  // Vision radius: baseViewRadius = 3 + (vis-1) * (4/9)
+  const visionR = Math.round(3 + (state.cgAttrs.vis - 1) * (4 / 9));
 
   document.getElementById('cg-derived').innerHTML = `
     <div class="kv" id="cg-d-hp"><span class="k">Health</span><span class="v">${hp}</span></div>
-    <div class="kv" id="cg-d-hplvl"><span class="k">Health per Level</span><span class="v">${hpLvl}</span></div>
-    <div class="kv" id="cg-d-melee"><span class="k">Melee Damage</span><span class="v">~${melee}</span></div>
+    <div class="kv" id="cg-d-hplvl"><span class="k">Health per Level</span><span class="v">+${hpPerLvl}</span></div>
+    <div class="kv" id="cg-d-melee"><span class="k">Melee Damage</span><span class="v">${melee} <span style="color:#666;font-weight:normal;font-size:7px;">(${Math.floor(state.cgAttrs.siz*1.5)}+${state.cgAttrs.strength}+${startWeapon.atk||0})</span></span></div>
     <div class="kv" id="cg-d-acc"><span class="k">Hit Chance</span><span class="v">${hitChance}%</span></div>
     <div class="kv" id="cg-d-dodge"><span class="k">Dodge Chance</span><span class="v">${Math.round(dodge)}%</span></div>
     <div class="kv" id="cg-d-crit"><span class="k">Critical Chance</span><span class="v">${Math.round(crit)}%</span></div>
