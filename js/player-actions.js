@@ -1,6 +1,6 @@
 // ==================== PLAYER ACTIONS ====================
 import { state, worlds, covers } from './state.js';
-import { FED_MAX, TURN_AGILITY_PER_POINT } from './constants.js';
+import { FED_MAX, TURN_AGILITY_PER_POINT, facingSteps } from './constants.js';
 import { isWalkable, terrainName } from './terrain.js';
 import { rand, randi, randomRound } from './rng.js';
 import { FOOD, POTIONS, BOOKS, findWeapon, findArmor } from './items.js';
@@ -45,7 +45,9 @@ function attemptMove(dx, dy){
   // On success, face and act in one action.
   const needsTurn = (state.facing.dx !== dx || state.facing.dy !== dy);
   if (needsTurn) {
-    const instantTurnChance = (11 - state.player.siz) * TURN_AGILITY_PER_POINT / 100;
+    const steps = facingSteps(state.facing.dx, state.facing.dy, dx, dy);
+    const baseChance = (11 - state.player.siz) * TURN_AGILITY_PER_POINT / 100;
+    const instantTurnChance = Math.min(1, baseChance * (5 - steps) / 3);
     state.facing.dx = dx;
     state.facing.dy = dy;
     if (Math.random() >= instantTurnChance) {

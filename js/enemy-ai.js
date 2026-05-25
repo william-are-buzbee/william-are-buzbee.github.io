@@ -3,7 +3,8 @@
 
 import { state, worlds, covers, monsters } from './state.js';
 import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
-         MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, TURN_AGILITY_PER_POINT } from './constants.js';
+         MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, TURN_AGILITY_PER_POINT,
+         facingSteps } from './constants.js';
 import { T, isWalkable } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -492,7 +493,9 @@ function enemyAct(mon){
     // Only roll if the creature actually needs to change direction
     if ((desiredDx !== 0 || desiredDy !== 0)
         && (mon.facing.dx !== desiredDx || mon.facing.dy !== desiredDy)) {
-      const instantTurnChance = (11 - mon.siz) * TURN_AGILITY_PER_POINT / 100;
+      const steps = facingSteps(mon.facing.dx, mon.facing.dy, desiredDx, desiredDy);
+      const baseChance = (11 - mon.siz) * TURN_AGILITY_PER_POINT / 100;
+      const instantTurnChance = Math.min(1, baseChance * (5 - steps) / 3);
       mon.facing.dx = desiredDx;
       mon.facing.dy = desiredDy;
       if (Math.random() >= instantTurnChance) {

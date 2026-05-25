@@ -470,6 +470,25 @@ export const MIN_ACTION_CHANCE     = 0.25;  // floor — even the slowest enemy 
 // Instant turn agility — smaller creatures change facing for free more often.
 export const TURN_AGILITY_PER_POINT = 10;   // instantTurnChance = (11 - Size) * TURN_AGILITY_PER_POINT, as %
 
+// Angular scaling for instant turn: the base chance above is calibrated for a
+// 90° turn (2 steps of 45°).  Smaller turns are easier, larger turns are harder.
+//   chance = baseChance * (5 - steps) / 3
+// Steps 1 (45°) → ×1.33,  2 (90°) → ×1.0,  3 (135°) → ×0.67,  4 (180°) → ×0.33
+
+// Compute the minimum number of 45° increments between two facing directions.
+// Returns 0–4 (0 = same direction, 4 = full reversal).
+const _DIRS = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
+export function facingSteps(dx1, dy1, dx2, dy2) {
+  let i1 = -1, i2 = -1;
+  for (let i = 0; i < 8; i++) {
+    if (_DIRS[i][0] === dx1 && _DIRS[i][1] === dy1) i1 = i;
+    if (_DIRS[i][0] === dx2 && _DIRS[i][1] === dy2) i2 = i;
+  }
+  if (i1 < 0 || i2 < 0) return 2; // fallback to 90° if direction is invalid
+  const diff = Math.abs(i1 - i2);
+  return Math.min(diff, 8 - diff);
+}
+
 // ==================== LANDMARKS ====================
 // Structures placed at biome-target-map scale.  Each entry defines:
 //   type  — identifier string matching a generator in LANDMARK_GENERATORS
