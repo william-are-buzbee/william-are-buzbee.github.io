@@ -616,8 +616,8 @@
   .chargen{
     display:flex;
     flex-direction:column;
-    width:92%;
-    max-width:540px;
+    width:96%;
+    max-width:620px;
     padding:18px;
   }
   .chargen h1{
@@ -643,9 +643,20 @@
   }
   .chargen .pool-label b{color:var(--accent);font-weight:bold;font-size:12px;}
 
+  .chargen-group-label{
+    font-size:7px;
+    color:var(--fg-dim);
+    letter-spacing:3px;
+    text-transform:uppercase;
+    padding:8px 4px 3px;
+    border-bottom:1px solid var(--fg-dark);
+    margin-top:4px;
+  }
+  .chargen-group-label:first-child{margin-top:0;padding-top:4px;}
+
   .chargen-row{
     display:grid;
-    grid-template-columns:60px 28px 36px 28px;
+    grid-template-columns:60px 28px 36px 28px 1fr;
     align-items:center;
     gap:4px;
     padding:6px 4px;
@@ -669,6 +680,15 @@
   .chargen-row button:hover{background:var(--fg);color:#000;}
   .chargen-row button:disabled{opacity:0.2;cursor:not-allowed;}
   .chargen-row .val{text-align:center;font-weight:bold;font-size:11px;color:var(--fg);}
+  .chargen-desc{
+    font-size:7px;
+    color:#666;
+    letter-spacing:0.5px;
+    padding-left:6px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
 
   .chargen-derived{
     display:grid;
