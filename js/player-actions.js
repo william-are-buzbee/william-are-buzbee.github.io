@@ -1,6 +1,6 @@
 // ==================== PLAYER ACTIONS ====================
 import { state, worlds, covers } from './state.js';
-import { FED_MAX, TURN_AGILITY_PER_POINT, facingSteps } from './constants.js';
+import { FED_MAX, STAT_MAX, TURN_AGILITY_COEFF, facingSteps } from './constants.js';
 import { isWalkable, terrainName } from './terrain.js';
 import { rand, randi, randomRound } from './rng.js';
 import { FOOD, POTIONS, BOOKS, findWeapon, findArmor } from './items.js';
@@ -46,7 +46,7 @@ function attemptMove(dx, dy){
   const needsTurn = (state.facing.dx !== dx || state.facing.dy !== dy);
   if (needsTurn) {
     const steps = facingSteps(state.facing.dx, state.facing.dy, dx, dy);
-    const baseChance = (11 - state.player.siz) * TURN_AGILITY_PER_POINT / 100;
+    const baseChance = (STAT_MAX + 1 - state.player.siz) * TURN_AGILITY_COEFF / 100;
     const instantTurnChance = Math.min(1, baseChance * (5 - steps) / 3);
     state.facing.dx = dx;
     state.facing.dy = dy;
@@ -95,7 +95,7 @@ function restAction(){
     const want = Math.min(state.player.hpMax - state.player.hp, amt);
     const actual = Math.min(want, state.player.fed);
     state.player.hp += actual;
-    const hungerReduction = 1 - (state.player.siz * 0.05);
+    const hungerReduction = 1 - (state.player.siz * 0.005);
     const hungerCost = randomRound(actual * hungerReduction);
     state.player.fed -= Math.min(hungerCost, state.player.fed);
     if (actual > 0) log(`You rest. [+${actual} HP · -${hungerCost} FED]`, 'muted');
