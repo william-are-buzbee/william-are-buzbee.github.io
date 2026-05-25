@@ -463,6 +463,13 @@ export const BASE_ACCURACY         = 70;
 export const ACC_PER_VISUAL        = 3;    // accuracy = BASE_ACCURACY + (Visual * ACC_PER_VISUAL)
 export const STEALTH_PER_SIZE_POINT = 4;   // stealthEffectiveness = (11 - Size) * STEALTH_PER_SIZE_POINT
 
+// Relative speed system — power-to-weight ratio governs enemy action frequency.
+export const MAX_BONUS_MOVE_CHANCE = 0.50;  // cap on bonus move probability (50%)
+export const MIN_ACTION_CHANCE     = 0.25;  // floor — even the slowest enemy acts at least 25% of turns
+
+// Instant turn agility — smaller creatures change facing for free more often.
+export const TURN_AGILITY_PER_POINT = 10;   // instantTurnChance = (11 - Size) * TURN_AGILITY_PER_POINT, as %
+
 // ==================== LANDMARKS ====================
 // Structures placed at biome-target-map scale.  Each entry defines:
 //   type  — identifier string matching a generator in LANDMARK_GENERATORS

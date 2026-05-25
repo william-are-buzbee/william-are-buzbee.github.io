@@ -2,7 +2,8 @@
 // End-of-turn processing, monster state machine, movement, and melee.
 
 import { state, worlds, covers, monsters } from './state.js';
-import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone } from './constants.js';
+import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
+         MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, TURN_AGILITY_PER_POINT } from './constants.js';
 import { T, isWalkable } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -198,6 +199,67 @@ function playerAdjacentToWater(layer){
   return false;
 }
 
+// ==================== BONUS MOVE (relative speed system) ====================
+// Called after all normal enemy actions for enemies with PTW ratio > player's.
+// Movement only — no attacks, no special abilities, no interactions.
+// Uses the enemy's existing AI movement logic for direction.
+function performBonusMove(mon){
+  const d = chebyshev(mon.x, mon.y, state.player.x, state.player.y);
+
+  // Hare: flee movement (bonus move makes them harder to catch)
+  if (mon.key === 'hare' || (mon.icon && mon.icon === 'HARE')){
+    if (d <= 4 || mon.wasAttacked || mon.alerted){
+      const fdx = Math.sign(mon.x - state.player.x);
+      const fdy = Math.sign(mon.y - state.player.y);
+      const nx = mon.x + (fdx || (rand()<0.5?1:-1));
+      const ny = mon.y + (fdy || (rand()<0.5?1:-1));
+      if (inBounds(state.player.layer, nx, ny)
+          && isWalkable(worlds[state.player.layer][ny][nx], getCover(state.player.layer, nx, ny))
+          && !monsterAt(nx,ny,state.player.layer) && !(nx===state.player.x && ny===state.player.y)
+          && !wouldExceedTerritory(mon, nx, ny)){
+        if (mon.facing) { mon.facing.dx = Math.sign(nx - mon.x); mon.facing.dy = Math.sign(ny - mon.y); }
+        mon.x = nx; mon.y = ny;
+      }
+    } else {
+      if (rand() < 0.15) wanderInTerritory(mon);
+    }
+    return;
+  }
+
+  // Mushroom / sync swarm — drift (no touch attack)
+  if (mon.clade && mon.clade.sync){
+    if (mon.swarmPhase === 'mobbing' || mon.swarmPhase === 'coalescing'){
+      if (d > 1) moveMonsterToward(mon, state.player.x, state.player.y, true);
+    } else {
+      if (rand() < 0.08) wanderInTerritory(mon);
+    }
+    return;
+  }
+
+  // Chase state — move toward target (no attack — movementOnly flag)
+  if (mon.aiState === 'chase'){
+    if (canSeePlayer(mon)){
+      moveMonsterToward(mon, state.player.x, state.player.y, true);
+    } else if (mon.lastSeenX >= 0){
+      moveMonsterToward(mon, mon.lastSeenX, mon.lastSeenY, true);
+    }
+    return;
+  }
+
+  // Search state — wander toward last seen
+  if (mon.aiState === 'search'){
+    if (mon.lastSeenX >= 0 && rand() < 0.5){
+      moveMonsterToward(mon, mon.lastSeenX, mon.lastSeenY, true);
+    } else {
+      wanderInTerritory(mon);
+    }
+    return;
+  }
+
+  // Idle — occasional drift
+  if (rand() < 0.15) wanderInTerritory(mon);
+}
+
  function endPlayerTurn(action){
     const player = state.player; // Add this line to define 'player'
   turnCount++;
@@ -279,10 +341,26 @@ function playerAdjacentToWater(layer){
   // Enemies act — only on current layer, town cells are safe
   if (!isTownCell(state.player.layer)){
     const mons = monstersHere();
+    // Phase 1: Each enemy takes its normal action (speed skip + instant turn + AI)
     for (const m of mons){
       if (m.hp <= 0) continue;
       enemyAct(m);
       if (state.player.hp <= 0){ _onPlayerDeathCallback && _onPlayerDeathCallback(); return; }
+    }
+    // Phase 2: Each enemy that acted normally rolls for a bonus move (faster enemies only)
+    for (const m of mons){
+      if (m.hp <= 0) continue;
+      if (!m._actedNormally) continue;
+      const monPTW  = m.strength / m.siz;
+      const plrPTW  = state.player.strength / state.player.siz;
+      const ratio   = monPTW / plrPTW;
+      if (ratio >= 1) {
+        const bonusChance = Math.min(ratio - 1, MAX_BONUS_MOVE_CHANCE);
+        if (Math.random() < bonusChance) {
+          performBonusMove(m);
+        }
+      }
+      m._actedNormally = false;  // clean up flag
     }
   }
   for (const layer of Object.keys(monsters)){
@@ -369,12 +447,65 @@ function canSeePlayer(mon){
 }
 
 function enemyAct(mon){
-  // Speed system — accumulate energy, act only when >= 100
-  mon.energy = (mon.energy || 0) + (mon.speed || 60);
-  if (mon.energy < 100) return;
-  mon.energy -= 100;
+  // ---- Relative speed system (PTW-based) ----
+  // Compare enemy's power-to-weight ratio to the player's.
+  // Slower enemies may skip their turn; faster enemies always act
+  // (and may earn a bonus move in the separate pass after all normal actions).
+  const player = state.player;
+  const monPTW  = mon.strength / mon.siz;
+  const plrPTW  = player.strength / player.siz;
+  const spdRatio = monPTW / plrPTW;
+
+  mon._actedNormally = false;  // reset — set true if the enemy takes a normal action
+
+  if (spdRatio < 1) {
+    // Enemy is slower — may skip this turn entirely
+    const actionChance = Math.max(spdRatio, MIN_ACTION_CHANCE);
+    if (Math.random() >= actionChance) {
+      return;  // skipped — no action at all this turn
+    }
+  }
+  // If spdRatio >= 1, enemy always acts (bonus move handled in endPlayerTurn)
 
   const d = chebyshev(mon.x, mon.y, state.player.x, state.player.y);
+
+  // ---- Instant turn check for cone-vision enemies ----
+  // If the enemy has cone vision and needs to face a new direction for its
+  // intended action, roll against its Size-based instant turn chance.
+  // On failure, the enemy spends its action turning only.
+  if (mon.visionType === 'cone' && mon.facing) {
+    let desiredDx = 0, desiredDy = 0;
+    // Determine desired direction from current AI state
+    if (mon.key === 'hare' && (d <= 4 || mon.wasAttacked || mon.alerted)) {
+      // Fleeing — away from player
+      desiredDx = Math.sign(mon.x - player.x) || (Math.random() < 0.5 ? 1 : -1);
+      desiredDy = Math.sign(mon.y - player.y) || (Math.random() < 0.5 ? 1 : -1);
+    } else if (mon.aiState === 'chase') {
+      const tx = (mon.lastSeenX >= 0 && !canSeePlayerTile(mon)) ? mon.lastSeenX : player.x;
+      const ty = (mon.lastSeenY >= 0 && !canSeePlayerTile(mon)) ? mon.lastSeenY : player.y;
+      desiredDx = Math.sign(tx - mon.x);
+      desiredDy = Math.sign(ty - mon.y);
+    } else if (mon.aiState === 'search' && mon.lastSeenX >= 0) {
+      desiredDx = Math.sign(mon.lastSeenX - mon.x);
+      desiredDy = Math.sign(mon.lastSeenY - mon.y);
+    }
+    // Only roll if the creature actually needs to change direction
+    if ((desiredDx !== 0 || desiredDy !== 0)
+        && (mon.facing.dx !== desiredDx || mon.facing.dy !== desiredDy)) {
+      const instantTurnChance = (11 - mon.siz) * TURN_AGILITY_PER_POINT / 100;
+      mon.facing.dx = desiredDx;
+      mon.facing.dy = desiredDy;
+      if (Math.random() >= instantTurnChance) {
+        // Failed — spent action turning, no further action
+        mon._actedNormally = true;  // counts as having acted (for bonus move eligibility)
+        return;
+      }
+    }
+  }
+
+  // Enemy passed speed + turn checks — mark as having acted normally.
+  // This flag is read by the bonus move pass in endPlayerTurn.
+  mon._actedNormally = true;
 
   // Eels always heal +1 HP in water per turn
   // T.WATER, T.UWATER, T.BEACH are ground types — read from worlds directly
@@ -468,6 +599,8 @@ function enemyAct(mon){
           && isWalkable(worlds[state.player.layer][ny][nx], getCover(state.player.layer, nx, ny))
           && !monsterAt(nx,ny,state.player.layer) && !(nx===state.player.x && ny===state.player.y)
           && !wouldExceedTerritory(mon, nx, ny)){
+        // Update facing to match flee direction
+        if (mon.facing) { mon.facing.dx = Math.sign(nx - mon.x); mon.facing.dy = Math.sign(ny - mon.y); }
         mon.x = nx; mon.y = ny;
       } else {
         wanderInTerritory(mon);
@@ -579,6 +712,7 @@ function enemyAct(mon){
       if (inBounds(state.player.layer, nx, ny)
           && isWalkable(worlds[state.player.layer][ny][nx], getCover(state.player.layer, nx, ny))
           && !monsterAt(nx,ny,state.player.layer)){
+        if (mon.facing) { mon.facing.dx = Math.sign(nx - mon.x); mon.facing.dy = Math.sign(ny - mon.y); }
         mon.x = nx; mon.y = ny;
       }
       return;
@@ -1036,11 +1170,13 @@ function wanderInTerritory(mon){
     const nt = cover || ground;
     if (mon.territory.length && !mon.territory.includes(nt) && rand() < 0.7) continue;
     mon.x = nx; mon.y = ny;
+    // Update facing to match wander direction
+    if (mon.facing) { mon.facing.dx = dx; mon.facing.dy = dy; }
     return;
   }
 }
 
-function moveMonsterToward(mon, tx, ty){
+function moveMonsterToward(mon, tx, ty, movementOnly){
   const dx = Math.sign(tx - mon.x);
   const dy = Math.sign(ty - mon.y);
   const attempts = [];
@@ -1053,7 +1189,10 @@ function moveMonsterToward(mon, tx, ty){
     if (!inBounds(state.player.layer, nx, ny)) continue;
     if (!isWalkable(worlds[state.player.layer][ny][nx], getCover(state.player.layer, nx, ny))) continue;
     // Water-locked monsters can melee the player from water, but never step on land
-    if (nx === state.player.x && ny === state.player.y){ monsterMelee(mon); return; }
+    if (nx === state.player.x && ny === state.player.y){
+      if (movementOnly) return;  // bonus move — no attacks allowed
+      monsterMelee(mon); return;
+    }
     if (waterLock && !WATER_TILES.has(worlds[state.player.layer][ny][nx])) continue;
     // Biome leash: never step onto forbidden tiles
     if (isForbiddenTile(mon, state.player.layer, nx, ny)) continue;
@@ -1066,6 +1205,8 @@ function moveMonsterToward(mon, tx, ty){
     }
     if (monsterAt(nx, ny, state.player.layer)) continue;
     mon.x = nx; mon.y = ny;
+    // Update facing to match movement direction
+    if (mon.facing) { mon.facing.dx = ax; mon.facing.dy = ay; }
     return;
   }
 }

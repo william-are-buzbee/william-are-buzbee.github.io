@@ -7,7 +7,7 @@ import { rand, randi, roll100 } from './rng.js';
 const MON = {
   // PLAINS
   hare:       ['Small Grazer',   'SMALL_GRAZER',
-               2, 1, 2, 5, 4, 2, 4,  1, 0,
+               2, 3, 2, 5, 4, 2, 4,  1, 0,
                2,  [0,1],
                ['flesh','beast'], DMG.BLADE,
                [T.GRASS],          LAYER_SURFACE,
@@ -641,6 +641,15 @@ function spawnMonster(key){
   if (vp) {
     m.visionType = vp.visionType;
     if (vp.coneAngle != null) m.coneAngle = vp.coneAngle;
+  }
+  // Initialize facing direction for cone-vision creatures.
+  // Radius-vision creatures have no facing (set to null).
+  if (m.visionType === 'cone') {
+    const dirs = [[0,1],[0,-1],[1,0],[-1,0],[1,1],[1,-1],[-1,1],[-1,-1]];
+    const pick = dirs[randi(dirs.length)];
+    m.facing = { dx: pick[0], dy: pick[1] };
+  } else {
+    m.facing = null;
   }
   // Attach clade trait data (null for creatures without clade biology)
   m.clade = getCladeData(key);

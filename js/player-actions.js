@@ -1,6 +1,6 @@
 // ==================== PLAYER ACTIONS ====================
 import { state, worlds, covers } from './state.js';
-import { FED_MAX } from './constants.js';
+import { FED_MAX, TURN_AGILITY_PER_POINT } from './constants.js';
 import { isWalkable, terrainName } from './terrain.js';
 import { rand, randi, randomRound } from './rng.js';
 import { FOOD, POTIONS, BOOKS, findWeapon, findArmor } from './items.js';
@@ -40,9 +40,25 @@ function attemptMove(dx, dy){
   if (!inBounds(state.player.layer, nx, ny)){ log('The world ends here.', 'muted'); return; }
   if (isImpassable(state.player.layer, nx, ny)) return;
 
-  // Update facing to match movement direction
-  state.facing.dx = dx;
-  state.facing.dy = dy;
+  // Instant turn check — if pressing a direction we're not facing, roll for free turn.
+  // On failure, spend the action just turning (face the new direction, turn over).
+  // On success, face and act in one action.
+  const needsTurn = (state.facing.dx !== dx || state.facing.dy !== dy);
+  if (needsTurn) {
+    const instantTurnChance = (11 - state.player.siz) * TURN_AGILITY_PER_POINT / 100;
+    state.facing.dx = dx;
+    state.facing.dy = dy;
+    if (Math.random() >= instantTurnChance) {
+      // Failed — spend the action turning only
+      endPlayerTurn('turn');
+      return;
+    }
+    // Success — continue to move/attack below
+  } else {
+    // Already facing this direction — no turn needed
+    state.facing.dx = dx;
+    state.facing.dy = dy;
+  }
 
   const mon = monsterAt(nx, ny, state.player.layer);
   if (mon){
