@@ -595,8 +595,8 @@ function buildMonsterCard(mon, player, ground, cover){
   h += `<span><span class="ex-dim">DEF</span> <span class="ex-val">${mon.def}</span></span>`;
   h += `</div>`;
 
-  // --- Central 3+: attributes, accuracy, dodge ---
-  if (pCentral >= 3){
+  // --- Central 30+: attributes, accuracy, dodge ---
+  if (pCentral >= 30){
     h += `<div class="ex-sep"></div>`;
     h += `<div class="ex-attrs">`;
     h += `<span><span class="ex-dim">Size</span> ${mon.siz}</span>`;
@@ -614,8 +614,8 @@ function buildMonsterCard(mon, player, ground, cover){
     h += `</div>`;
   }
 
-  // --- Central 5+: crit, AP, stealth, specials ---
-  if (pCentral >= 5){
+  // --- Central 50+: crit, AP, stealth, specials ---
+  if (pCentral >= 50){
     h += `<div class="ex-sep"></div>`;
     const critCh = monCritChance(mon);
     const critMl = monCritMult(mon);
@@ -653,8 +653,8 @@ function buildMonsterCard(mon, player, ground, cover){
     }
   }
 
-  // --- Central 7+: behavior, leash, biome, night vision ---
-  if (pCentral >= 7){
+  // --- Central 70+: behavior, leash, biome, night vision ---
+  if (pCentral >= 70){
     h += `<div class="ex-sep"></div>`;
     const hostNames = ['Passive','Territorial','Aggressive'];
     const traits = [];
@@ -676,12 +676,12 @@ function buildMonsterCard(mon, player, ground, cover){
     h += `<div class="ex-row"><span class="ex-dim">Speed</span> <span class="ex-val">${mon.speed || 60}</span></div>`;
   }
 
-  // --- Central 9+: exact damage range, loot hints ---
-  if (pCentral >= 9){
+  // --- Central 90+: exact damage range, loot hints ---
+  if (pCentral >= 90){
     h += `<div class="ex-sep"></div>`;
     const baseDmg = monDamage(mon);
-    const low = Math.max(1, baseDmg - Math.floor(mon.strength * 0.25));
-    const high = baseDmg + Math.floor(mon.strength * 0.25);
+    const low = Math.max(1, baseDmg - Math.floor(mon.strength * 0.025));
+    const high = baseDmg + Math.floor(mon.strength * 0.025);
     h += `<div class="ex-row"><span class="ex-dim">Dmg Range</span> <span class="ex-val">${low}–${high} ${mon.dmgType}</span></div>`;
     if (mon.goldRange){
       h += `<div class="ex-row"><span class="ex-dim">Loot</span> <span class="ex-val">${mon.goldRange[0]}–${mon.goldRange[1]} gold</span></div>`;
@@ -756,7 +756,7 @@ function buildPlayerCard(p){
   // Armor piercing (only if weapon has any)
   const ap = p.weapon.ap || 0;
   let displayAP = ap;
-  if (p.weapon.type === DMG.BLUNT) displayAP += (p.strength - 1) * (3 / 9);
+  if (p.weapon.type === DMG.BLUNT) displayAP += (p.strength / 10 - 1) * (3 / 9);
   if (displayAP > 0){
     h += `<div class="ex-row"><span class="ex-dim">Armor Pierce</span> <span class="ex-val">~${displayAP.toFixed(1)}</span></div>`;
   }

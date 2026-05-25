@@ -1,13 +1,14 @@
 // ==================== MONSTER DATA ====================
 import { DMG, LAYER_SURFACE, LAYER_UNDER,
-         HP_PER_SIZE, DODGE_PER_SIZE_POINT, BASE_ACCURACY, ACC_PER_VISUAL } from './constants.js';
+         HP_PER_SIZE, STAT_MAX, MAX_DODGE_CHANCE, BASE_ACCURACY, ACC_PER_VISUAL,
+         DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF } from './constants.js';
 import { T } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 
 const MON = {
   // PLAINS
   hare:       ['Small Grazer',   'SMALL_GRAZER',
-               2, 3, 2, 5, 4, 2, 4,  1, 0,
+               20, 30, 20, 50, 40, 20, 40,  1, 0,
                2,  [0,1],
                ['flesh','beast'], DMG.BLADE,
                [T.GRASS],          LAYER_SURFACE,
@@ -19,7 +20,7 @@ const MON = {
                null],
   // FOREST
   wolf:       ['Meso-Predator',  'MESO_PRED',
-               4, 4, 6, 1, 3, 5, 1,  2, 1,
+               40, 40, 60, 10, 30, 50, 10,  2, 1,
                12, [2,6],
                ['flesh','beast'], DMG.BLADE,
                [T.FOREST],            LAYER_SURFACE,
@@ -30,7 +31,7 @@ const MON = {
                '#5a4a40',           // dark warm gray-brown, wrinkled skin
                {nightVision:true}],
   goblin:     ['Forest Goblin',  'GOBLIN',
-               3, 3, 4, 0, 4, 4, 0,  2, 2,
+               30, 30, 40, 0, 40, 40, 0,  2, 2,
                12, [6,16],
                ['flesh'], DMG.BLADE,
                [T.FOREST], LAYER_SURFACE,
@@ -41,7 +42,7 @@ const MON = {
                '#887040',           // dirty brown — distinct from treant green
                {nightVision:true}],
   treant:     ['Treant',         'TREANT',
-               8, 8, 2, 0, 2, 1, 0,  3, 5,
+               80, 80, 20, 0, 20, 10, 0,  3, 5,
                35, [8,18],
                ['plant'], DMG.BLUNT,
                [T.FOREST], LAYER_SURFACE,
@@ -53,7 +54,7 @@ const MON = {
                null],
   // DESERT
   scorpion:   ['Dune Scorpion',  'SCORPION',
-               3, 4, 3, 0, 3, 1, 0,  3, 4,
+               30, 40, 30, 0, 30, 10, 0,  3, 4,
                22, [4,12],
                ['insect','shelled'], DMG.POISON,
                [T.SAND],           LAYER_SURFACE,
@@ -64,7 +65,7 @@ const MON = {
                '#a88838',           // tan-yellow
                {nightVision:true}],
   lurker:     ['Sand Lurker',    'SAND_LURKER',
-               4, 5, 5, 0, 5, 2, 0,  3, 3,
+               40, 50, 50, 0, 50, 20, 0,  3, 3,
                24, [6,16],
                ['flesh','beast'], DMG.BLADE,
                [T.SAND],           LAYER_SURFACE,
@@ -75,7 +76,7 @@ const MON = {
                '#c4a068',
                {nightVision:true}],
   mummy:      ['Desert Mummy',   'MUMMY',
-               6, 6, 2, 0, 2, 3, 0,  3, 3,
+               60, 60, 20, 0, 20, 30, 0,  3, 3,
                32, [12,28],
                ['flesh','undead'], DMG.BLUNT,
                [T.SAND],           LAYER_SURFACE,
@@ -87,7 +88,7 @@ const MON = {
                {nightVision:true}],
   // MOUNTAIN
   ice_wraith: ['Ice Wraith',     'ICE_WRAITH',
-               4, 3, 7, 0, 7, 5, 0,  4, 1,
+               40, 30, 70, 0, 70, 50, 0,  4, 1,
                38, [14,32],
                ['undead','ice'], DMG.COLD,
                [T.ROCK],           LAYER_SURFACE,
@@ -98,7 +99,7 @@ const MON = {
                '#b0c8d8',
                {dodgeMul:1.4, nightVision:true}],
   frost_troll:['Frost Troll',    'FROST_TROLL',
-               10, 10, 3, 0, 3, 1, 0,  4, 5,
+               100, 100, 30, 0, 30, 10, 0,  4, 5,
                70, [25,55],
                ['flesh','ice','beast'], DMG.BLUNT,
                [T.ROCK],           LAYER_SURFACE,
@@ -110,7 +111,7 @@ const MON = {
                null],
   // UNDERGROUND
   skeleton:   ['Skeleton',       'SKELETON',
-               3, 4, 3, 0, 3, 2, 0,  3, 3,
+               30, 40, 30, 0, 30, 20, 0,  3, 3,
                22, [6,14],
                ['bone','undead'], DMG.BLADE,
                [T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
@@ -121,7 +122,7 @@ const MON = {
                '#c8c4b8',
                {nightVision:true}],
   zombie:     ['Zombie',         'ZOMBIE',
-               5, 5, 1, 0, 1, 1, 0,  3, 2,
+               50, 50, 10, 0, 10, 10, 0,  3, 2,
                24, [4,10],
                ['flesh','undead'], DMG.BLADE,
                [T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
@@ -132,7 +133,7 @@ const MON = {
                '#708070',
                {nightVision:true}],
   knight:     ['Fallen Knight',  'KNIGHT',
-               8, 8, 6, 0, 6, 5, 0,  4, 9,
+               80, 80, 60, 0, 60, 50, 0,  4, 9,
                90, [30,70],
                ['armored','undead'], DMG.BLADE,
                [T.ROCK], LAYER_UNDER,
@@ -144,7 +145,7 @@ const MON = {
                {nightVision:true}],
   // LAVA
   magma_hound:['Magma Hound',    'MAGMA_HOUND',
-               4, 5, 6, 0, 6, 3, 0,  4, 3,
+               40, 50, 60, 0, 60, 30, 0,  4, 3,
                40, [10,22],
                ['fire','beast'], DMG.FIRE,
                [T.LAVA,T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
@@ -155,7 +156,7 @@ const MON = {
                '#d06040',
                {nightVision:true}],
   lava_fiend: ['Lava Fiend',     'LAVA_FIEND',
-               8, 8, 5, 0, 5, 6, 0,  4, 4,
+               80, 80, 50, 0, 50, 60, 0,  4, 4,
                85, [25,55],
                ['fire'], DMG.FIRE,
                [T.LAVA,T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
@@ -168,7 +169,7 @@ const MON = {
 
   // CHEMOTROPHIC ZONE (SE)
   mushroom:   ['Chemotroph',       'CHEMOTROPH_NODE',
-               2, 1, 1, 6, 2, 1, 7,  0, 2,  // Size 2, high Vibration/Distributed, zero weaponAtk
+               20, 10, 10, 60, 20, 10, 70,  0, 2,  // Size 2, high Vibration/Distributed, zero weaponAtk
                28, [8,20],
                ['plant','fungal'], DMG.POISON,
                [T.MUSHFOREST], LAYER_SURFACE,
@@ -180,7 +181,7 @@ const MON = {
                {blindsight:5}],    // vibration sense — ignores LOS and light
   // NORTHEAST CAVES — surface
   rock_golem: ['Rock Golem',      'ROCK_GOLEM',
-               10, 7, 2, 0, 2, 1, 0,  4, 8,
+               100, 70, 20, 0, 20, 10, 0,  4, 8,
                65, [20,45],
                ['stone','rockite'], DMG.BLUNT,
                [T.CAVE_FLOOR,T.ROCK], LAYER_SURFACE,
@@ -193,7 +194,7 @@ const MON = {
                { restrictedRegion: 'NE_QUADRANT', layers: [0, 1] }],
   // WATER CAVES — aquatic enemies
   cave_eel:   ['Cave Eel',        'EEL',
-               3, 4, 5, 0, 5, 2, 0,  3, 1,
+               30, 40, 50, 0, 50, 20, 0,  3, 1,
                30, [8,18],
                ['aquatic','beast'], DMG.ELEC,
                [T.WATER,T.DEEP_WATER,T.UWATER], LAYER_SURFACE,
@@ -204,7 +205,7 @@ const MON = {
                '#4090b0',
                {waterHeal:true, nightVision:true}],
   cave_crab:  ['Wading Grazer',   'WADING_GRAZER',
-               7, 3, 5, 0, 5, 4, 0,  3, 6,
+               70, 30, 50, 0, 50, 40, 0,  3, 6,
                35, [10,25],
                ['flesh','beast'], DMG.BLUNT,
                [T.WATER,T.DEEP_WATER,T.UWATER,T.BEACH], LAYER_SURFACE,
@@ -216,7 +217,7 @@ const MON = {
                {nightVision:true}],
   // UNDERGROUND OCEAN
   drowned:    ['The Drowned',    'DROWNED',
-               6, 5, 2, 0, 2, 2, 0,  3, 2,
+               60, 50, 20, 0, 20, 20, 0,  3, 2,
                46, [12,30],
                ['undead','aquatic'], DMG.BLADE,
                [T.UWATER,T.CAVE_FLOOR,T.ROCK], LAYER_UNDER,
@@ -227,7 +228,7 @@ const MON = {
                '#6890a8',
                {nightVision:true}],
   deep_squid: ['Deep Squid',     'DEEP_SQUID',
-               10, 8, 6, 0, 6, 4, 0,  4, 4,
+               100, 80, 60, 0, 60, 40, 0,  4, 4,
                120,[30,75],
                ['aquatic','beast'], DMG.BLADE,
                [T.UWATER], LAYER_UNDER,
@@ -240,7 +241,7 @@ const MON = {
 };
 // Boss: intelligent undead. High search, won't pursue beyond throne chamber.
 const DREAD_KING = ['The Dread King','DREAD_KING',
-               14, 14, 8, 0, 8, 10, 0,  6, 10,
+               140, 140, 80, 0, 80, 100, 0,  6, 10,
                900, [800,1200],
                ['cursed','undead','armored'], DMG.BLADE,
                [], LAYER_UNDER,
@@ -340,7 +341,7 @@ function rollPersonality(key){
 // ==================== APEX PREDATOR DATA ====================
 // Rarer, higher Size/Strength, same Central, tends toward lone or small groups
 MON.dire_wolf = ['Apex Predator',  'APEX_PRED',
-               6, 6, 7, 1, 4, 6, 1,  4, 2,
+               60, 60, 70, 10, 40, 60, 10,  4, 2,
                22, [6,14],
                ['flesh','beast'], DMG.BLADE,
                [T.FOREST],            LAYER_SURFACE,
@@ -355,7 +356,7 @@ MON.dire_wolf = ['Apex Predator',  'APEX_PRED',
 // Clade B solitary ambush predator. Territorial, disengages outside home range.
 // Spawns at forest and fungal zone edges. Less common than other surface creatures.
 MON.ambush_pred = ['Ambush Predator', 'AMBUSH_PRED',
-               4, 5, 2, 7, 5, 2, 5,  3, 3,
+               40, 50, 20, 70, 50, 20, 50,  3, 3,
                18, [4,10],
                ['flesh','beast'], DMG.BLADE,
                [T.FOREST,T.MUSHFOREST],  LAYER_SURFACE,
@@ -366,21 +367,21 @@ MON.ambush_pred = ['Ambush Predator', 'AMBUSH_PRED',
                '#5a5048',           // dark mottled gray-brown, blends with terrain
                null];
 function monDodge(mon){
-  const raw = (11 - mon.siz) * DODGE_PER_SIZE_POINT;
+  const raw = Math.floor(((STAT_MAX + 1 - mon.siz) / STAT_MAX) * MAX_DODGE_CHANCE);
   const m = (mon.mods && mon.mods.dodgeMul) || 1;
   return Math.max(0, raw * m);
 }
-function monAcc(mon){ return BASE_ACCURACY + (mon.vis * ACC_PER_VISUAL); }
+function monAcc(mon){ return BASE_ACCURACY + Math.floor(mon.vis * ACC_PER_VISUAL); }
 function monCritChance(mon){
-  if (mon.siz < 2) return 0;
-  const base = (mon.siz - 2) * 3 + (mon.central - 1) * 1;
+  if (mon.siz < 20) return 0;
+  const base = (mon.siz / 10 - 2) * 3 + (mon.central / 10 - 1) * 1;
   const m = (mon.mods && mon.mods.critMul) || 1;
   return Math.min(50, base * m);
 }
-function monCritMult(mon){ return 1.5 + mon.strength * 0.03; }
+function monCritMult(mon){ return 1.5 + mon.strength * 0.003; }
 function monDamage(mon){
-  // baseDamage = floor(Size * 1.5) + Strength
-  return Math.floor(mon.siz * 1.5) + mon.strength;
+  // baseDamage = floor(Size * DAMAGE_SIZE_COEFF) + floor(Strength * DAMAGE_STR_COEFF)
+  return Math.floor(mon.siz * DAMAGE_SIZE_COEFF) + Math.floor(mon.strength * DAMAGE_STR_COEFF);
 }
 
 // ==================== VISION PROFILES ====================
@@ -588,13 +589,13 @@ function spawnMonster(key){
   };
   // Apply personality stat modifiers
   if (personality === 'ancient' && key === 'treant'){
-    m.siz += 3; m.strength += 1;
+    m.siz += 30; m.strength += 10;
   } else if (personality === 'withered' && key === 'treant'){
-    m.siz -= 2; m.speed = 50;
+    m.siz -= 20; m.speed = 50;
   } else if (personality === 'guardian' && key === 'treant'){
     m.percept += 10; m.aggroRange += 2;
   } else if (personality === 'lone_hunter' && (key === 'wolf' || key === 'dire_wolf')){
-    m.strength += 1; m.siz += 1;
+    m.strength += 10; m.siz += 10;
   } else if (personality === 'aggressive' && key === 'goblin'){
     m.aggroRange += 3; m.chase += 3; m.hostility = 2;
   } else if (personality === 'wary' && key === 'goblin'){
@@ -602,7 +603,7 @@ function spawnMonster(key){
   } else if (personality === 'explorer' && key === 'goblin'){
     m.territory = [T.FOREST, T.GRASS, T.ROCK]; // explores beyond forest
   } else if (personality === 'skulker' && key === 'goblin'){
-    m.percept += 5; m.siz += 1;
+    m.percept += 5; m.siz += 10;
   } else if (personality === 'spore_heavy' && key === 'mushroom'){
     m.sporeHeavy = true;  // flag checked during poison touch
   } else if (personality === 'patient' && key === 'ambush_pred'){

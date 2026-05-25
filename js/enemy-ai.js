@@ -3,7 +3,7 @@
 
 import { state, worlds, covers, monsters } from './state.js';
 import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
-         MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, TURN_AGILITY_PER_POINT,
+         MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, STAT_MAX, TURN_AGILITY_COEFF,
          facingSteps } from './constants.js';
 import { T, isWalkable } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
@@ -494,7 +494,7 @@ function enemyAct(mon){
     if ((desiredDx !== 0 || desiredDy !== 0)
         && (mon.facing.dx !== desiredDx || mon.facing.dy !== desiredDy)) {
       const steps = facingSteps(mon.facing.dx, mon.facing.dy, desiredDx, desiredDy);
-      const baseChance = (11 - mon.siz) * TURN_AGILITY_PER_POINT / 100;
+      const baseChance = (STAT_MAX + 1 - mon.siz) * TURN_AGILITY_COEFF / 100;
       const instantTurnChance = Math.min(1, baseChance * (5 - steps) / 3);
       mon.facing.dx = desiredDx;
       mon.facing.dy = desiredDy;

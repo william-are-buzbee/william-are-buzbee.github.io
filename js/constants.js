@@ -455,20 +455,34 @@ export const GOLD_DROP_MUL   = 1.30;
 export const FOOD_DROP_MUL   = 1.30;
 
 // ==================== GAMEPLAY FORMULA CONSTANTS ====================
-// Size & Strength driven formulas (Prompt 2).
-export const HP_PER_SIZE           = 10;   // maxHp = Size * HP_PER_SIZE
-export const HP_PER_LEVEL_FACTOR   = 0.5;  // hpPerLevel = Math.ceil(Size * HP_PER_LEVEL_FACTOR)
-export const DODGE_PER_SIZE_POINT  = 3;    // dodgeChance = (11 - Size) * DODGE_PER_SIZE_POINT
+// Stat scale: 1-100 range (scaled from legacy 1-10).
+export const STAT_MIN = 1;
+export const STAT_MAX = 100;
+
+// HP — each point of Size = 1 HP, so Size 40 = 40 HP
+export const HP_PER_SIZE           = 1;
+export const HP_PER_LEVEL_FACTOR   = 0.05;  // hpPerLevel = Math.ceil(Size * HP_PER_LEVEL_FACTOR)
+
+// Damage — rebalanced so fights last 4-6 hits
+export const DAMAGE_SIZE_COEFF     = 0.12;
+export const DAMAGE_STR_COEFF      = 0.08;
+
+// Dodge — scaled to 1-100 stat range
+export const MAX_DODGE_CHANCE      = 30;    // dodgeChance = floor(((STAT_MAX+1-Size)/STAT_MAX)*MAX_DODGE_CHANCE)
+
+// Accuracy
 export const BASE_ACCURACY         = 70;
-export const ACC_PER_VISUAL        = 3;    // accuracy = BASE_ACCURACY + (Visual * ACC_PER_VISUAL)
-export const STEALTH_PER_SIZE_POINT = 4;   // stealthEffectiveness = (11 - Size) * STEALTH_PER_SIZE_POINT
+export const ACC_PER_VISUAL        = 0.3;   // accuracy = BASE_ACCURACY + floor(Visual * ACC_PER_VISUAL)
+
+// Stealth
+export const STEALTH_SIZE_COEFF    = 0.4;   // stealthEffectiveness = floor((STAT_MAX+1-Size)*STEALTH_SIZE_COEFF)
 
 // Relative speed system — power-to-weight ratio governs enemy action frequency.
 export const MAX_BONUS_MOVE_CHANCE = 0.50;  // cap on bonus move probability (50%)
 export const MIN_ACTION_CHANCE     = 0.25;  // floor — even the slowest enemy acts at least 25% of turns
 
 // Instant turn agility — smaller creatures change facing for free more often.
-export const TURN_AGILITY_PER_POINT = 10;   // instantTurnChance = (11 - Size) * TURN_AGILITY_PER_POINT, as %
+export const TURN_AGILITY_COEFF    = 1.0;   // instantTurnChance = (STAT_MAX+1-Size)*TURN_AGILITY_COEFF/100
 
 // Angular scaling for instant turn: the base chance above is calibrated for a
 // 90° turn (2 steps of 45°).  Smaller turns are easier, larger turns are harder.

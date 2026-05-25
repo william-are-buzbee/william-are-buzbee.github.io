@@ -1,7 +1,8 @@
 // ==================== PLAYER ====================
 import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META,
-         HP_PER_SIZE, HP_PER_LEVEL_FACTOR, DODGE_PER_SIZE_POINT,
-         BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_PER_SIZE_POINT } from './constants.js';
+         HP_PER_SIZE, HP_PER_LEVEL_FACTOR, STAT_MAX,
+         MAX_DODGE_CHANCE, DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF,
+         BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF } from './constants.js';
 import { getTimePhase } from './time-cycle.js';
 import { state } from './state.js';
 import { rand, randomRound } from './rng.js';
@@ -59,14 +60,14 @@ function deriveHP(p){
 
 // Fixed 10-slot inventory grid. Weight governs carry limit.
 const INV_SLOTS = 10;
-function carryCapacity(p){ return 4 + p.strength*2; }  // Strength 1 = 6, Strength 10 = 24
+function carryCapacity(p){ return 4 + Math.floor(p.strength * 0.2); }  // Strength 10 = 6, Strength 100 = 24
 function totalWeight(p){ return p.inventory.reduce((s,it) => s + (it.weight||1), 0); }
 function bagFull(p){ return p.inventory.length >= INV_SLOTS; }
 function overWeight(p, extra=0){ return (totalWeight(p)+extra) > carryCapacity(p); }
 
-// Melee dmg: baseDamage = floor(Size * 1.5) + Strength, plus weapon + level bonus
+// Melee dmg: baseDamage = floor(Size * DAMAGE_SIZE_COEFF) + floor(Strength * DAMAGE_STR_COEFF), plus weapon + level bonus
 function playerMelee(p){
-  let base = Math.floor(p.siz * 1.5) + p.strength + (p.weapon.atk || 0) + Math.floor((p.level-1)*0.5);
+  let base = Math.floor(p.siz * DAMAGE_SIZE_COEFF) + Math.floor(p.strength * DAMAGE_STR_COEFF) + (p.weapon.atk || 0) + Math.floor((p.level-1)*0.5);
   if (p.perks && p.perks.blade_bonus && p.weapon.type === DMG.BLADE) base += 1;
   if (p.perks && p.perks.blunt_bonus && p.weapon.type === DMG.BLUNT) base += 1;
   return base;
@@ -76,8 +77,8 @@ function playerMelee(p){
 function effectiveAP(p){
   let ap = p.weapon.ap || 0;
   if (p.weapon.type === DMG.BLUNT){
-    // Strength 1 = +0, Strength 10 = +3, smooth probabilistic transition
-    const scale = (p.strength - 1) * (3 / 9);
+    // Strength 10 = +0, Strength 100 = +3, smooth probabilistic transition
+    const scale = (p.strength / 10 - 1) * (3 / 9);
     ap += randomRound(scale);
   }
   return ap;
@@ -85,24 +86,24 @@ function effectiveAP(p){
 
 function playerDef(p){ return p.armor.def; }
 
-// Accuracy: BASE_ACCURACY + Visual * ACC_PER_VISUAL
+// Accuracy: BASE_ACCURACY + floor(Visual * ACC_PER_VISUAL)
 // Armor accPenalty = dodgePenalty / 2, applied as flat subtraction.
 function playerAcc(p){
   const accPen = (p.armor.dodgePenalty || 0) / 2;
-  return BASE_ACCURACY + (p.vis * ACC_PER_VISUAL) + (p.weapon.acc||0) - accPen;
+  return BASE_ACCURACY + Math.floor(p.vis * ACC_PER_VISUAL) + (p.weapon.acc||0) - accPen;
 }
-// Dodge: (11 - Size) * DODGE_PER_SIZE_POINT, minus armor dodgePenalty (flat subtraction, floor 0).
+// Dodge: floor(((STAT_MAX+1-Size)/STAT_MAX)*MAX_DODGE_CHANCE), minus armor dodgePenalty (flat subtraction, floor 0).
 // Smaller creatures dodge more effectively.
 function playerDodge(p){
-  const raw = (11 - p.siz) * DODGE_PER_SIZE_POINT;
+  const raw = Math.floor(((STAT_MAX + 1 - p.siz) / STAT_MAX) * MAX_DODGE_CHANCE);
   return Math.max(0, raw - (p.armor.dodgePenalty || 0));
 }
 // Crit: scales linearly with Size (temporary shim). Always enabled (no gate).
 function playerCritChance(p){
-  const raw = (p.siz - 1) * 4.5;  // Size 1=0%, Size 10=40.5%
+  const raw = (p.siz / 10 - 1) * 4.5;  // Size 10=0%, Size 100=40.5%
   return Math.min(60, raw) + (p.weapon.crit||0);
 }
-function playerCritMult(p){ return 1.5 + p.strength*0.02 + p.central*0.02; }
+function playerCritMult(p){ return 1.5 + p.strength*0.002 + p.central*0.002; }
 
 // XP multiplier — Central driven
 // Calibrated so that killing ALL enemies in the game yields:
@@ -110,7 +111,7 @@ function playerCritMult(p){ return 1.5 + p.strength*0.02 + p.central*0.02; }
 //   Central 10 → approximately level 12
 // Scaled ×1.333 to compensate for 25% reduced spawn density (1/50 → 1/67).
 function xpMult(p){
-  let m = 0.0573 + (p.central - 1) * 0.0224;
+  let m = 0.0573 + (p.central / 10 - 1) * 0.0224;
   if (p.perks && p.perks.xp_bonus) m *= 1.15;
   return m;
 }
@@ -128,7 +129,7 @@ function xpFromKill(p, baseXP){
 // When called without a category, defaults to STANDARD for backward compat.
 function buyPriceMul(p, category){
   const cat = category || PRICE_CAT.STANDARD;
-  const pts = p.central - 1;  // 0 at Central 1
+  const pts = Math.max(0, p.central / 10 - 1);  // 0 at Central 10, 9 at Central 100
   let ratePerPoint;
   if (cat === PRICE_CAT.STAPLE)   ratePerPoint = 0.01;
   else if (cat === PRICE_CAT.LUXURY) ratePerPoint = 0.03;
@@ -150,7 +151,7 @@ function innPriceMul(p){
 //   luxury   — 25% → 52% at Central 10 (smart sellers get much more for rare goods)
 function sellValueMul(p, category){
   const cat = category || PRICE_CAT.STANDARD;
-  const pts = p.central - 1;
+  const pts = Math.max(0, p.central / 10 - 1);
   let ratePerPoint;
   if (cat === PRICE_CAT.STAPLE)   ratePerPoint = 0.01;
   else if (cat === PRICE_CAT.LUXURY) ratePerPoint = 0.03;
@@ -162,9 +163,9 @@ function sellValueMul(p, category){
 function foodFedMul(p){ return ((p.perks && p.perks.food_bonus) ? 1.5 : 1.0) * 1.25; }
 
 // Stealth effectiveness — smaller creatures hide better
-// (11 - Size) * STEALTH_PER_SIZE_POINT
+// floor((STAT_MAX + 1 - Size) * STEALTH_SIZE_COEFF)
 function stealthBonus(p){
-  let b = (11 - p.siz) * STEALTH_PER_SIZE_POINT;
+  let b = Math.floor((STAT_MAX + 1 - p.siz) * STEALTH_SIZE_COEFF);
   if (p.perks && p.perks.stealth_bonus) b += 20;
   return Math.max(0, b);
 }
@@ -174,7 +175,7 @@ function stealthBonus(p){
 // Returns a value 0–100; caller compares against a difficulty threshold.
 function perceptionCheck(p){
   const roll = Math.floor(rand() * 100) + 1;  // 1–100
-  const bonus = p.vis * 4;  // Visual 1 = +4, Visual 10 = +40
+  const bonus = Math.floor(p.vis * 0.4);  // Visual 10 = +4, Visual 100 = +40
   return Math.min(100, roll + bonus);
 }
 
@@ -190,7 +191,7 @@ function perceptionCheck(p){
 //             Applied AFTER phase reduction, before the per-phase minimum.
 //             Defaults to 0. NOT applied at night/underground (cone is hard-1).
 function baseViewRadius(p){
-  return Math.round(3 + (p.vis - 1) * (4 / 9));
+  return Math.round(3 + (p.vis - 1) * (4 / 99));
 }
 
 // Awareness radius — the small omnidirectional bubble around the player
@@ -214,7 +215,7 @@ function awarenessRadius(p){
 // @returns {number} effective vision depth in tiles
 function creatureViewRadius(vis, layer, opts) {
   const { lightBonus = 0, nightVision = false } = opts || {};
-  const base = Math.round(3 + (vis - 1) * (4 / 9));
+  const base = Math.round(3 + (vis - 1) * (4 / 99));
 
   // Night-vision creatures ignore darkness entirely
   if (nightVision) return Math.max(2, base + lightBonus);
@@ -269,9 +270,9 @@ function cursedBaneMul(p, tags){
 }
 
 // Passive regen (not while resting). Scales linearly with Size.
-// Size 1 = every 55 turns, Size 10 = every 5 turns. Each point matters equally.
+// Size 1 = every 55 turns, Size 100 = every 5 turns. Each point matters equally.
 function passiveRegenInterval(p){
-  return Math.round(55 + (p.siz - 1) * (5 - 55) / 9);
+  return Math.round(55 + (p.siz - 1) * (5 - 55) / 99);
 }
 
 // ==================== POISON RESISTANCE ====================
@@ -286,10 +287,10 @@ function passiveRegenInterval(p){
 */
 function poisonResistance(p){
   const sizWeight = 0.75, strWeight = 0.25;
-  // Base resistance from stats
-  const statResist = (p.siz - 1) * sizWeight * 3.5 + (p.strength - 1) * strWeight * 3.5;
+  // Base resistance from stats (scaled for 1-100 stat range)
+  const statResist = (p.siz / 10 - 1) * sizWeight * 3.5 + (p.strength / 10 - 1) * strWeight * 3.5;
   // Per-level bonus based on Size (Size provides more poison resist per level)
-  const levelBonus = (p.level - 1) * (p.siz * 0.5);
+  const levelBonus = (p.level - 1) * (p.siz * 0.05);
   const totalResist = statResist + levelBonus;
   return {
     // Damage reduction: 0 to ~0.55 at CON 10 level 10 (never fully immune)
@@ -305,10 +306,11 @@ function poisonResistance(p){
 // Size 1: always 1. Size 5: mostly 1-2, sometimes 3. Size 10: 1-6, avg ~4-5.
 function restHealAmount(p){
   if (p.isPlayer && p.fed <= 0) return 0;
-  if (p.siz <= 1) return 1;
-  // Each Size point above 1 gives a 40% chance to add +1 HP (independent rolls)
+  const effSiz = Math.max(1, Math.round(p.siz / 10));
+  if (effSiz <= 1) return 1;
+  // Each effective Size point above 1 gives a 40% chance to add +1 HP (independent rolls)
   let heal = 1;
-  for (let i = 1; i < p.siz; i++){
+  for (let i = 1; i < effSiz; i++){
     if (rand() < 0.4) heal++;
   }
   return heal;
@@ -320,54 +322,55 @@ function describeAttributePerks(p){
   // Size: HP
   lines.push(`Size ${p.siz}: ${p.siz * HP_PER_SIZE} base HP, +${Math.ceil(p.siz * HP_PER_LEVEL_FACTOR)} HP/level`);
   // Size: base damage contribution
-  lines.push(`Size ${p.siz}: base melee +${Math.floor(p.siz * 1.5)}`);
+  lines.push(`Size ${p.siz}: base melee +${Math.floor(p.siz * DAMAGE_SIZE_COEFF)}`);
   // Size: dodge
-  lines.push(`Size ${p.siz}: dodge ${(11 - p.siz) * DODGE_PER_SIZE_POINT}%`);
+  lines.push(`Size ${p.siz}: dodge ${Math.floor(((STAT_MAX + 1 - p.siz) / STAT_MAX) * MAX_DODGE_CHANCE)}%`);
   // Size: stealth
-  lines.push(`Size ${p.siz}: stealth ${(11 - p.siz) * STEALTH_PER_SIZE_POINT}%`);
+  lines.push(`Size ${p.siz}: stealth ${Math.floor((STAT_MAX + 1 - p.siz) * STEALTH_SIZE_COEFF)}%`);
   // Size: rest heals random amount
-  if (p.siz >= 1){
-    lines.push(`Size ${p.siz}: rest heals 1–${Math.max(1,1+Math.floor((p.siz-1)*0.55))} HP (random)`);
+  const effSiz = Math.max(1, Math.round(p.siz / 10));
+  if (effSiz >= 1){
+    lines.push(`Size ${p.siz}: rest heals 1–${Math.max(1,1+Math.floor((effSiz-1)*0.55))} HP (random)`);
   }
   // Size: rest hunger reduction
-  if (p.siz >= 2){
-    const reduction = Math.round(p.siz * 5);
+  if (p.siz >= 20){
+    const reduction = Math.round(p.siz * 0.5);
     lines.push(`Size ${p.siz}: rest hunger -${reduction}%`);
   }
   // Size: passive regen (always active now)
   const iv = passiveRegenInterval(p);
   lines.push(`Size ${p.siz}: passive +1 HP / ${iv} turns`);
   // Size: poison resistance
-  if (p.siz >= 2){
+  if (p.siz >= 20){
     const pr = poisonResistance(p);
     lines.push(`Size ${p.siz}: poison dmg -${Math.round(pr.damageReduction*100)}%`);
   }
   // Strength: melee damage contribution
   if (p.strength > 0){
-    lines.push(`Strength ${p.strength}: melee +${p.strength}`);
+    lines.push(`Strength ${p.strength}: melee +${Math.floor(p.strength * DAMAGE_STR_COEFF)}`);
   }
   // Strength: blunt AP scales linearly
-  if (p.strength > 1 && p.weapon && p.weapon.type === DMG.BLUNT){
-    const avgAP = ((p.strength - 1) * (3 / 9));
+  if (p.strength > 10 && p.weapon && p.weapon.type === DMG.BLUNT){
+    const avgAP = ((p.strength / 10 - 1) * (3 / 9));
     lines.push(`Strength ${p.strength}: blunt AP ~+${avgAP.toFixed(1)} avg`);
   }
   // Central: crit damage contribution
-  if (p.central >= 2){
-    lines.push(`Central ${p.central}: crit dmg ×${(1.5 + p.strength*0.02 + p.central*0.02).toFixed(2)}`);
+  if (p.central >= 20){
+    lines.push(`Central ${p.central}: crit dmg ×${(1.5 + p.strength*0.002 + p.central*0.002).toFixed(2)}`);
   }
-  if (p.central >= 2){
+  if (p.central >= 20){
     const staple = Math.round((1 - buyPriceMul(p, PRICE_CAT.STAPLE)) * 100);
     const standard = Math.round((1 - buyPriceMul(p, PRICE_CAT.STANDARD)) * 100);
     const luxury = Math.round((1 - buyPriceMul(p, PRICE_CAT.LUXURY)) * 100);
     if (luxury > 0) lines.push(`Central ${p.central}: prices -${staple}%/${standard}%/${luxury}% (food/gear/rare)`);
   }
-  if (p.central < 2){
-    lines.push(`Central 1: speech stunted — folk speak simply`);
+  if (p.central < 20){
+    lines.push(`Central ${p.central}: speech stunted — folk speak simply`);
   }
   // Visual: accuracy
   if (p.vis >= 1){
     const accPen = (p.armor.dodgePenalty || 0) / 2;
-    const acc = BASE_ACCURACY + (p.vis * ACC_PER_VISUAL) + (p.weapon.acc||0) - accPen;
+    const acc = BASE_ACCURACY + Math.floor(p.vis * ACC_PER_VISUAL) + (p.weapon.acc||0) - accPen;
     lines.push(`Visual ${p.vis}: accuracy ${acc}%`);
   }
   return lines;
