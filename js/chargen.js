@@ -1,8 +1,8 @@
 // ==================== CHARACTER CREATION + DEATH/VICTORY ====================
 import { state } from './state.js';
 import { STARTING_POINTS, HP_PER_SIZE, HP_PER_LEVEL_FACTOR,
-         DODGE_PER_SIZE_POINT, BASE_ACCURACY, ACC_PER_VISUAL,
-         STEALTH_PER_SIZE_POINT } from './constants.js';
+         STAT_MAX, MAX_DODGE_CHANCE, BASE_ACCURACY, ACC_PER_VISUAL,
+         STEALTH_SIZE_COEFF, DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF } from './constants.js';
 import { rand, choice } from './rng.js';
 import { freshPlayer, deriveHP, poisonResistance } from './player.js';
 import { findArmor, findWeapon } from './items.js';
@@ -117,69 +117,76 @@ function renderCharGen(){
   });
 
   // Derived preview — mirrors player.js formulas exactly
+  // Chargen allocates 1-10; actual stats are ×10 (10-100 range)
   const startArmor = findArmor('rags');
   const startWeapon = findWeapon('dagger');
   const armorDodgePen = startArmor.dodgePenalty || 0;
   const armorAccPen = armorDodgePen / 2;
 
+  // Scaled stats (what the player will actually have)
+  const sSiz = state.cgAttrs.siz * 10;
+  const sStr = state.cgAttrs.strength * 10;
+  const sVis = state.cgAttrs.vis * 10;
+  const sCen = state.cgAttrs.central * 10;
+
   // HP: siz * HP_PER_SIZE (player.js deriveHP, level 1, no perks)
-  const hp = state.cgAttrs.siz * HP_PER_SIZE;
+  const hp = sSiz * HP_PER_SIZE;
 
   // HP per level: Math.ceil(siz * HP_PER_LEVEL_FACTOR)
-  const hpPerLvl = Math.ceil(state.cgAttrs.siz * HP_PER_LEVEL_FACTOR);
+  const hpPerLvl = Math.ceil(sSiz * HP_PER_LEVEL_FACTOR);
 
-  // Melee: floor(siz * 1.5) + strength + weapon.atk (level 1, no perks)
-  const melee = Math.floor(state.cgAttrs.siz * 1.5) + state.cgAttrs.strength + (startWeapon.atk || 0);
+  // Melee: floor(siz * DAMAGE_SIZE_COEFF) + floor(str * DAMAGE_STR_COEFF) + weapon.atk
+  const melee = Math.floor(sSiz * DAMAGE_SIZE_COEFF) + Math.floor(sStr * DAMAGE_STR_COEFF) + (startWeapon.atk || 0);
 
-  // Carry: 4 + strength*2
-  const carry = 4 + state.cgAttrs.strength*2;
+  // Carry: 4 + floor(strength * 0.2)
+  const carry = 4 + Math.floor(sStr * 0.2);
 
-  // Armor piercing (blunt only, avg): (strength-1) * (3/9)
-  const avgAP = ((state.cgAttrs.strength - 1) * (3 / 9));
+  // Armor piercing (blunt only, avg): (strength/10 - 1) * (3/9)
+  const avgAP = ((sStr / 10 - 1) * (3 / 9));
 
-  // Accuracy: BASE_ACCURACY + vis * ACC_PER_VISUAL + weapon.acc − armor accPenalty
-  const rawAcc = BASE_ACCURACY + state.cgAttrs.vis * ACC_PER_VISUAL + (startWeapon.acc || 0) - armorAccPen;
+  // Accuracy: BASE_ACCURACY + floor(vis * ACC_PER_VISUAL) + weapon.acc − armor accPenalty
+  const rawAcc = BASE_ACCURACY + Math.floor(sVis * ACC_PER_VISUAL) + (startWeapon.acc || 0) - armorAccPen;
   const hitChance = Math.min(95, Math.max(5, rawAcc));
 
-  // Dodge: (11 - siz) * DODGE_PER_SIZE_POINT − armor dodgePenalty, floor 0
-  // Smaller = more dodge. Size 1 = 30%, Size 10 = 3%.
-  const dodge = Math.max(0, (11 - state.cgAttrs.siz) * DODGE_PER_SIZE_POINT - armorDodgePen);
+  // Dodge: floor(((STAT_MAX+1-siz)/STAT_MAX)*MAX_DODGE_CHANCE) − armor dodgePenalty
+  const dodge = Math.max(0, Math.floor(((STAT_MAX + 1 - sSiz) / STAT_MAX) * MAX_DODGE_CHANCE) - armorDodgePen);
 
-  // Crit chance: (siz-1) * 4.5, capped at 60, + weapon crit
-  const crit = Math.min(60, (state.cgAttrs.siz - 1) * 4.5) + (startWeapon.crit || 0);
+  // Crit chance: (siz/10 - 1) * 4.5, capped at 60, + weapon crit
+  const crit = Math.min(60, (sSiz / 10 - 1) * 4.5) + (startWeapon.crit || 0);
 
-  // Crit mult: 1.5 + strength*0.02 + central*0.02
-  const critMult = 1.5 + state.cgAttrs.strength*0.02 + state.cgAttrs.central*0.02;
+  // Crit mult: 1.5 + strength*0.002 + central*0.002
+  const critMult = 1.5 + sStr*0.002 + sCen*0.002;
 
   // XP multiplier
-  const xpM = 0.0573 + (state.cgAttrs.central - 1) * 0.0224;
+  const xpM = 0.0573 + (sCen / 10 - 1) * 0.0224;
   const xpBaseline = 0.0573;
   const xpBonusPct = Math.round(((xpM / xpBaseline) - 1) * 100);
   const xpDisplay = xpBonusPct > 0 ? `100% +${xpBonusPct}%` : '100%';
 
-  // Rest HP: random 1 to max, where max = 1 + floor((siz-1)*0.55)
-  const maxRest = Math.max(1, 1 + Math.floor((state.cgAttrs.siz-1)*0.55));
+  // Rest HP: random 1 to max (uses effective Size = siz/10)
+  const effSiz = Math.max(1, Math.round(sSiz / 10));
+  const maxRest = Math.max(1, 1 + Math.floor((effSiz-1)*0.55));
 
-  // Passive regen interval: Size 1 = every 55 turns, Size 10 = every 5 turns
-  const regenIv = Math.round(55 + (state.cgAttrs.siz-1) * (5-55)/9);
+  // Passive regen interval: Size 1 = every 55 turns, Size 100 = every 5 turns
+  const regenIv = Math.round(55 + (sSiz-1) * (5-55)/99);
 
-  // Stealth: (11 - siz) * STEALTH_PER_SIZE_POINT. Smaller = stealthier.
-  const stealth = (11 - state.cgAttrs.siz) * STEALTH_PER_SIZE_POINT;
+  // Stealth: floor((STAT_MAX+1-siz) * STEALTH_SIZE_COEFF)
+  const stealth = Math.floor((STAT_MAX + 1 - sSiz) * STEALTH_SIZE_COEFF);
 
   // Shop discount (mirrors buyPriceMul — standard category)
-  const shopDisc = Math.min(0.18, (state.cgAttrs.central - 1) * 0.02);
+  const shopDisc = Math.min(0.18, (sCen / 10 - 1) * 0.02);
   const shopStr = shopDisc > 0 ? `−${Math.round(shopDisc*100)}%` : '—';
 
   // Sell value
-  const sellPct = Math.round((0.25 + (state.cgAttrs.central-1) * 0.02)*100);
+  const sellPct = Math.round((0.25 + (sCen/10-1) * 0.02)*100);
 
-  // Vision radius: baseViewRadius = 3 + (vis-1) * (4/9)
-  const visionR = Math.round(3 + (state.cgAttrs.vis - 1) * (4 / 9));
+  // Vision radius: baseViewRadius = 3 + (vis-1) * (4/99)
+  const visionR = Math.round(3 + (sVis - 1) * (4 / 99));
 
   document.getElementById('cg-derived').innerHTML = `
     <div class="kv" id="cg-d-hp"><span class="k">Health</span><span class="v">${hp}</span></div>
     <div class="kv" id="cg-d-hplvl"><span class="k">Health per Level</span><span class="v">+${hpPerLvl}</span></div>
-    <div class="kv" id="cg-d-melee"><span class="k">Melee Damage</span><span class="v">${melee} <span style="color:#666;font-weight:normal;font-size:7px;">(${Math.floor(state.cgAttrs.siz*1.5)}+${state.cgAttrs.strength}+${startWeapon.atk||0})</span></span></div>
+    <div class="kv" id="cg-d-melee"><span class="k">Melee Damage</span><span class="v">${melee} <span style="color:#666;font-weight:normal;font-size:7px;">(${Math.floor(sSiz*DAMAGE_SIZE_COEFF)}+${Math.floor(sStr*DAMAGE_STR_COEFF)}+${startWeapon.atk||0})</span></span></div>
     <div class="kv" id="cg-d-acc"><span class="k">Hit Chance</span><span class="v">${hitChance}%</span></div>
     <div class="kv" id="cg-d-dodge"><span class="k">Dodge Chance</span><span class="v">${Math.round(dodge)}%</span></div>
     <div class="kv" id="cg-d-crit"><span class="k">Critical Chance</span><span class="v">${Math.round(crit)}%</span></div>
@@ -193,7 +200,7 @@ function renderCharGen(){
     <div class="kv" id="cg-d-vision"><span class="k">Vision Radius</span><span class="v">${visionR} tiles</span></div>
     <div class="kv" id="cg-d-shop"><span class="k">Shop Discount</span><span class="v">${shopStr}</span></div>
     <div class="kv" id="cg-d-sell"><span class="k">Sell Value</span><span class="v">${sellPct}%</span></div>
-    <div class="kv" id="cg-d-poison"><span class="k">Poison Resist</span><span class="v">${Math.round(poisonResistance({siz:state.cgAttrs.siz,strength:state.cgAttrs.strength,level:1,perks:{}}).damageReduction*100)}%</span></div>
+    <div class="kv" id="cg-d-poison"><span class="k">Poison Resist</span><span class="v">${Math.round(poisonResistance({siz:sSiz,strength:sStr,level:1,perks:{}}).damageReduction*100)}%</span></div>
   `;
 
   document.getElementById('cg-begin').disabled = remaining !== 0;
@@ -212,7 +219,10 @@ function randomizeAttrs(){
 
 function beginGame(){
   state.exploredCells = new Set();
-  state.player = freshPlayer(state.cgAttrs, state.selectedBodyType || 'meso', state.selectedColorPalette || 'meso_predator');
+  // Chargen allocates 1-10; scale to 1-100 range for gameplay
+  const scaledAttrs = {};
+  for (const k of Object.keys(state.cgAttrs)) scaledAttrs[k] = state.cgAttrs[k] * 10;
+  state.player = freshPlayer(scaledAttrs, state.selectedBodyType || 'meso', state.selectedColorPalette || 'meso_predator');
   initWorld(Math.floor(Math.random()*999999));
   document.getElementById('chargen-screen').style.display = 'none';
   document.getElementById('bodytype-screen').style.display = 'none';
