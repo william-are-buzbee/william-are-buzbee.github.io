@@ -1,7 +1,7 @@
 // ==================== MONSTER DATA ====================
 import { DMG, LAYER_SURFACE, LAYER_UNDER,
          HP_PER_SIZE, STAT_MAX, MAX_DODGE_CHANCE, BASE_ACCURACY, ACC_PER_VISUAL,
-         DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF, CREATURE_PATHWAYS } from './constants.js';
+         DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF, CREATURE_PATHWAYS, initBodyMap } from './constants.js';
 import { T } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 
@@ -662,6 +662,9 @@ function spawnMonster(key){
   }
   m.hpMax = monHP(m);
   m.hp = m.hpMax;
+  m.immobilized = false;
+  // Initialize per-instance body map with zone HP
+  initBodyMap(m);
   return m;
 }
 

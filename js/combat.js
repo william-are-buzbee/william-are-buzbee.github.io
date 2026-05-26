@@ -2,7 +2,8 @@
 import { render } from './rendering.js';
 import { monsterMelee } from './enemy-ai.js';
 import { state, worlds, monsters } from './state.js';
-import { DMG, GOLD_DROP_MUL, resistMult, getBodyMap, selectHitZone } from './constants.js';
+import { DMG, GOLD_DROP_MUL, resistMult, getBodyMap, selectHitZone,
+         checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss } from './constants.js';
 import { T, coverBonus } from './terrain.js';
 import { rand, randi, randRange, roll100 } from './rng.js';
 import { playerMelee, playerAcc, playerDodge, playerDef, playerCritChance,
@@ -18,6 +19,68 @@ let _onVictoryCallback = null;
 export function setOnVictoryCallback(fn){ _onVictoryCallback = fn; }
 
 function monstersHere(){ return monsters[state.player.layer]; }
+
+// ==================== ZONE DESTRUCTION RESOLUTION ====================
+// Apply damage to a specific zone and resolve all consequences.
+// `entity` is the creature whose zone was hit (monster or player).
+// `hitZone` is the zone object from the entity's body map.
+// `dmg` is the damage dealt (already subtracted from entity.hp).
+// `entityName` is the display name for log messages.
+// `bodyMap` is the zone array for the entity.
+// Returns true if the entity died from zone destruction consequences.
+
+function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
+  if (!hitZone || !bodyMap) return false;
+
+  // Apply damage to the zone
+  if (hitZone.hp == null) return false;  // zone HP not initialized
+  hitZone.hp = Math.max(0, hitZone.hp - dmg);
+
+  // Check if zone is newly destroyed
+  if (hitZone.hp <= 0 && !hitZone.destroyed) {
+    hitZone.hp = 0;
+    hitZone.destroyed = true;
+
+    log(`${entityName}'s ${hitZone.name} is destroyed!`, 'crit');
+
+    // Step 2 — Vital check
+    if (hitZone.vital) {
+      log(`${entityName}'s ${hitZone.name} is destroyed — a fatal blow.`, 'dead');
+      return true; // caller handles death
+    }
+
+    // Step 3 — Neural death check
+    if (checkNeuralDeath(bodyMap)) {
+      log(`${entityName} collapses — too much neural tissue destroyed.`, 'dead');
+      return true; // caller handles death
+    }
+
+    // Step 4 — Locomotion check
+    if (hitZone.locomotion && !hasLocomotion(bodyMap)) {
+      entity.immobilized = true;
+      log(`${entityName} collapses, unable to move.`, 'warn');
+    }
+
+    // Step 5 — Attack loss
+    if (hitZone.attacks && hitZone.attacks.length > 0) {
+      for (const atk of hitZone.attacks) {
+        log(`${entityName}'s ${atk.name} is gone.`, 'warn');
+      }
+    }
+
+    // Step 6 — Sensory log messages
+    const senseLosses = checkSenseLoss(bodyMap, hitZone);
+    for (const sl of senseLosses) {
+      if (sl.type === 'lost') {
+        log(`${entityName} can no longer ${sl.verb}.`, 'warn');
+      } else {
+        log(`${entityName}'s ${sl.sense} weakens.`, 'muted');
+      }
+    }
+  }
+
+  return false;
+}
 
 function rollHit(acc, dodge){
   const c = Math.max(5, Math.min(95, acc - dodge));
@@ -71,6 +134,7 @@ function playerAttack(mon){
 
   mon.hp -= dmg;
   if (dmg > 0){ mon.hitFlash = 3; mon.damageTaken = (mon.damageTaken||0) + dmg; }
+  let totalZoneDmg = dmg;  // accumulate all damage for zone HP
 
   // Combat log with zone name when available
   const zoneSuffix = hitZone ? `'s ${hitZone.name}` : '';
@@ -92,7 +156,17 @@ function playerAttack(mon){
       if (emul >= 1.4) esuf = ' [WEAK]';
       else if (emul <= 0.6) esuf = ' [RESIST]';
       mon.hp -= edmg;
+      totalZoneDmg += edmg;
       log(`  + ${edmg} ${state.player.weapon.elem}${esuf}.`, 'hit');
+    }
+  }
+
+  // Zone destruction resolution — apply accumulated damage to the hit zone
+  let zoneDeath = false;
+  if (hitZone && monBodyMap && totalZoneDmg > 0) {
+    zoneDeath = resolveZoneDamage(mon, hitZone, totalZoneDmg, mon.name, monBodyMap);
+    if (zoneDeath) {
+      mon.hp = 0;  // ensure global HP reflects death
     }
   }
 
@@ -123,7 +197,7 @@ function playerAttack(mon){
     alertNearby(mon, 4);
   }
 
-  if (mon.hp <= 0) killMonster(mon);
+  if (mon.hp <= 0 || zoneDeath) killMonster(mon);
   return true;  // hit
 }
 

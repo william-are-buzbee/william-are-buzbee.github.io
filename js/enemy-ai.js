@@ -4,7 +4,7 @@
 import { state, worlds, covers, monsters } from './state.js';
 import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, STAT_MAX, TURN_AGILITY_COEFF,
-         facingSteps } from './constants.js';
+         facingSteps, checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss } from './constants.js';
 import { T, isWalkable } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -205,6 +205,9 @@ function playerAdjacentToWater(layer){
 // Movement only — no attacks, no special abilities, no interactions.
 // Uses the enemy's existing AI movement logic for direction.
 function performBonusMove(mon){
+  // Immobilized creatures can't move
+  if (mon.immobilized) return;
+
   const d = chebyshev(mon.x, mon.y, state.player.x, state.player.y);
 
   // Hare: flee movement (bonus move makes them harder to catch)
@@ -509,6 +512,50 @@ function enemyAct(mon){
   // Enemy passed speed + turn checks — mark as having acted normally.
   // This flag is read by the bonus move pass in endPlayerTurn.
   mon._actedNormally = true;
+
+  // ====== IMMOBILIZED CHECK ======
+  // Creatures with all locomotion zones destroyed can't move but can still
+  // attack if adjacent to a target and have surviving attack zones.
+  if (mon.immobilized) {
+    const d = chebyshev(mon.x, mon.y, state.player.x, state.player.y);
+    if (d <= 1) {
+      // Mushroom touch is special (enzyme contact, not zone-based attack)
+      if (mon.key === 'mushroom') {
+        mushroomTouch(mon);
+      } else {
+        const monBodyMap = getBodyMap(mon);
+        const hasAttacks = !monBodyMap || getAvailableAttacks(monBodyMap).length > 0;
+        if (hasAttacks) monsterMelee(mon);
+      }
+    }
+    return;  // can't move regardless
+  }
+
+  // ====== NO ATTACKS CHECK ======
+  // Creatures with zero available attacks flee from the player if they have
+  // flee behavior, otherwise just wander. Mushrooms are exempt (enzyme touch).
+  if (mon.key !== 'mushroom') {
+    const _monBodyMap = getBodyMap(mon);
+    if (_monBodyMap && getAvailableAttacks(_monBodyMap).length === 0) {
+    const d = chebyshev(mon.x, mon.y, state.player.x, state.player.y);
+    if (d <= 6) {
+      // Flee from player
+      const fdx = Math.sign(mon.x - state.player.x);
+      const fdy = Math.sign(mon.y - state.player.y);
+      const nx = mon.x + (fdx || (rand()<0.5?1:-1));
+      const ny = mon.y + (fdy || (rand()<0.5?1:-1));
+      if (inBounds(state.player.layer, nx, ny)
+          && isWalkable(worlds[state.player.layer][ny][nx], getCover(state.player.layer, nx, ny))
+          && !monsterAt(nx,ny,state.player.layer) && !(nx===state.player.x && ny===state.player.y)){
+        if (mon.facing) { mon.facing.dx = Math.sign(nx - mon.x); mon.facing.dy = Math.sign(ny - mon.y); }
+        mon.x = nx; mon.y = ny;
+      }
+    } else {
+      if (rand() < 0.15) wanderInTerritory(mon);
+    }
+    return;
+  }
+  } // end mushroom exemption for no-attacks check
 
   // Eels always heal +1 HP in water per turn
   // T.WATER, T.UWATER, T.BEACH are ground types — read from worlds directly
@@ -1221,6 +1268,14 @@ function moveMonsterTowardPlayer(mon){ moveMonsterToward(mon, state.player.x, st
 export function monsterMelee(mon){
   const player = state.player; // Define local reference to player
   if (player.hp <= 0) return;
+
+  // Check if monster has available attacks (zone destruction may have removed them)
+  const monBodyMap = getBodyMap(mon);
+  if (monBodyMap) {
+    const available = getAvailableAttacks(monBodyMap);
+    if (available.length === 0) return;  // no attacks available
+  }
+
   const acc = monAcc(mon);
   const dodge = playerDodge(player);
   if (!rollHit(acc, dodge)){
@@ -1247,6 +1302,12 @@ export function monsterMelee(mon){
                mon.dmgType === DMG.POISON ? 'stings' : 'hits';
   if (crit) log(`${mon.name} CRITS — ${verb}${zoneSuffix}! ${dmg} ${mon.dmgType}.`, 'crit');
   else log(`${mon.name} ${verb}${zoneSuffix}. ${dmg} ${mon.dmgType}.`, 'dmg');
+
+  // Zone destruction resolution for player
+  if (hitZone && playerBodyMap && dmg > 0) {
+    resolvePlayerZoneDamage(hitZone, dmg, playerBodyMap);
+  }
+
   // Poison application — probability reduced by 75% Size / 25% Strength
   if (mon.dmgType === DMG.POISON){
     const poisonResist = poisonResistance(player);
@@ -1266,6 +1327,59 @@ export function monsterMelee(mon){
     }
   }
   if (state.player.stealth) endStealth('Your cover is blown!');
+}
+
+// Resolve zone damage on the player.
+// Similar to resolveZoneDamage in combat.js but for the player entity.
+function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
+  if (hitZone.hp == null) return;
+  hitZone.hp = Math.max(0, hitZone.hp - dmg);
+
+  if (hitZone.hp <= 0 && !hitZone.destroyed) {
+    hitZone.hp = 0;
+    hitZone.destroyed = true;
+
+    log(`Your ${hitZone.name} is destroyed!`, 'crit');
+
+    // Vital check — player dies
+    if (hitZone.vital) {
+      log(`Your ${hitZone.name} is destroyed — a fatal blow.`, 'dead');
+      state.player.hp = 0;
+      state.player.deathCause = 'zone_vital';
+      return;
+    }
+
+    // Neural death check
+    if (checkNeuralDeath(bodyMap)) {
+      log(`You collapse — too much neural tissue destroyed.`, 'dead');
+      state.player.hp = 0;
+      state.player.deathCause = 'neural_death';
+      return;
+    }
+
+    // Locomotion check
+    if (hitZone.locomotion && !hasLocomotion(bodyMap)) {
+      state.player.immobilized = true;
+      log(`You collapse, unable to move.`, 'warn');
+    }
+
+    // Attack loss
+    if (hitZone.attacks && hitZone.attacks.length > 0) {
+      for (const atk of hitZone.attacks) {
+        log(`Your ${atk.name} is gone.`, 'warn');
+      }
+    }
+
+    // Sensory messages
+    const senseLosses = checkSenseLoss(bodyMap, hitZone);
+    for (const sl of senseLosses) {
+      if (sl.type === 'lost') {
+        log(`You can no longer ${sl.verb}.`, 'warn');
+      } else {
+        log(`Your ${sl.sense} weakens.`, 'muted');
+      }
+    }
+  }
 }
 
 export { endPlayerTurn, enemyAct, playerInTerritory, monInOwnTerritory,

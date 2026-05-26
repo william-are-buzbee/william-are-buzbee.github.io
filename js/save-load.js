@@ -3,14 +3,14 @@
 // Handles circular references (bondPartner), Set objects, and item registry refs.
 
 import { state, worlds, covers, monsters, features, groundItems } from './state.js';
-import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR } from './constants.js';
+import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, initBodyMap, getBodyMap } from './constants.js';
 import { findWeapon, findArmor } from './items.js';
 import { render } from './rendering.js';
 import { log } from './log.js';
 import { updatePlayerFOV } from './fov.js';
 
 const SAVE_KEY = 'overworld_zero_save';
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
 
 // ==================== HELPERS ====================
 
@@ -90,6 +90,38 @@ function migrateCgAttrs(attrs) {
   return attrs;
 }
 
+// ==================== ZONE STATE PERSISTENCE ====================
+// Restore saved zone HP and destroyed state onto a freshly-initialized body map.
+// Matches by zone key. If a saved zone doesn't exist in the template (e.g. body
+// map changed between versions), it's silently skipped.
+
+function restoreZoneState(bodyMap, savedState) {
+  if (!bodyMap || !savedState) return;
+  const stateByKey = {};
+  for (const zs of savedState) {
+    if (zs && zs.key) stateByKey[zs.key] = zs;
+  }
+  for (const zone of bodyMap) {
+    const saved = stateByKey[zone.key];
+    if (saved) {
+      zone.hp = saved.hp != null ? saved.hp : zone.maxHp;
+      zone.destroyed = saved.destroyed || false;
+      if (saved.maxHp != null) zone.maxHp = saved.maxHp;
+    }
+  }
+}
+
+// Extract saveable zone state from a body map.
+function extractZoneState(bodyMap) {
+  if (!bodyMap) return null;
+  return bodyMap.map(z => ({
+    key: z.key,
+    hp: z.hp,
+    maxHp: z.maxHp,
+    destroyed: z.destroyed,
+  }));
+}
+
 // ==================== SERIALIZATION ====================
 
 /** Serialize a player object into a plain JSON-safe structure. */
@@ -106,6 +138,16 @@ function serializePlayer(p) {
   out._booksRead = p.booksRead ? [...p.booksRead] : [];
   delete out.npcsMet;
   delete out.booksRead;
+  // Body map → save only zone runtime state (hp, maxHp, destroyed)
+  if (p.bodyMap) {
+    out._zoneState = p.bodyMap.map(z => ({
+      key: z.key,
+      hp: z.hp,
+      maxHp: z.maxHp,
+      destroyed: z.destroyed,
+    }));
+  }
+  delete out.bodyMap;  // don't persist full body map (static data reloaded from template)
   return out;
 }
 
@@ -130,11 +172,20 @@ function deserializePlayer(raw) {
   if (p.distributed == null) p.distributed = 0;
   // Backwards compat: colorPalette added post-launch
   if (p.colorPalette == null) p.colorPalette = 'meso_predator';
+  // Backwards compat: immobilized flag
+  if (p.immobilized == null) p.immobilized = false;
   // Reconstruct Sets
   p.npcsMet   = new Set(raw._npcsMet   || []);
   p.booksRead = new Set(raw._booksRead || []);
   delete p._npcsMet;
   delete p._booksRead;
+  // Reconstruct body map from template, then restore zone state
+  const savedZoneState = raw._zoneState || null;
+  delete p._zoneState;
+  initBodyMap(p);
+  if (savedZoneState && p.bodyMap) {
+    restoreZoneState(p.bodyMap, savedZoneState);
+  }
   return p;
 }
 
@@ -164,6 +215,11 @@ function serializeMonsters(allLayers) {
         out._bondRef = null;
       }
       delete out.bondPartner;
+      // Body map → save only zone runtime state
+      if (mon.bodyMap) {
+        out._zoneState = extractZoneState(mon.bodyMap);
+      }
+      delete out.bodyMap;
       serialized.push(out);
     }
     result[li] = serialized;
@@ -193,12 +249,21 @@ function deserializeMonsters(allLayers) {
       }
     }
   }
-  // Clean up _bondRef markers
+  // Third pass: clean up markers, restore body maps and zone state
   for (const li of Object.keys(result)) {
     for (const mon of result[li]) {
       if (mon) {
         delete mon._bondRef;
         if (!mon.bondPartner) mon.bondPartner = null;
+        // Ensure immobilized flag exists
+        if (mon.immobilized == null) mon.immobilized = false;
+        // Restore body map from template, then apply saved zone state
+        const savedZoneState = mon._zoneState || null;
+        delete mon._zoneState;
+        initBodyMap(mon);
+        if (savedZoneState && mon.bodyMap) {
+          restoreZoneState(mon.bodyMap, savedZoneState);
+        }
       }
     }
   }
@@ -294,7 +359,7 @@ export function hasSave() {
     if (!raw) return false;
     const data = JSON.parse(raw);
     // Accept current version AND previous versions (will be migrated on load)
-    return data && (data.version === SAVE_VERSION || data.version === 2 || data.version === 1) && data.state && data.state.player;
+    return data && (data.version === SAVE_VERSION || data.version === 3 || data.version === 2 || data.version === 1) && data.state && data.state.player;
   } catch {
     return false;
   }
@@ -320,8 +385,8 @@ export function loadGame() {
 
     const data = JSON.parse(raw);
 
-    // Version check — accept v1, v2 (will migrate) and current version
-    if (!data || (data.version !== SAVE_VERSION && data.version !== 2 && data.version !== 1)) {
+    // Version check — accept v1, v2, v3 (will migrate) and current version
+    if (!data || (data.version !== SAVE_VERSION && data.version !== 3 && data.version !== 2 && data.version !== 1)) {
       console.warn('[Save] Incompatible save version, discarding.');
       deleteSave();
       return false;
@@ -329,10 +394,13 @@ export function loadGame() {
 
     const needsStatMigration = data.version === 1;   // v1 → rename old stat keys
     const needsHPRecalc = data.version <= 2;          // v1 & v2 → recalc HP with new formula
+    const needsZoneMigration = data.version <= 3;     // v1-v3 → add zone destroyed defaults
     if (needsStatMigration) {
-      console.log('[Save] Migrating v1 save to v3 (stat system rename + HP recalc).');
+      console.log('[Save] Migrating v1 save to v4 (stat system rename + HP recalc + zone state).');
     } else if (data.version === 2) {
-      console.log('[Save] Migrating v2 save to v3 (HP recalc).');
+      console.log('[Save] Migrating v2 save to v4 (HP recalc + zone state).');
+    } else if (data.version === 3) {
+      console.log('[Save] Migrating v3 save to v4 (zone destruction state).');
     }
 
     // Validate critical data

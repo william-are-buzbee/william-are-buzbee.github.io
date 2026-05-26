@@ -3,7 +3,7 @@ import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META,
          HP_PER_SIZE, HP_PER_LEVEL_FACTOR, STAT_MAX,
          MAX_DODGE_CHANCE, DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF,
          BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF,
-         CREATURE_PATHWAYS } from './constants.js';
+         CREATURE_PATHWAYS, initBodyMap } from './constants.js';
 import { getTimePhase } from './time-cycle.js';
 import { state } from './state.js';
 import { rand, randomRound } from './rng.js';
@@ -44,6 +44,9 @@ function freshPlayer(attrs, bodyType, colorPalette){
   p.inventory.push({kind:'food', key:'bread', weight:1});
   p.hpMax = deriveHP(p);
   p.hp = p.hpMax;
+  p.immobilized = false;
+  // Initialize per-instance body map with zone HP
+  initBodyMap(p);
   return p;
 }
 

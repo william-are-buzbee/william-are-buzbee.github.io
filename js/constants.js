@@ -445,6 +445,13 @@ export function getAtmosphere(x, y) {
   };
 }
 
+// ==================== ZONE DESTRUCTION CONSTANTS ====================
+// If remaining neural mass fraction falls below this, the creature dies.
+export const NEURAL_DEATH_THRESHOLD = 0.20;
+
+// Zone HP derived from zone mass. Each kg of zone tissue = this many HP.
+export const HP_PER_KG = 5;
+
 // ==================== BALANCE CONSTANTS ====================
 // Single balance curve (formerly "easy" difficulty).
 export const STARTING_POINTS = 22;  // Math.round(16 * 1.4) — scaled from 5-stat to 7-stat system
@@ -1156,8 +1163,13 @@ export const CREATURE_PATHWAYS = {
 };
 
 // Look up a body map for any combatant (player or monster).
-// Returns the zone array or null if no map is defined.
+// Returns the entity's per-instance body map if it exists (with zone HP state),
+// otherwise falls back to the shared template (read-only, no HP).
 export function getBodyMap(entity) {
+  // Per-instance body map (has zone HP, destroyed state)
+  if (entity.bodyMap) return entity.bodyMap;
+
+  // Fallback to shared template (Phase 1 compat — no zone HP)
   if (entity.isPlayer) {
     const bt = entity.bodyType || 'meso';
     return BODY_MAPS['player_' + bt] || BODY_MAPS.player_meso;
@@ -1166,6 +1178,38 @@ export function getBodyMap(entity) {
     return BODY_MAPS[entity.key] || null;
   }
   return null;
+}
+
+// Initialize a per-instance body map for a creature or player.
+// Deep-copies the template and adds zone HP fields.
+// Call at spawn time and store the result on the entity.
+export function initBodyMap(entity) {
+  let template;
+  if (entity.isPlayer) {
+    const bt = entity.bodyType || 'meso';
+    template = BODY_MAPS['player_' + bt] || BODY_MAPS.player_meso;
+  } else if (entity.key) {
+    template = BODY_MAPS[entity.key] || null;
+  }
+  if (!template) return null;
+
+  // Deep copy each zone, initialize HP
+  const bodyMap = template.map(z => {
+    const zone = {
+      ...z,
+      neuralAllocation: { ...z.neuralAllocation },
+      transducers: { ...(z.transducers || {}) },
+      attacks: z.attacks ? z.attacks.map(a => ({ ...a })) : [],
+    };
+    // Zone HP from mass
+    zone.maxHp = Math.max(1, Math.floor(z.mass * HP_PER_KG));
+    zone.hp = zone.maxHp;
+    zone.destroyed = false;
+    return zone;
+  });
+
+  entity.bodyMap = bodyMap;
+  return bodyMap;
 }
 
 // Look up pathways for any combatant (player or monster).
@@ -1184,12 +1228,81 @@ export function getPathways(entity) {
 // Weighted random zone selection.  Takes a body map (zone array),
 // returns the selected zone object.  Uses Math.random — called only
 // after a hit is confirmed, so the roll is independent of the hit roll.
+// Destroyed zones are excluded and their weight redistributed.
 export function selectHitZone(bodyMap) {
-  let r = Math.random();
-  for (const zone of bodyMap) {
+  const alive = bodyMap.filter(z => !z.destroyed);
+  if (alive.length === 0) return bodyMap[bodyMap.length - 1]; // safety fallback
+  const totalWeight = alive.reduce((sum, z) => sum + z.targetWeight, 0);
+  let r = Math.random() * totalWeight;
+  for (const zone of alive) {
     r -= zone.targetWeight;
     if (r <= 0) return zone;
   }
-  // Floating-point safety — return last zone
-  return bodyMap[bodyMap.length - 1];
+  // Floating-point safety — return last alive zone
+  return alive[alive.length - 1];
+}
+
+// ==================== ZONE DESTRUCTION HELPERS ====================
+
+// Check if remaining neural mass is below the death threshold.
+// Returns true if creature should die from neural loss.
+export function checkNeuralDeath(bodyMap) {
+  let originalNeural = 0;
+  let remainingNeural = 0;
+  for (const zone of bodyMap) {
+    originalNeural += zone.neural;
+    if (!zone.destroyed) {
+      remainingNeural += zone.neural;
+    }
+  }
+  if (originalNeural === 0) return false; // non-biological (e.g. undead)
+  return (remainingNeural / originalNeural) < NEURAL_DEATH_THRESHOLD;
+}
+
+// Get all attacks from non-destroyed zones.
+// Returns array of { ...attackData, sourceZone: zone.key }
+export function getAvailableAttacks(bodyMap) {
+  const attacks = [];
+  for (const zone of bodyMap) {
+    if (!zone.destroyed && zone.attacks) {
+      for (const atk of zone.attacks) {
+        attacks.push({ ...atk, sourceZone: zone.key });
+      }
+    }
+  }
+  return attacks;
+}
+
+// Check if any locomotion zones survive.
+export function hasLocomotion(bodyMap) {
+  return bodyMap.some(z => z.locomotion && !z.destroyed);
+}
+
+// Check for sense loss when a zone is destroyed.
+// Returns array of { sense, verb, type } where type is 'lost' or 'weakened'.
+export function checkSenseLoss(bodyMap, destroyedZone) {
+  const senses = [
+    { key: 'chemical', verb: 'smell' },
+    { key: 'vibration', verb: 'feel vibrations' },
+    { key: 'visual', verb: 'see' },
+  ];
+  const results = [];
+  for (const sense of senses) {
+    const destroyedValue = (destroyedZone.transducers && destroyedZone.transducers[sense.key]) || 0;
+    if (destroyedValue === 0) continue;
+
+    const bestRemaining = Math.max(
+      0,
+      ...bodyMap
+        .filter(z => !z.destroyed)
+        .map(z => (z.transducers && z.transducers[sense.key]) || 0)
+    );
+
+    if (bestRemaining === 0) {
+      results.push({ sense: sense.key, verb: sense.verb, type: 'lost' });
+    } else if (bestRemaining < destroyedValue) {
+      results.push({ sense: sense.key, verb: sense.verb, type: 'weakened' });
+    }
+  }
+  return results;
 }
