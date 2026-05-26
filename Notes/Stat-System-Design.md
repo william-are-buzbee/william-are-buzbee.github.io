@@ -295,7 +295,7 @@ These are not assigned stats — they're the effective sense values derived from
 - Cognitive: same as meso-predator with more experience accumulation (longer-lived)
 
 **Clade A Large Herbivore (~200 kg):**
-- Chemical: 5 — adapted for aquatic mineral detection
+- Chemical: 5 — dominant sense, adapted for evaluating flora quality and detecting submerged vegetation
 - Visual: 5 — better distance vision than predators (open terrain)
 - Vibration: 0 — absent
 - Centralization: ~0.50 — Tier 3
@@ -317,7 +317,7 @@ These are not assigned stats — they're the effective sense values derived from
 
 **Clade B Ambush Predator (~24 kg):**
 - Chemical: 2 — minor, limb-tip chemoreceptors
-- Vibration: 7 — primary, dense arrays on sensor limbs and all other limbs
+- Vibration: 5 — primary, dense arrays on sensor limbs and all other limbs
 - Visual: 5 — good motion detection, including rear-facing eyes
 - Centralization: 0.15 — Tier 1 with modest Tier 2 integration in head
 - Cognitive: reflexive pattern matching with deep territory familiarity. Modest visual+vibration cross-referencing in head. No episodic memory.

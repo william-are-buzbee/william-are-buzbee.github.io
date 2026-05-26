@@ -149,7 +149,7 @@ Direction: head zone gains sensory and neural mass. Chemical sense improves. Cen
 
 Direction: total mass increases. Chemical and visual improve. Centralization reinforced. The player gets bigger and more perceptive but heavier and slower.
 
-**Large herbivore mutations:** Eating the amphibious grazer pushes toward mass and spatial memory. Each tier adds structural mass (thicker integument, denser connective tissue), grows the head's episodic memory allocation (spatial mapping of large territories), and may develop chemical sensitivity to dissolved minerals (the herbivore's aquatic foraging sense).
+**Large herbivore mutations:** Eating the amphibious grazer pushes toward mass and spatial memory. Each tier adds structural mass (thicker integument, denser connective tissue), grows the head's episodic memory allocation (spatial mapping of large territories), and may enhance chemical sensitivity for evaluating flora quality (the herbivore's foraging sense).
 
 Direction: total mass increases significantly. Structural mass increases (tougher). Head neural mass grows in spatial/memory allocation. The player becomes tankier.
 

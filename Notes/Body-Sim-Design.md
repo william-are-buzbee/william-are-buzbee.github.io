@@ -506,7 +506,7 @@ HEAD — 2.2 kg                              targetWeight: 0.08
   Neural allocation:
     visualProcessing: 0.12    vibrationProcessing: 0.06    integration: 0.05
     motorControl: 0.03       patternLibrary: 0.02
-  Transducers: visual 3, vibration 2, chemical 0
+  Transducers: visual 5, vibration 2, chemical 0
   Attacks: [{bite, puncture, canReflex: false}]
   Locomotion: false    Vital: false
 
@@ -584,7 +584,7 @@ rear-L ──(0.2)──► rear-R          (rear pair coordination)
 
 | Action | Meso-Predator (Clade A) | Ambush Predator (Clade B) |
 |---|---|---|
-| Destroy head | 66% neural mass lost. Bite gone. Chemical 6, visual 3 gone. Creature wanders aimlessly — no tracking, no memory, no decisions. Functionally dead. | 15% neural mass lost. Bite gone. Visual 3 lost. Modest integration lost. Every limb still fully functional. Creature becomes pure reflex — less coordinated, still dangerous. |
+| Destroy head | 66% neural mass lost. Bite gone. Chemical 6, visual 3 gone. Creature wanders aimlessly — no tracking, no memory, no decisions. Functionally dead. | 15% neural mass lost. Bite gone. Visual 5 lost. Modest integration lost. Every limb still fully functional. Creature becomes pure reflex — less coordinated, still dangerous. |
 | Destroy torso | Dead (vital organs) + all limb pathways severed. Head intact but commands nothing. | Dead (vital organs). Sub-clusters briefly linked via direct limb pathways. |
 | Destroy one limb | ~3% neural loss. Negligible cognitive impact. Speed loss of ~1/6. | ~12% neural loss. One flank's detection and strike capability gone. Rest fully capable. |
 | Flanking | Free hit. Limb ganglia can't detect or react independently. | Rear limbs detect via vibration + visual 1 and kick reflexively. No free hits. |

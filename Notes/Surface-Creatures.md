@@ -2,7 +2,7 @@
 
 First-pass creature designs for the primary surface biomes. These six form a minimum viable ecosystem: two predator tiers, two herbivore strategies, one colonial chemotroph, and one ambush specialist. All are common, generalist-niche organisms — the baseline fauna the player encounters in the first hour.
 
-Include this alongside Ecology-Foundations.md and Spawn-Design.md when implementing creatures.
+Include this alongside Ecology-Foundations.md and Spawn-Design.md when implementing.
 
 ---
 
@@ -47,6 +47,82 @@ Social groups have clear dominance hierarchies. Reproductive roles are determine
 
 **Future AI:** Scent-trail tracking (follows the player's path history, not a straight line). Episodic memory (remembers prior encounters with the player — if it survived a fight, it behaves differently next time). Age-based competence scaling. Ear-flap state visualization on the sprite.
 
+### Body Map — 22 kg total
+
+Six limbs, three pairs. Centralized neural architecture, star topology. Chemical-dominant senses concentrated in head. Tier 3 cognition with full episodic memory. Front limbs carry claw attacks, head carries bite.
+
+```
+HEAD — 3.5 kg                              targetWeight: 0.10
+  muscle: 0.80    structural: 0.60    neural: 0.85    sensory: 0.50    connective: 0.75
+  Neural allocation:
+    chemicalProcessing:  0.25    visualProcessing: 0.10    episodicMemory: 0.18
+    integration:         0.15    motorCoordination: 0.08   threatAssessment: 0.04
+    patternLibrary:      0.05
+  Transducers: chemical 6, visual 3, vibration 0
+  Attacks: [{bite, puncture, canReflex: false}]
+  Locomotion: false    Vital: false
+
+TORSO — 7.5 kg                              targetWeight: 0.30
+  muscle: 3.00    structural: 1.50    neural: 0.22    sensory: 0.08    connective: 2.70
+  Neural allocation:
+    motorRelay: 0.12    chemicalProcessing: 0.05    patternLibrary: 0.05
+  Transducers: chemical 1, vibration 0, visual 0
+  Attacks: []
+  Locomotion: false    Vital: true (organs)
+
+FRONT-L LIMB — 1.6 kg                      targetWeight: 0.08
+  muscle: 0.85    structural: 0.35    neural: 0.05    sensory: 0.05    connective: 0.30
+  Neural allocation:
+    motorControl: 0.04    chemicalProcessing: 0.01
+  Transducers: chemical 1, vibration 0, visual 0
+  Attacks: [{claw, slashing, canReflex: false}]
+  Locomotion: true    Vital: false
+
+FRONT-R LIMB — 1.6 kg                      targetWeight: 0.08
+  (mirror of front-L)
+
+MID-L LIMB — 1.9 kg                        targetWeight: 0.09
+  muscle: 1.10    structural: 0.40    neural: 0.04    sensory: 0.00    connective: 0.36
+  Neural allocation:
+    motorControl: 0.04
+  Transducers: none
+  Attacks: []
+  Locomotion: true    Vital: false
+
+MID-R LIMB — 1.9 kg                        targetWeight: 0.09
+  (mirror of mid-L)
+
+REAR-L LIMB — 2.1 kg                       targetWeight: 0.08
+  muscle: 1.30    structural: 0.42    neural: 0.04    sensory: 0.00    connective: 0.34
+  Neural allocation:
+    motorControl: 0.04
+  Transducers: none
+  Attacks: []
+  Locomotion: true    Vital: false
+
+REAR-R LIMB — 2.1 kg                       targetWeight: 0.08
+  (mirror of rear-L)
+```
+
+**Pathways:**
+```
+head ──(0.9)──► torso
+torso ──(0.7)──► front-L
+torso ──(0.7)──► front-R
+torso ──(0.5)──► mid-L
+torso ──(0.5)──► mid-R
+torso ──(0.5)──► rear-L
+torso ──(0.5)──► rear-R
+```
+
+**Derived values:**
+- Total neural: 1.29 kg
+- Peak concentration: 0.85 / 1.29 = 0.66 (head) — Tier 3
+- Locomotion muscle: 6.50 kg (all six limbs)
+- Raw speed ratio: 6.50 / 22.0 = 0.295
+- Coordination bonus: motorCoordination 0.08 in head
+- Knockout vulnerability: HIGH (head at 0.66)
+
 ---
 
 ## Creature 2 — Clade A Apex Predator
@@ -72,6 +148,82 @@ Social groups have clear dominance hierarchies. Reproductive roles are determine
 **Current AI:** Dire wolf behavior. Same state machine as Creature 1 with higher stats, longer detection range, more solo tendency, lower group probability.
 
 **Future AI:** Extended scent-detection radius. Preemptive positioning (moves toward the player's predicted path based on scent trail direction, not just following directly behind). Rare pack encounters that use simple coordination — flanking, cutting off escape routes. Memory of player encounters persists longer and has stronger behavioral effects.
+
+### Body Map — 90 kg total
+
+Six limbs, three pairs. Same centralized star topology as Creature 1 but scaled up. Chemical 7 with heavy processing investment. Tier 3 cognition with full episodic memory, integration, and threat assessment. Head carries bite, front limbs carry claw attacks.
+
+```
+HEAD — 8.0 kg                              targetWeight: 0.08
+  muscle: 2.00    structural: 1.60    neural: 1.26    sensory: 0.90    connective: 2.24
+  Neural allocation:
+    chemicalProcessing:  0.38    visualProcessing: 0.20    episodicMemory: 0.26
+    integration:         0.20    motorCoordination: 0.10   threatAssessment: 0.06
+    patternLibrary:      0.06
+  Transducers: chemical 7, visual 4, vibration 0
+  Attacks: [{bite, puncture, canReflex: false}]
+  Locomotion: false    Vital: false
+
+TORSO — 30.0 kg                             targetWeight: 0.30
+  muscle: 10.50    structural: 5.50    neural: 0.42    sensory: 0.10    connective: 13.48
+  Neural allocation:
+    motorRelay: 0.26    chemicalProcessing: 0.08    patternLibrary: 0.08
+  Transducers: chemical 1, vibration 0, visual 0
+  Attacks: []
+  Locomotion: false    Vital: true (organs)
+
+FRONT-L LIMB — 8.0 kg                     targetWeight: 0.10
+  muscle: 3.80    structural: 1.60    neural: 0.08    sensory: 0.12    connective: 2.40
+  Neural allocation:
+    motorControl: 0.06    chemicalProcessing: 0.02
+  Transducers: chemical 1, vibration 1, visual 0
+  Attacks: [{claw, slashing, canReflex: false}]
+  Locomotion: true    Vital: false
+
+FRONT-R LIMB — 8.0 kg                     targetWeight: 0.10
+  (mirror of front-L)
+
+MID-L LIMB — 8.5 kg                       targetWeight: 0.10
+  muscle: 4.20    structural: 1.60    neural: 0.06    sensory: 0.00    connective: 2.64
+  Neural allocation:
+    motorControl: 0.06
+  Transducers: none
+  Attacks: []
+  Locomotion: true    Vital: false
+
+MID-R LIMB — 8.5 kg                       targetWeight: 0.10
+  (mirror of mid-L)
+
+REAR-L LIMB — 9.5 kg                      targetWeight: 0.11
+  muscle: 4.80    structural: 1.80    neural: 0.06    sensory: 0.00    connective: 2.84
+  Neural allocation:
+    motorControl: 0.06
+  Transducers: none
+  Attacks: []
+  Locomotion: true    Vital: false
+
+REAR-R LIMB — 9.5 kg                      targetWeight: 0.11
+  (mirror of rear-L)
+```
+
+**Pathways:**
+```
+head ──(0.9)──► torso
+torso ──(0.7)──► front-L
+torso ──(0.7)──► front-R
+torso ──(0.5)──► mid-L
+torso ──(0.5)──► mid-R
+torso ──(0.5)──► rear-L
+torso ──(0.5)──► rear-R
+```
+
+**Derived values:**
+- Total neural: 2.08 kg
+- Peak concentration: 1.26 / 2.08 = 0.61 (head) — Tier 3
+- Locomotion muscle: 25.60 kg (all six limbs)
+- Raw speed ratio: 25.60 / 90.0 = 0.284
+- Coordination bonus: motorCoordination 0.10 in head
+- Knockout vulnerability: HIGH (head at 0.61 — lower than meso-predator's 0.66 but still well above 0.30 threshold)
 
 ---
 
@@ -103,6 +255,109 @@ Reproduction is predominantly fragmentation when food is abundant. A productive 
 
 **Future AI:** Vibration-based detection radius that scales with player movement speed (running = detected from far, creeping = detected from close, standing still = nearly undetectable). Home-range familiarity bonus to escape pathing — in familiar territory, it always finds the best escape route; in unfamiliar terrain, it sometimes gets cornered more easily. Loose-aggregation flight synchronization — when one flees, nearby individuals flee simultaneously in the same direction.
 
+### Body Map — 5.0 kg total
+
+Eight limbs, four pairs. Front two pairs are grazing limbs (long, thin, independently active, not locomotory). Rear two pairs are locomotory. Mesh topology, fully distributed ganglia, Tier 1 cognition. No offensive attacks — this creature flees.
+
+```
+HEAD — 0.28 kg                             targetWeight: 0.06
+  muscle: 0.04    structural: 0.06    neural: 0.042    sensory: 0.08    connective: 0.058
+  Neural allocation:
+    visualProcessing:    0.020    vibrationProcessing: 0.010
+    patternLibrary:      0.008    motorControl:        0.004
+  Transducers: visual 4, vibration 1, chemical 0
+  Attacks: []
+  Locomotion: false    Vital: false
+
+TORSO — 1.00 kg                             targetWeight: 0.24
+  muscle: 0.25    structural: 0.22    neural: 0.022    sensory: 0.02    connective: 0.488
+  Neural allocation:
+    motorRelay:          0.010    vibrationProcessing: 0.006
+    patternLibrary:      0.006
+  Transducers: vibration 1, chemical 0, visual 0
+  Attacks: []
+  Locomotion: false    Vital: true (organs)
+
+FORE-L LIMB — 0.22 kg                      targetWeight: 0.05
+  muscle: 0.03    structural: 0.03    neural: 0.028    sensory: 0.05    connective: 0.082
+  Neural allocation:
+    vibrationProcessing: 0.010    motorControl: 0.008
+    patternLibrary:      0.006    chemicalProcessing: 0.004
+  Transducers: vibration 5, chemical 2, visual 0
+  Attacks: []
+  Locomotion: false    Vital: false
+
+FORE-R LIMB — 0.22 kg                      targetWeight: 0.05
+  (mirror of fore-L)
+
+MID-GRAZE-L LIMB — 0.22 kg                 targetWeight: 0.05
+  muscle: 0.04    structural: 0.03    neural: 0.026    sensory: 0.035    connective: 0.089
+  Neural allocation:
+    vibrationProcessing: 0.010    motorControl: 0.008
+    patternLibrary:      0.006    chemicalProcessing: 0.002
+  Transducers: vibration 4, chemical 1, visual 0
+  Attacks: []
+  Locomotion: false    Vital: false
+
+MID-GRAZE-R LIMB — 0.22 kg                 targetWeight: 0.05
+  (mirror of mid-graze-L)
+
+MID-LOCO-L LIMB — 0.58 kg                  targetWeight: 0.10
+  muscle: 0.35    structural: 0.08    neural: 0.028    sensory: 0.02    connective: 0.102
+  Neural allocation:
+    motorControl:        0.012    vibrationProcessing: 0.008
+    patternLibrary:      0.008
+  Transducers: vibration 3, chemical 0, visual 0
+  Attacks: []
+  Locomotion: true    Vital: false
+
+MID-LOCO-R LIMB — 0.58 kg                  targetWeight: 0.10
+  (mirror of mid-loco-L)
+
+REAR-L LIMB — 0.84 kg                      targetWeight: 0.15
+  muscle: 0.55    structural: 0.10    neural: 0.030    sensory: 0.02    connective: 0.140
+  Neural allocation:
+    motorControl:        0.014    vibrationProcessing: 0.008
+    patternLibrary:      0.008
+  Transducers: vibration 3, chemical 0, visual 0
+  Attacks: []
+  Locomotion: true    Vital: false
+
+REAR-R LIMB — 0.84 kg                      targetWeight: 0.15
+  (mirror of rear-L)
+```
+
+**Pathways:**
+```
+head ──(0.3)──► torso
+torso ──(0.3)──► fore-L
+torso ──(0.3)──► fore-R
+torso ──(0.3)──► mid-graze-L
+torso ──(0.3)──► mid-graze-R
+torso ──(0.3)──► mid-loco-L
+torso ──(0.3)──► mid-loco-R
+torso ──(0.2)──► rear-L
+torso ──(0.2)──► rear-R
+fore-L ──(0.2)──► fore-R              (cross-body, grazing pair 1)
+fore-L ──(0.2)──► mid-graze-L         (adjacent pair, left side)
+fore-R ──(0.2)──► mid-graze-R         (adjacent pair, right side)
+mid-graze-L ──(0.2)──► mid-graze-R    (cross-body, grazing pair 2)
+mid-graze-L ──(0.2)──► mid-loco-L     (adjacent pair, left side)
+mid-graze-R ──(0.2)──► mid-loco-R     (adjacent pair, right side)
+mid-loco-L ──(0.2)──► mid-loco-R      (cross-body, loco pair 1)
+mid-loco-L ──(0.2)──► rear-L          (adjacent pair, left side)
+mid-loco-R ──(0.2)──► rear-R          (adjacent pair, right side)
+rear-L ──(0.2)──► rear-R              (cross-body, loco pair 2)
+```
+
+**Derived values:**
+- Total neural: 0.288 kg
+- Peak concentration: 0.042 / 0.288 = 0.146 (head) — Tier 1
+- Locomotion muscle: 1.80 kg (mid-loco pair 0.70 + rear pair 1.10)
+- Raw speed ratio: 1.80 / 5.0 = 0.360
+- Coordination bonus: none (no motorCoordination allocation — each limb self-times)
+- Knockout vulnerability: VERY LOW (no zone above 0.146 — well below 0.30 threshold)
+
 ---
 
 ## Creature 4 — Clade A Large Herbivore
@@ -130,6 +385,82 @@ The player sees this creature wading through shallows, rooting through coastal m
 **Current AI:** Crab behavior (water-locked movement, attacks adjacent from water edge). Adapted to be semi-aquatic — prefers water but freely transitions to land.
 
 **Future AI:** True amphibious pathing (land/water transition is seamless, not a special case). Water-as-refuge behavior (retreats to water when threatened, stays there until threat passes). Mineral-foraging animation in water (stationary, rooting through substrate). Chemical-sensing detection of player at range. Memory of dangerous areas — avoids locations where it's been attacked in prior encounters.
+
+### Body Map — 200 kg total
+
+Six limbs, three pairs. Barrel-shaped body, heavy torso, thick structural mass everywhere. Front pair is paddle-like (digging, pulling vegetation, sculling through water). All six limbs are locomotory. Star topology, head-concentrated but diluted by massive body demands. Tier 3 cognition with spatial mapping emphasis. Defensive attacks only — front limb shove, rear limb kick. No bite (mouth is ventral, adapted for grazing and rooting).
+
+```
+HEAD — 12.0 kg                             targetWeight: 0.06
+  muscle: 2.50    structural: 2.80    neural: 1.10    sensory: 1.00    connective: 4.60
+  Neural allocation:
+    chemicalProcessing:  0.28    visualProcessing: 0.26    episodicMemory: 0.22
+    integration:         0.14    motorCoordination: 0.10   patternLibrary: 0.08
+    threatAssessment:    0.02
+  Transducers: chemical 5, visual 5, vibration 0
+  Attacks: []
+  Locomotion: false    Vital: false
+
+TORSO — 80.0 kg                             targetWeight: 0.34
+  muscle: 26.00    structural: 20.00    neural: 0.54    sensory: 0.10    connective: 33.36
+  Neural allocation:
+    motorRelay: 0.38    chemicalProcessing: 0.08    patternLibrary: 0.08
+  Transducers: chemical 1, vibration 0, visual 0
+  Attacks: []
+  Locomotion: false    Vital: true (organs)
+
+FRONT-L LIMB — 15.0 kg                    targetWeight: 0.08
+  muscle: 5.00    structural: 4.20    neural: 0.10    sensory: 0.15    connective: 5.55
+  Neural allocation:
+    motorControl: 0.08    chemicalProcessing: 0.02
+  Transducers: chemical 1, vibration 0, visual 0
+  Attacks: [{shove, blunt, canReflex: false}]
+  Locomotion: true    Vital: false
+
+FRONT-R LIMB — 15.0 kg                    targetWeight: 0.08
+  (mirror of front-L)
+
+MID-L LIMB — 18.0 kg                      targetWeight: 0.10
+  muscle: 9.00    structural: 3.80    neural: 0.08    sensory: 0.00    connective: 5.12
+  Neural allocation:
+    motorControl: 0.08
+  Transducers: none
+  Attacks: []
+  Locomotion: true    Vital: false
+
+MID-R LIMB — 18.0 kg                      targetWeight: 0.10
+  (mirror of mid-L)
+
+REAR-L LIMB — 21.0 kg                     targetWeight: 0.12
+  muscle: 11.00    structural: 4.40    neural: 0.08    sensory: 0.00    connective: 5.52
+  Neural allocation:
+    motorControl: 0.08
+  Transducers: none
+  Attacks: [{kick, blunt, canReflex: false}]
+  Locomotion: true    Vital: false
+
+REAR-R LIMB — 21.0 kg                     targetWeight: 0.12
+  (mirror of rear-L)
+```
+
+**Pathways:**
+```
+head ──(0.8)──► torso
+torso ──(0.6)──► front-L
+torso ──(0.6)──► front-R
+torso ──(0.5)──► mid-L
+torso ──(0.5)──► mid-R
+torso ──(0.5)──► rear-L
+torso ──(0.5)──► rear-R
+```
+
+**Derived values:**
+- Total neural: 2.16 kg
+- Peak concentration: 1.10 / 2.16 = 0.509 (head) — Tier 3
+- Locomotion muscle: 50.00 kg (front pair 10.00 + mid pair 18.00 + rear pair 22.00)
+- Raw speed ratio: 50.00 / 200.0 = 0.250
+- Coordination bonus: motorCoordination 0.10 in head
+- Knockout vulnerability: HIGH (head at 0.509 — above 0.30 threshold, though lower than either predator)
 
 ---
 
@@ -169,6 +500,8 @@ The player's options: leave before the coalesce phase triggers. Move fast enough
 
 **Future AI:** Multi-action-per-turn system where the synchronized colony gets N actions proportional to active node count. Each action is a communication/relay/reposition step — the colony "thinks faster" with more nodes online. Seismic ping propagation — nodes that detect the player relay position to nodes that can't detect the player, with propagation delay based on distance through the network. The player can learn to break line-of-sight to the nearest node and reposition before the update propagates. Ambient hum intensity as a direct audio cue for colony attention level. Colony fragmentation — if enough nodes are killed, the colony splits into sub-colonies that act independently until they re-establish signal contact.
 
+**Body map deferred — colonial architecture requires special handling (the "creature" is a colony of semi-independent nodes, not a single body).**
+
 ---
 
 ## Creature 6 — Clade B Solitary Ambush Predator
@@ -204,6 +537,88 @@ The player learns: pay attention to terrain type (dense cover = possible ambush 
 **Current AI:** No direct equivalent in the current codebase. Closest approximation: a basic chase AI with short leash range (8-12 tiles from home position), high initial aggression, and immediate disengage when the player leaves the radius. Ships as a territorial predator that attacks on sight within its range and gives up outside it.
 
 **Future AI:** Vibration-based detection radius scaling with player movement type (sprint > walk > creep > still). Ambush positioning — the creature preemptively moves to an intercept point on the player's predicted path rather than charging directly. The parallel-behavior system: simultaneously attacking and repositioning, no readable state transitions, no "wind-up" that the player can exploit for timing. Home-territory competence scaling — tiles within its established range get fast reflexive responses; tiles outside range get slow cautious behavior. If the player forces it out of territory, it becomes noticeably less dangerous.
+
+### Body Map — 24 kg total
+
+Eight limbs, four pairs. Distributed ganglia, mesh topology. Vibration-dominant sensing with dense mechanoreceptor arrays on sensor limbs. Tier 1 cognition with modest Tier 2 integration in head. Front limbs carry hook attacks (reflex-capable), sensor limbs carry probe attacks (reflex-capable), rear limbs carry kick attacks (reflex-capable). Head carries bite.
+
+```
+HEAD — 2.2 kg                              targetWeight: 0.08
+  muscle: 0.40    structural: 0.50    neural: 0.28    sensory: 0.35    connective: 0.67
+  Neural allocation:
+    visualProcessing: 0.12    vibrationProcessing: 0.06    integration: 0.05
+    motorControl: 0.03       patternLibrary: 0.02
+  Transducers: visual 3, vibration 2, chemical 0
+  Attacks: [{bite, puncture, canReflex: false}]
+  Locomotion: false    Vital: false
+
+TORSO — 6.0 kg                              targetWeight: 0.24
+  muscle: 2.20    structural: 1.30    neural: 0.20    sensory: 0.15    connective: 2.15
+  Neural allocation:
+    motorRelay: 0.08    vibrationProcessing: 0.06    patternLibrary: 0.06
+  Transducers: vibration 2, chemical 0, visual 0
+  Attacks: []
+  Locomotion: false    Vital: true (organs)
+
+SENSOR-L LIMB — 1.8 kg                     targetWeight: 0.06
+  muscle: 0.50    structural: 0.25    neural: 0.28    sensory: 0.40    connective: 0.37
+  Neural allocation:
+    vibrationProcessing: 0.15    chemicalProcessing: 0.06
+    patternLibrary: 0.05        motorControl: 0.02
+  Transducers: vibration 5, chemical 2, visual 0
+  Attacks: [{probe, puncture, canReflex: true}]
+  Locomotion: false    Vital: false
+
+SENSOR-R LIMB — 1.8 kg                     targetWeight: 0.06
+  (mirror of sensor-L)
+
+FRONT-L LIMB — 2.2 kg                      targetWeight: 0.08
+  muscle: 1.10    structural: 0.35    neural: 0.22    sensory: 0.18    connective: 0.37
+  Neural allocation:
+    vibrationProcessing: 0.10    chemicalProcessing: 0.03
+    motorControl: 0.05          patternLibrary: 0.04
+  Transducers: vibration 4, chemical 1, visual 0
+  Attacks: [{hook, puncture, canReflex: true}]
+  Locomotion: true    Vital: false
+
+FRONT-R LIMB — 2.2 kg                      targetWeight: 0.08
+  (mirror of front-L)
+
+REAR-L LIMB — 2.9 kg                       targetWeight: 0.09
+  muscle: 1.80    structural: 0.45    neural: 0.18    sensory: 0.12    connective: 0.35
+  Neural allocation:
+    vibrationProcessing: 0.06    visualProcessing: 0.04
+    motorControl: 0.05          patternLibrary: 0.03
+  Transducers: vibration 2, visual 1, chemical 0
+  Attacks: [{kick, blunt, canReflex: true}]
+  Locomotion: true    Vital: false
+
+REAR-R LIMB — 2.9 kg                       targetWeight: 0.09
+  (mirror of rear-L)
+```
+
+**Pathways:**
+```
+head ──(0.5)──► torso
+torso ──(0.4)──► sensor-L
+torso ──(0.4)──► sensor-R
+torso ──(0.5)──► front-L
+torso ──(0.5)──► front-R
+torso ──(0.4)──► rear-L
+torso ──(0.4)──► rear-R
+sensor-L ──(0.3)──► front-L       (direct detection-to-strike)
+sensor-R ──(0.3)──► front-R       (direct detection-to-strike)
+front-L ──(0.2)──► front-R        (cross-body)
+rear-L ──(0.2)──► rear-R          (rear pair coordination)
+```
+
+**Derived values:**
+- Total neural: 1.84 kg
+- Peak concentration: 0.28 / 1.84 = 0.15 (sensor limbs and head tied) — Tier 1
+- Locomotion muscle: 5.80 kg (front pair + rear pair)
+- Raw speed ratio: 5.80 / 24.0 = 0.242
+- Coordination bonus: none (no centralized motorCoordination)
+- Knockout vulnerability: VERY LOW (no zone above 0.16)
 
 ---
 
