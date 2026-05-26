@@ -30,14 +30,18 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Update world map until it looks good
 - [x] Add a corpse/item drop system (enemies drop a corpse upon death which can be looted, objects can be seen and picked up on the ground)
 - [x] Update UI to have no icons and use key presses to bring up info screens
-- [x] Designed systems around a 3d body map as a core game system (visualizes weight, muscularity, connective tissue, neural mass, armor, sensory organs, neural pathways, etc)
-- [x] Created a cognitive system where centralized neuron clusters are more efficient at communication (smell is more efficient if the "nose" is near the "brain" so to speak)
+- [x] Create two alien "clades" that all alien life is related too (clade A resembles more mammalian, clade B resembles more cephalopod, but both are terrestrial)
+- [x] Designed a 3d body map system as a core game mechanic that will replace stats like CON, STR, INT, etc. (instead, the body map visualizes and describes weight, muscularity, connective tissue, neural mass, armor, texture, hardness, sensory organs, neural pathways, etc and a 3d animal could be created from this description with a lot of functional detail)
+- [x] Create body maps for the main ancestors of the two clades (small herbivore, large herbivore, ambush predator, meso carnivore, apex carnivore) 
+- [x] Implemented a temporary "Size" and "Strength" system that roughly reflects total mass and total muscle mass % (relative to total mass in kg) to help current build reflect size disparities & how that should affect damage
 
 ## Up Next
-- 
+- [ ] Implement the next phase of the 3d body plan, of which there will be many rounds
 
 ## Near-Term Plans
-- [ ] Update biomes (new groundcover options, ground tile options and ground palette)  
+- [ ] Implement necesary AI changes (most animals will eat corpses they run into, herbivores have to actually forage and eat plants, eating takes time, implement sleeping, implement basic intimidation logic, etc)
+- [ ] Implement basic sensory abilities (visual map for chemical sense, tremor/AOE around player for vibration)
+- [ ] Playtest gameplay with the 3d body plan functioning as multiple different animals/niches
 
 ## Long-Term Plans
 - [ ] Implement underground generation of new floors and cave systems 
