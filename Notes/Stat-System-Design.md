@@ -1,261 +1,387 @@
 # Stat System Design
 
-Replacement for the D&D-derived STR/DEX/CON/INT/PER attribute system. Stats now describe what an organism physically *is* — its body, its senses, and its neural architecture — rather than abstract RPG categories. Include this alongside Body-Sim-Design.md, Mutation-Design.md, and Ecology-Foundations.md when implementing.
+All gameplay-relevant values derive from the body map. There are no independent stats. What the player sees on their status screen are derived summary values computed from the physical composition of their body — total mass, muscle distribution, sensory organs, neural architecture. This document describes what those derived values are, how they're computed, and what they mean in gameplay.
+
+Include this alongside Body-Sim-Design.md, Mutation-Design.md, and Ecology-Foundations.md when implementing.
 
 ---
 
-## Why the Old System Doesn't Work
+## Why No Independent Stats
 
-The old five stats (STR, CON, DEX, INT, PER) are human adventurer categories. They bundle unrelated things: DEX covers dodge, stealth, crit chance, and hand-eye coordination — four different physical properties jammed into one number. CON is "toughness" disconnected from body mass. PER is "awareness" without specifying awareness of *what* through *which sense*. INT is "smartness" without distinguishing between different cognitive architectures.
+The original system had seven stats (Size, Strength, Chemical, Vibration, Visual, Central, Distributed) assigned directly to each creature. This was a bridge from the D&D-derived system (STR/CON/DEX/INT/PER) toward something more physical. But the body sim made independent stats redundant — every number they described is a physical property of a specific body zone:
 
-On a planet with two clades that see, think, and process the world through fundamentally different biological hardware, these abstractions hide the things that actually matter. A Clade A predator with PER 7 and a Clade B predator with PER 7 are doing completely different things with completely different organs. That needs to be visible in the stat block, not buried under one number.
+- "Size" is total body mass in kg.
+- "Strength" is muscle mass distributed across zones.
+- "Chemical" is chemoreceptor transducer quality plus neural processing allocated to interpreting it.
+- "Vibration" is mechanoreceptor transducer quality plus neural processing allocated to interpreting it.
+- "Visual" is eye quality plus neural processing allocated to interpreting it.
+- "Central" is the centralization score — the peak concentration of neural mass in any single zone.
+- "Distributed" is the distribution score — 1.0 minus the centralization score.
+
+Keeping independent stats alongside the body map means two systems describing the same creature, which creates conflicts. The body map is the source of truth. Stats are views into it.
 
 ---
 
-## The New Stats
+## Derived Physical Values
 
-### Physical Stats (Universal)
+### Total Mass
 
-Every creature has these. They describe the body itself.
+```
+totalMass = sum of all zone masses (kg)
+```
 
-**SIZE** — Body mass. Not height, not length — total physical bulk.
+This is what "Size" used to be. The player sees their total mass in kg on the status screen.
 
 What it determines:
-- Zone HP pools in the body sim (bigger zones have more HP)
-- Total HP (sum of zone HPs, all scaling with Size)
-- Food cost (bigger body, more calories to maintain)
-- Target profile (bigger = easier to hit, harder to miss)
+- Zone HP pools (heavier zones have more HP)
+- Total HP (sum of zone HPs)
+- Target profile (bigger = easier to hit)
 - Stealth penalty (bigger = harder to hide)
-- Carrying capacity (bigger frame can bear more weight)
-- Intimidation (future social mechanic)
-- Terrain interaction (future — can't fit through tight spaces at high Size)
+- Dodge chance (bigger = less dodge, inverse relationship)
+- Food cost (bigger body = more calories)
+- Turn agility (bigger = harder to change direction quickly)
+- Carrying capacity (future)
+- Terrain interaction (future — tight spaces)
+- Intimidation (future)
 
-What it doesn't determine: how hard you hit (that's Strength), how fast you move (open question), how tough your skin is (that's armor from the body sim zones).
+Approximate mass ranges for context:
 
-Scale: 1-10 where 1 is prawn-sized and 10 is the largest thing on the planet. The small herbivore is Size 2. The meso-predator is Size 4. The large herbivore is Size 7. Player starts around Size 4 and can grow through mutation.
+| Mass (kg) | Feels like | Earth comparison |
+|---|---|---|
+| 0.3 | Rat-sized | Large rat |
+| 1.5 | Cat-sized | Small cat |
+| 5 | Small dog / large rabbit | Jack rabbit, fox |
+| 12 | Medium dog | Coyote |
+| 24 | Large dog | Labrador, small wolf |
+| 45 | Large dog / small human | Large wolf |
+| 90 | Large human / small bear | Small black bear |
+| 200 | Large bear | Grizzly |
+| 400 | Bison | Bison |
+| 1000 | Rhino | White rhino |
+| 2500 | Terrestrial maximum | Hippo-to-small-elephant range |
 
-**STRENGTH** — Muscular force relative to body size. Not absolute force — a small creature with high Strength is compact and disproportionately powerful. A large creature with low Strength is bulky but soft.
+This planet's terrestrial ceiling is roughly 2000-3000 kg due to archipelago geography (limited landmass, lower primary productivity from the dim star). Aquatic organisms can be much larger — up to 30-40 tonnes for a Clade A whale analogue.
 
-What it determines:
-- Damage modifier (not primary damage — primary damage comes from Size/mass, the weapon/limb used, and the target's material properties. Strength modifies that baseline up or down.)
-- Grapple/hold ability (future)
-- Carrying capacity modifier (supplements Size)
-- Armor requirements (heavy armor needs minimum Strength)
-- Environmental interaction (future — breaking through obstacles, digging, climbing)
+### Muscle Mass and Distribution
 
-What it doesn't determine: HP (that's Size), accuracy (that's senses + processing), speed (open question). And it doesn't determine base damage on its own — damage is physics. Mass (Size) of the attacker, what body part or weapon struck, and the material interaction at the impact site (claw vs flesh, hook vs armor, blunt vs bone) are the primary damage inputs. Strength scales that result.
+There is no single "Strength" value. Muscle is distributed across zones and serves different functions depending on where it is:
 
-Scale: 1-10 relative to the creature's own body. A constrictor snake might be Size 2, Strength 8 — tiny but immensely powerful per unit mass. The large herbivore might be Size 7, Strength 3 — enormous but not built for fighting.
+**Locomotion muscle:** Muscle mass in zones flagged as locomotion. This drives speed.
 
----
+```
+locomotionMuscle = sum of muscle in all locomotion zones
+```
 
-### Senses (Individually Tracked)
+**Strike muscle:** Muscle mass in the zone housing a specific attack. This drives that attack's damage.
 
-Each sense is its own stat. A creature can have any combination. Zero in a sense means that sense doesn't exist for this creature. New senses can be added to the system later without restructuring.
+**Total muscle percentage:** Total muscle mass / total body mass. A rough indicator of how "powerful" the creature is overall, but the distribution matters more than the total.
 
-Each sense is not just a "detection range number." Each sense creates its own layer of world-information for the creature. Higher levels don't just mean "detect further" — they mean richer, more detailed information from that sense.
-
-**CHEMICAL** — Chemoreception. Smell, taste, reading dissolved compounds in air and water.
-
-Gameplay layer: a scent map. Creatures and the player leave chemical trails on tiles they've visited. Chemical sense lets you read those trails. Higher levels mean longer trail persistence, wider detection range, and richer information (from "something was here" up to identifying specific creatures and their state). The exact thresholds and detail tiers are open — to be determined through implementation and playtesting.
-
-Clade A ancestors are high Chemical. Most Clade A descendants start with Chemical 4-7. Clade B descendants can evolve Chemical too but most start lower (1-3).
-
-**VIBRATION** — Mechanoreception. Reading ground tremors, footsteps, pressure changes, body movements through substrate contact.
-
-Gameplay layer: movement detection. Any creature that moves generates vibration. Vibration sense lets you detect movement through the ground, potentially through walls and obstacles. Higher levels mean wider range, better identification (from "something moved" to recognizing specific creature types by signature), and detection of subtler stimuli. The exact thresholds and detail tiers are open — to be determined through implementation and playtesting.
-
-Clade B ancestors are high Vibration. Most Clade B descendants start with Vibration 4-7. Clade A descendants can evolve Vibration but most start at 0-2.
-
-**VISUAL** — Eyes. Light-based detection. Pattern recognition, motion detection, color discrimination, distance assessment.
-
-Gameplay layer: standard FOV (field of view). The existing sight system. Visual determines how far and how clearly you see. Higher levels mean longer FOV range, better detail at distance, and ability to read more information from what you observe. The exact thresholds are open.
-
-Both clades have eyes. Visual varies by creature and lifestyle, not by clade. The ambush predator has moderate-high Visual (needs to confirm targets). The colonial chemotroph has low Visual (barely uses eyes). The meso-predator has moderate Visual (secondary sense, chemical is primary).
-
-**Future senses (not implemented yet, but the system accommodates them):**
-- Thermal — detecting heat signatures. Useful underground, at night, through cover.
-- Echolocation — active sonar. Requires the creature to emit sound, which reveals its own position.
-- Electromagnetic — detecting bioelectric fields in water. Aquatic niche.
-- Pressure — atmospheric pressure changes. Weather prediction, altitude sensing.
-
-Each would follow the same pattern: its own stat, its own gameplay layer, low-to-high detail scaling.
+The player doesn't see "Strength 40." They might see "muscle: 48%" on the status screen, or they might just see the downstream effects — speed, damage per attack. The exact player-facing display is a design decision for implementation.
 
 ---
 
-### Processing (Individually Tracked)
+## Derived Senses
 
-Two modes of neural processing. Not "intelligence" as a single axis. Different architectures that are good at different things.
+Each sense is computed from the body map: transducer quality (the hardware) and neural processing allocation (the software).
 
-**CENTRAL** — Single-brain efficiency. The centralized nervous system's capacity for deep, integrated processing.
+### Chemical (Chemoreception)
 
-What it's good at:
-- Episodic memory (remembering specific events, recognizing individuals)
-- Generalization (applying lessons from one context to a novel situation)
-- Novel-situation handling (figuring out something you've never encountered before)
-- Targeted zone attacks in the body sim (understanding anatomy well enough to aim for specific zones)
-- Information extraction (the examine/look system — higher Central reveals more detail about what you're observing)
-- Abstract reasoning (future — puzzle solving, tool use, communication)
+Smell, taste, reading dissolved compounds in air and water.
 
-What it's not good at:
-- Reflexive reaction to familiar patterns (that's Distributed)
-- Parallel motor execution (that's Distributed)
-- Rapid-fire multi-stimulus response (that's Distributed)
+```
+effectiveChemical = max(zone.transducers.chemical for all surviving zones)
+discrimination = min(transducerQuality, chemicalProcessing * PROCESSING_SCALE)
+```
 
-Scale: 1-10. Most Clade A descendants have Central 4-8. Most Clade B descendants have Central 1-4. Advanced Clade B descendants that evolved central planning might reach Central 5-6. The player starts with Clade A-level Central (5-6).
+The creature's effective Chemical is the best chemoreceptor array it still has. Discrimination — how much useful information is extracted — is bottlenecked by whichever is lower: the transducer quality or the neural tissue processing it.
 
-**DISTRIBUTED** — Multi-ganglion efficiency. The distributed nervous system's capacity for parallel, pattern-matched processing.
+Gameplay layer: a scent map. Creatures and the player leave chemical trails on tiles they've visited. Chemical sense reads those trails. Higher effective Chemical + higher processing = longer detection range, richer information (from "something was here" to identifying specific creatures and their state).
 
-What it's good at:
-- Pattern-matched reflexes (reacting instantly to a recognized stimulus)
-- Parallel motor execution (multiple limb groups acting independently and simultaneously)
-- Territory-optimized performance (reaction speed scales with familiarity — a Distributed creature in known territory is dramatically faster than in unknown territory)
-- Simultaneous threat assessment (tracking multiple nearby entities without context-switching)
-- Graceful degradation under damage (body sim — damage to one segment doesn't impair processing in other segments)
+Clade A: primary sense. Dense chemoreceptors concentrated in the head zone, heavy neural investment in chemical processing. Losing the head is catastrophic for Chemical.
 
-What it's not good at:
-- Novel situations (pattern library has no match, response is slow and cautious)
-- Long-term memory of specific events (no episodic narrator)
-- Targeted anatomical reasoning (can't plan a precise aimed strike the way Central can)
-- Generalizing across contexts (a solution that worked in one territory doesn't transfer)
+Clade B: secondary sense for most. Chemoreceptors distributed across limb tips, modest processing in each local ganglion. Losing one limb reduces coverage on that flank but doesn't eliminate Chemical.
 
-Scale: 1-10. Most Clade B descendants have Distributed 4-8. Most Clade A descendants have Distributed 0-1 (vestigial spinal reflexes at best). Advanced Clade B descendants with colonial synchronization might have Distributed 8-10. The player starts with Distributed 0 and can gain it through mutation — which is the biologically impossible cross-clade signal.
+### Vibration (Mechanoreception)
 
-**The cross-clade impossibility:** No native creature has both Central 5+ AND Distributed 5+. A Clade B organism might evolve Central 4-5 over time (octopus-level), but alongside Distributed 6+, the Central is always the secondary system. A Clade A organism cannot develop Distributed processing at all — the architecture isn't there. The player accumulating both through mutation is the thing that shouldn't exist on this planet.
+Reading ground tremors, footsteps, pressure changes through substrate contact.
 
----
+```
+effectiveVibration = sum(zone.transducers.vibration for all surviving zones), capped
+discrimination = min(transducerQuality, vibrationProcessing * PROCESSING_SCALE)
+```
 
-## Creature Stat Examples
+Vibration uses sum-with-cap rather than max because spatial coverage matters — more mechanoreceptor arrays across the body = wider detection area. A creature with vibration sensors on every limb detects from all directions. A creature with sensors only on its front limbs has a detection gap behind it.
 
-**Clade A Meso-Predator:**
-Size 4, Strength 4, Chemical 6, Vibration 1, Visual 3, Central 5, Distributed 1
+Gameplay layer: movement detection. Any moving creature generates vibration. Vibration sense detects movement through the ground, potentially through walls. Higher effective Vibration = wider range, better identification (from "something moved" to recognizing specific creatures by footstep signature).
 
-**Clade A Large Predator:**
-Size 6, Strength 6, Chemical 7, Vibration 1, Visual 4, Central 6, Distributed 1
+Clade A: vestigial or absent. Most Clade A descendants have little to no vibration sensing.
 
-**Clade A Large Herbivore:**
-Size 7, Strength 3, Chemical 5, Vibration 0, Visual 5, Central 4, Distributed 0
+Clade B: primary sense. Dense mechanoreceptor arrays on limb surfaces, heavy neural investment in vibration processing distributed across limb ganglia. Each limb processes its own vibration input locally — detection is fast, local, and independent.
 
-**Clade B Small Herbivore:**
-Size 2, Strength 1, Chemical 2, Vibration 5, Visual 4, Central 2, Distributed 4
+### Visual (Eyesight)
 
-**Clade B Colonial Chemotroph (per node):**
-Size 2, Strength 1, Chemical 1, Vibration 6, Visual 2, Central 1, Distributed 7
+Light-based detection. Pattern recognition, motion detection, distance assessment.
 
-**Clade B Solitary Ambush Predator:**
-Size 4, Strength 5, Chemical 2, Vibration 7, Visual 5, Central 2, Distributed 5
+```
+effectiveVisual = max(zone.transducers.visual for all surviving zones)
+discrimination = min(transducerQuality, visualProcessing * PROCESSING_SCALE)
+```
 
-**Player (starting Clade A body):**
-Size 4, Strength 3, Chemical 5, Vibration 0, Visual 4, Central 5, Distributed 0
+Visual uses max — you see through your best eye.
 
-**Player (late game, heavily mutated from both clades):**
-Size 5, Strength 5, Chemical 6, Vibration 4, Visual 5, Central 6, Distributed 3
-(This stat block is biologically impossible for any native organism.)
+Gameplay layer: standard FOV (field of view). Visual determines cone depth and clarity. Higher effective Visual = longer sight range, better detail at distance.
+
+Both clades have eyes. Visual varies by creature and lifestyle, not by clade. The ambush predator has distributed eyes (including small rear-facing ones on the rear limbs). The meso-predator has all eyes concentrated in the head.
+
+### Future Senses
+
+The system accommodates new senses without restructuring. Each future sense follows the same pattern: transducer quality on zones, neural processing allocation in local ganglia, derived effective value.
+
+- Thermal — heat signatures. Useful underground, at night, through cover.
+- Echolocation — active sonar. Reveals own position.
+- Electromagnetic — bioelectric fields in water. Aquatic niche.
+- Pressure — atmospheric changes. Weather, altitude.
 
 ---
 
-## Derived Effects
+## Derived Cognition
 
-These are gameplay consequences that emerge from stat combinations. Not separate numbers the player tracks — just how the stats express in play.
+Cognition is not a stat. It's an emergent property of neural mass distribution across the body map.
 
-**Detection range:** Each sense provides its own detection layer. The creature's "awareness bubble" is the union of all its sense ranges. Chemical gives a trail-map extending behind where things have been. Vibration gives a proximity pulse around where things are moving. Visual gives a forward cone of identification. A creature can be detected by one sense and not another — you might smell something you can't see, or feel footsteps from something you can't smell.
+### Centralization Score
 
-**Melee damage:** Physics first. Size (mass) of the attacker, the body part or weapon used, and the material interaction at the impact point (claw vs flesh, blunt vs bone, hook vs armor) determine base damage. Strength modifies the result — a stronger creature hits harder than an equally-sized weaker one, but a Size 7 creature with Strength 2 still hits harder in absolute terms than a Size 2 creature with Strength 8, because mass is mass. The body sim's attack source zone determines what you're hitting with and whether that body part is functional.
+```
+totalNeuralMass = sum of neural mass across all zones
+centralizationScore = max(zone.neural / totalNeuralMass for all zones)
+```
 
-**Information from Look/Examine:** Central processing determines how much detail you extract from observation. Low Central: "A creature is here." Medium Central: "A predator with six limbs, wounded." High Central: "A meso-predator, left mid-limb destroyed, bleeding, favoring right side, likely to flee."
+The highest fraction of total neural mass concentrated in any single zone. This determines what cognitive capabilities are available.
 
-**Targeted zone attacks:** Central processing + relevant sense. You need the Central capacity to understand anatomy AND the sensory acuity to perceive the target zone. High Central, low senses: you know where to aim but can't see clearly enough. High senses, low Central: you see everything but can't identify the weak point.
+### Cognitive Tiers
 
-**Stealth:** Size inverted (primary — smaller is harder to see) combined with understanding of enemy senses. A creature with high Central can model what the enemy detects and avoid those channels. Sneaking past a Chemical-dominant creature means staying downwind. Sneaking past a Vibration-dominant creature means moving slowly. The player's knowledge of enemy sense profiles (from the examine system) feeds into stealth strategy.
+| Tier | Centralization Score | Capabilities |
+|---|---|---|
+| Tier 1 (< 0.20) | Fully distributed | Reflexive pattern matching only. No episodic memory. No integration. Pure stimulus-response per ganglion. |
+| Tier 2 (0.20 — 0.40) | Partially centralized | Episodic memory available (limited, short-term). Basic two-modal integration where senses converge. Short-term individual recognition. |
+| Tier 3 (> 0.40) | Heavily centralized | Full episodic memory. Multi-modal integration (cross-referencing chemical, visual, vibration, spatial, and temporal data). Generalization. Threat assessment. Targeted zone attacks. The creature is recognizably intelligent. |
 
-**Territory effectiveness (Clade B):** Distributed processing provides a reaction speed bonus within familiar territory. The bonus scales with how high Distributed is and how long the creature has been in that territory. Outside familiar territory, Distributed still provides parallel motor coordination but loses the pattern-matched reaction speed.
+### What Each Tier Means in Gameplay
+
+**Tier 1 — Reflexive only:**
+- AI: parallel weighted behaviors, no readable state transitions
+- Detection: each zone detects independently using its local senses
+- Combat: reflexive strikes from zones with sufficient neural mass and local senses, no targeted attacks
+- Memory: pattern library only — trained stimulus-response associations local to each ganglion. No memory of specific events or individuals.
+- Examine: minimal information extracted ("a creature is here")
+- Territory: strong — each ganglion builds deep local pattern library through experience
+
+**Tier 2 — Partial centralization:**
+- AI: rudimentary state machine with limited transitions
+- Detection: modest cross-referencing of two sensory modalities
+- Combat: deliberate attacks from the concentrated zone, reflexive strikes from distributed zones
+- Memory: short-term episodic memory. Remembers recent encounters but not in detail. Basic individual recognition.
+- Examine: moderate information ("a predator, six limbs, wounded")
+- Territory: moderate — episodic memory supplements pattern matching
+
+**Tier 3 — Full centralization:**
+- AI: complex state machine with readable transitions, personality, learning
+- Detection: full multi-modal integration. Cross-references scent trails with visual confirmation with vibration data with past experience.
+- Combat: targeted zone attacks (requires centralization + sensory acuity to perceive the target zone). Full-body committed strikes with coordinated gait.
+- Memory: rich episodic memory. Remembers specific encounters with the player, adjusts behavior based on personal history. Recognizes individuals. Remembers dangerous locations.
+- Examine: detailed information gated by centralization score ("a meso-predator, left mid-limb destroyed, bleeding, favoring right side, likely to flee")
+- Territory: moderate — episodic memory of landmarks and routes, but less locally optimized than Tier 1 pattern matching
+
+### Distribution Score
+
+```
+distributionScore = 1.0 - centralizationScore
+```
+
+Higher distribution provides:
+- Reflexive defense (zones react independently to local threats)
+- Graceful degradation (no single point of failure for cognition)
+- Parallel motor execution (multiple limbs acting on independent motor programs simultaneously)
+- Knockout resistance (no zone holds enough neural mass for a knockout blow)
+- Territory-optimized pattern matching (each ganglion builds its own local stimulus-response library)
+
+### The Cross-Clade Impossibility
+
+No native creature has both high centralization AND high distribution with sensory coverage to support both. A Clade A organism has centralization 0.50+ with vestigial limb ganglia. A Clade B organism has centralization below 0.20 with dense limb ganglia. The architectures are mutually exclusive because neural mass is a finite resource — concentrating it in the head means it's not in the limbs, and vice versa.
+
+A player who mutates through consuming Clade B creatures develops neural mass in limb zones. Their head's concentration fraction drops as limb ganglia grow. They're physically restructuring their neural architecture from centralized toward distributed. At some point their centralization score drops below 0.40 and they begin losing Tier 3 capabilities while gaining reflexive defense. The stat display reflects this — the player can see their cognitive tier shifting as they mutate.
+
+This is the biologically impossible signal. No native organism transitions between architectures. The player doing so hints at the demigod's nature.
 
 ---
 
-## Dodge — Open Question
+## Derived Combat Values
 
-The old model was dodge = Size inverted (small = hard to hit). With the body sim, "dodge" might not be a single number anymore. When an attack is made:
+### Dodge
 
-1. Attacker rolls accuracy (based on their senses + Central processing).
-2. Defender's profile determines hit chance — Size is the dominant factor (bigger target = easier to hit).
-3. If hit, zone selection determines where (from body sim target weights).
-4. Damage applied to that zone.
+```
+dodgeChance = ((DODGE_REFERENCE_MASS - totalMass) / DODGE_REFERENCE_MASS) * MAX_DODGE_PERCENT
+```
 
-"Dodge" in this model is really just "the attack missed entirely" — which is the attacker's accuracy check failing against the defender's Size-based target profile. A small creature is hard to hit not because it's "dodging" but because there's physically less of it to connect with.
+Smaller creatures dodge more because there's physically less of them to hit. DODGE_REFERENCE_MASS is the mass at which dodge reaches 0%. Armor penalties still apply as flat subtractions.
 
-Distributed processing could contribute a small modifier — parallel motor evasion, limbs pulling away reflexively — but this might be unnecessary complexity. Or it could be the thing that makes Clade B creatures feel different to fight: at the same Size, a Clade B creature with high Distributed is slightly harder to land a clean hit on because its body segments react independently to incoming attacks. Each ganglion cluster flinches its local segment without waiting for central authorization.
+Dodge is resolved. It's total-mass-inverted, nothing else. No separate dodge stat, no Distributed contribution. The clade difference in combat comes from reflexive defense (Clade B limbs strike back when you attack from outside their attention arc), not from an abstract dodge modifier.
 
-This needs playtesting to determine whether it matters or is just noise on top of the Size-based hit chance.
+### Speed
+
+```
+locomotionMuscle = sum of muscle in all locomotion zones
+rawSpeedRatio = locomotionMuscle / totalMass
+coordinationBonus = motorCoordinationNeural * COORDINATION_MULT
+effectiveSpeed = rawSpeedRatio * (1 + coordinationBonus)
+```
+
+Speed is power-to-weight ratio for locomotion specifically, modified by neural coordination efficiency. Centralized motor coordination (one hub timing all limbs) extracts more speed from the same muscle. Distributed self-timing (each limb manages its own motor program) is less efficient but resilient to damage.
+
+Speed feeds into the relative speed system: enemies faster than the player occasionally get bonus moves, enemies slower occasionally skip turns. The player always acts once per turn — the world speeds up or slows down around them.
+
+Speed is resolved. Locomotion muscle / total mass + coordination bonus. Damaged locomotion zones reduce locomotionMuscle. Destroyed motor coordination zones remove the coordination bonus.
+
+### Damage
+
+```
+strikeDamage = (zoneMuscle * MUSCLE_FORCE_COEFF) + (zoneMass * MOMENTUM_COEFF)
+attackDamage = strikeDamage * attack.damageModifier
+```
+
+Each attack derives damage from the zone housing it. Muscle provides force, zone mass provides momentum. A bite's damage comes from jaw muscle in the head. A kick's damage comes from leg muscle. There is no creature-wide "damage" number — each attack has its own damage derived from its own zone.
+
+### Accuracy
+
+```
+accuracy = BASE_ACCURACY + (effectiveSense * SENSE_ACCURACY_COEFF)
+```
+
+Where effectiveSense is whichever sense the creature is using to detect the target (Chemical for scent-tracking Clade A, Vibration for ground-sensing Clade B, Visual for sight-based attacks). The attacker uses the sense that led to detection. This is a placeholder until full sense-specific accuracy is implemented.
+
+### Stealth
+
+```
+stealthProfile = totalMass * STEALTH_MASS_COEFF
+```
+
+Stealth is primarily about being physically small enough to not be noticed. Future expansion: stealth effectiveness against specific senses depends on understanding what the detector can perceive. Sneaking past a Chemical-dominant creature means staying downwind. Sneaking past a Vibration-dominant creature means moving slowly. The player's knowledge of enemy sense profiles (from the examine system, gated by their own centralization score) feeds into stealth strategy.
+
+### Turn Agility
+
+```
+instantTurnChance = (AGILITY_REFERENCE_MASS - totalMass) / AGILITY_REFERENCE_MASS
+```
+
+Smaller creatures change facing direction almost for free. Larger creatures commit to a direction. Derived from total mass — inertia is mass times velocity, changing direction means overcoming momentum.
 
 ---
 
-## Speed — Open Question
+## Creature Sense Profiles
 
-Speed is not currently a stat. Movement in the turn-based system is "everyone gets one action per turn." Speed differences could be expressed as:
+These are not assigned stats — they're the effective sense values derived from each creature's body map. Listed here for reference:
 
-- **Turn order priority** (faster creatures act first each round)
-- **Occasional extra actions** (a fast creature sometimes gets two moves in one round — but this is the "multiple attacks per turn" problem we already decided against)
-- **Movement distance** (fast creatures move 2 tiles per turn, slow creatures move 1 — simple, legible, but changes the tactical geometry significantly)
-- **Disengage chance** (fast creatures can break contact more reliably)
-- **Not a stat at all** — speed is emergent from Size (small things are quick) and the situation (injured locomotion zones slow you down)
+**Clade A Meso-Predator (22 kg):**
+- Chemical: 6 (head transducers, 0.25 kg processing) — primary sense
+- Visual: 3 (head transducers, 0.10 kg processing) — secondary
+- Vibration: 0 — absent
+- Centralization: 0.66 — Tier 3
+- Cognitive: full episodic memory, integration, threat assessment, targeted attacks
 
-If speed becomes a stat, it probably derives from Size (inverted — small is fast) and Strength (powerful legs cover ground faster) rather than being an independent allocation. This avoids the old DEX problem of one stat doing too many unrelated things.
+**Clade A Apex Predator (~90 kg):**
+- Chemical: 7 — primary, extended range
+- Visual: 4 — better developed than meso-predator
+- Vibration: 0-1 — vestigial
+- Centralization: ~0.60 — Tier 3
+- Cognitive: same as meso-predator with more experience accumulation (longer-lived)
 
-Decision deferred until movement mechanics are revisited.
+**Clade A Large Herbivore (~200 kg):**
+- Chemical: 5 — adapted for aquatic mineral detection
+- Visual: 5 — better distance vision than predators (open terrain)
+- Vibration: 0 — absent
+- Centralization: ~0.50 — Tier 3
+- Cognitive: episodic memory, spatial mapping, threat avoidance. Less threat assessment than predators.
+
+**Clade B Small Herbivore (~5 kg):**
+- Chemical: 2 — minor
+- Vibration: 5 — primary, distributed across all limbs
+- Visual: 4 — good motion detection
+- Centralization: ~0.15 — Tier 1
+- Cognitive: reflexive only. No memory of specific encounters. Deep territory-trained pattern libraries.
+
+**Clade B Colonial Chemotroph node (~5 kg):**
+- Chemical: 1 — minimal
+- Vibration: 6 — primary, communication + detection
+- Visual: 2 — minimal
+- Centralization: ~0.12 — Tier 1
+- Cognitive: reflexive only. Colony-level behavior emerges from inter-node chemical signaling, not individual intelligence.
+
+**Clade B Ambush Predator (~24 kg):**
+- Chemical: 2 — minor, limb-tip chemoreceptors
+- Vibration: 7 — primary, dense arrays on sensor limbs and all other limbs
+- Visual: 5 — good motion detection, including rear-facing eyes
+- Centralization: 0.15 — Tier 1 with modest Tier 2 integration in head
+- Cognitive: reflexive pattern matching with deep territory familiarity. Modest visual+vibration cross-referencing in head. No episodic memory.
+
+**Player (starting Clade A body, ~24 kg):**
+- Chemical: 5 — Clade A default
+- Vibration: 0 — absent (Clade A body has no mechanoreceptors)
+- Visual: 4 — moderate
+- Centralization: ~0.55 — Tier 3
+- Cognitive: full episodic memory, integration, targeted attacks, examine depth
+
+**Player (late game, heavily mutated, ~30 kg):**
+- Chemical: 6 — enhanced from Clade A consumption
+- Vibration: 4 — grown through Clade B consumption (mechanoreceptors developed in limb zones)
+- Visual: 5 — enhanced
+- Centralization: ~0.30 — dropped from 0.55 as neural mass redistributed to limbs. Tier 2 — reduced episodic memory, reduced examine depth, but gained reflexive defense and knockout resistance.
+
+This profile is biologically impossible for any native organism. Both Chemical 6 (Clade A signature) and Vibration 4 (Clade B signature) on the same body, with a centralization score that's neither Clade A-high nor Clade B-low but somewhere in between.
 
 ---
 
-## Interaction with Existing Systems
+## What the Player Sees
+
+The status screen shows derived summary values, not body map internals:
+
+- **Mass:** total body mass in kg
+- **Speed:** effective speed (a descriptive word or relative value — "fast," "moderate," "slow" — rather than the raw ratio)
+- **Senses:** each sense with an effective quality level. Only senses above 0 are shown. "Chemical: strong. Visual: moderate." Or numeric if preferred.
+- **Cognition:** a descriptive tier. "Centralized" or "Distributed" or "Partially distributed." Not a number.
+- **HP:** total across all zones (the sum)
+
+The examine screen when looking at enemies shows information gated by the player's own centralization score. Higher centralization = better anatomical reasoning = more detail visible.
+
+The player does NOT see: zone mass breakdowns, neural allocations, pathway bandwidths, tissue composition ratios, centralization scores as numbers. The body map is the simulation. The status screen is the dashboard.
+
+---
+
+## Interaction with Other Systems
 
 ### Body Sim
-Zone HP pools scale with Size. Attack damage scales with Strength via the attack source zone. Damaged locomotion zones reduce movement. Damaged sensory zones reduce the corresponding sense stat temporarily. Central processing enables targeted zone attacks. Distributed processing provides per-segment independent evasion (if implemented).
+The body sim IS the stat system. Every value described in this document is computed from body map data. Damaging a zone changes the creature's derived values in real time — destroying a locomotion zone reduces speed, destroying a sensory zone reduces the corresponding sense, destroying a high-neural-mass zone can shift the creature's cognitive tier.
 
 ### Mutation
-Eating creatures grants stat increases in the consumed creature's strong stats. Eating Clade A creatures increases Chemical, Central. Eating Clade B creatures increases Vibration, Distributed. Eating large creatures increases Size. Eating strong predators increases Strength. The mutation system reads these stats directly — no translation layer needed.
+Mutations physically modify the body map. Eating Clade A creatures grows neural mass in the head zone and develops chemoreceptors. Eating Clade B creatures grows neural mass in limb zones and develops mechanoreceptors. The derived sense values and cognitive scores shift as the body map changes. The player sees "Chemical increased" in the log — behind the scenes, chemoreceptor transducer quality improved in a zone and chemical processing neural tissue grew in the local ganglion.
 
-Cross-clade mutations are visible in the stat block: a player with both Chemical 6 and Vibration 4, or both Central 5 and Distributed 3, is displaying a profile that no native organism can have.
-
-### Spawn System
-Creature stats are defined per creature type, not generated randomly (for now). All meso-predators have the same stat block. Variance between individuals (if added later) would be small random modifiers on top of the base, not full random generation.
-
-### Combat
-Accuracy is attacker's relevant sense + Central processing vs defender's Size-based target profile. Damage is Strength * attack zone modifier. The old derived combat stats (accuracy %, dodge %, crit %) are replaced by direct stat interactions resolved through the body sim.
+### Speed System
+The relative speed system reads effectiveSpeed (derived from the body map) instead of the old Strength/Size ratio. Turn agility reads totalMass. All inputs from the body map.
 
 ### AI
-Detection behavior reads the creature's highest relevant sense. Chemical-dominant creatures track by scent trail. Vibration-dominant creatures detect by movement proximity. Visual-dominant creatures use line-of-sight. AI already has clade data flagging sensing mode — the sense stats make that quantitative instead of just tagged.
+Detection reads the creature's effective senses (derived from surviving zone transducers and processing). AI behavioral complexity reads the creature's cognitive tier (derived from centralization score). Chemical-dominant creatures track by scent trail. Vibration-dominant creatures detect by movement proximity. Visual-dominant creatures use line-of-sight.
 
----
-
-## Implementation Notes
-
-### Migration from Old Stats
-
-The current codebase has STR, CON, DEX, INT, PER on every creature and the player. The mapping:
-
-| Old stat | New replacement |
-|---|---|
-| STR | Strength (direct rename, rebalance values) |
-| CON | Size (conceptual change — HP now comes from body mass) |
-| DEX | Removed. Dodge → Size inverted. Stealth → Size + sense awareness. Crit → body sim targeting. |
-| INT | Central (rename + conceptual narrowing — no longer covers "smartness" broadly) |
-| PER | Split into Chemical, Vibration, Visual (one number becomes three) |
-
-Every file that references the old stat names needs updating: `monsters.js`, `player.js`, `chargen.js`, `combat.js`, `enemy-ai.js`, `ui.js`, `interactions.js`, `save-load.js`, and any derived stat calculations.
+### Combat
+Accuracy uses the attacking creature's relevant effective sense. Damage uses the striking zone's muscle and mass. Dodge uses the defender's total mass. Armor uses the target zone's structural mass. Everything from the body map.
 
 ### Chargen
+Character creation will need to move from abstract point allocation to body configuration. Options under consideration:
+- Choose a body type template ("lean and fast" vs "heavy and powerful") that sets the body map, then fine-tune specific zones
+- Allocate mass between categories (muscle, neural, structural) and let the body map compute from those inputs
+- Simplified allocation that maps to body map parameters behind the scenes
 
-Character creation currently allocates points across 5 stats. With 7 stats, the allocation screen needs redesign. Options:
-- Fixed physical stats (Size and Strength set by body type choice), player allocates points across senses and processing only.
-- All 7 are allocatable but with suggested templates ("keen nose," "sharp eyes," "quick reflexes").
-- Physical stats are fixed, two senses are preset by Clade A body (Chemical 5, Visual 4), player allocates remaining points to other senses and processing.
+Decision deferred to implementation. The current abstract stat allocation works as a temporary bridge — the allocated values map to body map parameters during creature initialization.
 
-Decision deferred to implementation.
-
-### Display
-
-The status overlay (T key) shows all stats. Physical stats first, then senses (only showing senses that are above 0), then processing. A creature with Chemical 0 and Vibration 0 just doesn't show those lines.
-
-The examine system reads Central processing to determine how much detail the player sees about enemies — this replaces the old INT-gating directly.
+### Save System
+Derived values are not saved — they're recomputed from the body map at load time. Only zone damage states (current HP, destroyed flag) need persisting per creature.
 
 ---
 
@@ -263,15 +389,15 @@ The examine system reads Central processing to determine how much detail the pla
 
 When implementing, include:
 - This document
-- `player.js` (player stat storage)
-- `monsters.js` (creature stat definitions)
-- `combat.js` (damage and accuracy formulas that reference stats)
-- `enemy-ai.js` (detection and behavior that reads stats)
-- `chargen.js` (stat allocation at character creation)
-- `ui.js` (stat display in status overlay)
-- `interactions.js` (examine system that reads Central for info gating)
-- `save-load.js` (stat persistence)
-- `constants.js` (any derived stat formulas or thresholds)
-- Body-Sim-Design.md (zone HP scaling with Size, attack damage with Strength)
-- Mutation-Design.md (which stats mutations modify)
-- Ecology-Foundations.md (clade context for why the stats are structured this way)
+- Body-Sim-Design.md (the body map system that all stats derive from)
+- `player.js` (player body map)
+- `monsters.js` (creature body map definitions and templates)
+- `combat.js` (damage, accuracy, dodge formulas reading body map values)
+- `enemy-ai.js` (detection and behavior reading derived senses and cognition)
+- `chargen.js` (body configuration at character creation)
+- `ui.js` (status display showing derived values)
+- `interactions.js` (examine system gated by centralization score)
+- `save-load.js` (zone state persistence)
+- `constants.js` (tuning values for all derived formulas)
+- Mutation-Design.md (how mutations modify the body map)
+- Ecology-Foundations.md (clade context for neural architecture differences)
