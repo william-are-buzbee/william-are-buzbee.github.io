@@ -2,7 +2,8 @@
 import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META,
          HP_PER_SIZE, HP_PER_LEVEL_FACTOR, STAT_MAX,
          MAX_DODGE_CHANCE, DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF,
-         BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF } from './constants.js';
+         BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF,
+         CREATURE_PATHWAYS } from './constants.js';
 import { getTimePhase } from './time-cycle.js';
 import { state } from './state.js';
 import { rand, randomRound } from './rng.js';
@@ -35,6 +36,7 @@ function freshPlayer(attrs, bodyType, colorPalette){
     isPlayer:true,
     hitFlash:0,
     bodyMapKey: 'player_' + (bodyType || 'meso'),  // Phase 1: body map lookup key
+    pathways: CREATURE_PATHWAYS['player_' + (bodyType || 'meso')] || [],
   };
   // Starter inventory — each item is its own slot, no stacking
   p.inventory.push({kind:'food', key:'apple', weight:1});

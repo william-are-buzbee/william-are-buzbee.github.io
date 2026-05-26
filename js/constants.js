@@ -522,125 +522,637 @@ export const LANDMARKS = [
 ];
 
 // ==================== BODY MAPS ====================
-// Phase 1 — body zone definitions for locational hit resolution.
+// Phase 2 — expanded body zone definitions with full physical composition.
 // Each creature type maps to an array of zones.  targetWeight values
 // sum to 1.0 per creature and represent the probability a random
 // (non-targeted) attack lands on that zone.
 //
-// `vital: true`  — zone destruction kills the creature (not enforced yet).
-// `functions`    — what the zone provides; used by future phases for
-//                  degradation when the zone takes damage.
+// Each zone carries:
+//   key, name, targetWeight  — identity and hit selection (Phase 1)
+//   muscle, structural, neural, sensory, connective, mass — tissue mass (kg)
+//   neuralAllocation — fractional breakdown of neural tissue functions
+//   transducers      — sensory organ quality ratings per modality
+//   locomotion       — whether this zone contributes to movement
+//   vital            — zone destruction kills the creature (not enforced yet)
+//   attacks          — attack definitions housed in this zone
+//   bleedRate, bleedThreshold — bleed properties (tuning TBD)
+//   destroyed        — runtime state (always false at spawn)
 //
-// Clade A (6 limbs, centralized brain): head is vital.
-// Clade B (8 limbs, distributed ganglia): head is NOT vital; central
-//   body ganglion cluster is the closest thing to a single point of failure.
-
-// ---- Clade A base layout (meso-predator) ----
-const CLADE_A_BASE = [
-  { key: 'head',        name: 'head',        targetWeight: 0.10, vital: true,  functions: ['sensory', 'organ'] },
-  { key: 'torso',       name: 'torso',       targetWeight: 0.35, vital: true,  functions: ['organ'] },
-  { key: 'front_limbs', name: 'front limbs', targetWeight: 0.15, vital: false, functions: ['attack_melee', 'grip'] },
-  { key: 'mid_limbs',   name: 'mid limbs',   targetWeight: 0.15, vital: false, functions: ['locomotion'] },
-  { key: 'rear_limbs',  name: 'rear limbs',  targetWeight: 0.15, vital: false, functions: ['locomotion'] },
-  { key: 'underside',   name: 'underside',   targetWeight: 0.10, vital: false, functions: ['attack_melee'] },
-];
-
-// ---- Clade B base layout (8 limbs, distributed ganglia) ----
-const CLADE_B_BASE = [
-  { key: 'head',           name: 'head',           targetWeight: 0.08, vital: false, functions: ['sensory'] },
-  { key: 'central_body',   name: 'central body',   targetWeight: 0.25, vital: true,  functions: ['organ'] },
-  { key: 'front_sensory',  name: 'front limbs',    targetWeight: 0.12, vital: false, functions: ['sensory'] },
-  { key: 'second_limbs',   name: 'second limbs',   targetWeight: 0.15, vital: false, functions: ['grip'] },
-  { key: 'rear_limbs_a',   name: 'rear limbs',     targetWeight: 0.15, vital: false, functions: ['locomotion'] },
-  { key: 'rear_limbs_b',   name: 'hind limbs',     targetWeight: 0.15, vital: false, functions: ['locomotion'] },
-  { key: 'integument',     name: 'shell',          targetWeight: 0.10, vital: false, functions: ['defense'] },
-];
-
-// Helper: clone a base map with optional per-zone weight overrides.
-function deriveMap(base, overrides) {
-  return base.map(z => {
-    const o = overrides && overrides[z.key];
-    if (!o) return { ...z, functions: [...z.functions] };
-    return { ...z, ...o, functions: o.functions ? [...o.functions] : [...z.functions] };
-  });
-}
+// Design note: Clade A heads are NOT vital (recent change).
+// Only torso is vital on Clade A creatures.
 
 export const BODY_MAPS = {
-  // ─── Clade A creatures ───────────────────────────────
 
-  // Meso-predator — standard Clade A proportions
-  wolf: deriveMap(CLADE_A_BASE),
+  // ═══════════════════════════════════════════════════════
+  // ─── Meso-Predator (wolf) — 22 kg, 8 zones ──────────
+  // ═══════════════════════════════════════════════════════
+  wolf: [
+    { key: 'head', name: 'Head', targetWeight: 0.11,
+      muscle: 0.80, structural: 0.60, neural: 0.85, sensory: 0.50, connective: 0.75, mass: 3.5,
+      neuralAllocation: { chemicalProcessing: 0.25, visualProcessing: 0.10, episodicMemory: 0.18, integration: 0.15, motorCoordination: 0.08, threatAssessment: 0.04, patternLibrary: 0.05 },
+      transducers: { chemical: 6, visual: 3, vibration: 0 },
+      locomotion: false, vital: false,
+      attacks: [{ key: 'bite', name: 'Bite', baseDamage: 4, damageType: 'puncture', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'torso', name: 'Torso', targetWeight: 0.34,
+      muscle: 3.00, structural: 1.50, neural: 0.22, sensory: 0.08, connective: 2.70, mass: 7.5,
+      neuralAllocation: { motorRelay: 0.12, chemicalProcessing: 0.05, patternLibrary: 0.05 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: false, vital: true,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.09,
+      muscle: 0.85, structural: 0.35, neural: 0.05, sensory: 0.05, connective: 0.30, mass: 1.6,
+      neuralAllocation: { motorControl: 0.04, chemicalProcessing: 0.01 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 3, damageType: 'slashing', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.09,
+      muscle: 0.85, structural: 0.35, neural: 0.05, sensory: 0.05, connective: 0.30, mass: 1.6,
+      neuralAllocation: { motorControl: 0.04, chemicalProcessing: 0.01 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 3, damageType: 'slashing', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_l', name: 'Mid-Left Limb', targetWeight: 0.10,
+      muscle: 1.10, structural: 0.40, neural: 0.04, sensory: 0.00, connective: 0.36, mass: 1.9,
+      neuralAllocation: { motorControl: 0.04 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_r', name: 'Mid-Right Limb', targetWeight: 0.10,
+      muscle: 1.10, structural: 0.40, neural: 0.04, sensory: 0.00, connective: 0.36, mass: 1.9,
+      neuralAllocation: { motorControl: 0.04 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.09,
+      muscle: 1.30, structural: 0.42, neural: 0.04, sensory: 0.00, connective: 0.34, mass: 2.1,
+      neuralAllocation: { motorControl: 0.04 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.08,
+      muscle: 1.30, structural: 0.42, neural: 0.04, sensory: 0.00, connective: 0.34, mass: 2.1,
+      neuralAllocation: { motorControl: 0.04 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+  ],
 
-  // Apex predator — heavier torso (bigger target), slightly smaller head
-  dire_wolf: deriveMap(CLADE_A_BASE, {
-    head:        { targetWeight: 0.08 },
-    torso:       { targetWeight: 0.38 },
-    front_limbs: { targetWeight: 0.14 },
-    mid_limbs:   { targetWeight: 0.14 },
-    rear_limbs:  { targetWeight: 0.14 },
-    underside:   { targetWeight: 0.12 },
-  }),
+  // ═══════════════════════════════════════════════════════
+  // ─── Apex Predator (dire_wolf) — 90 kg, 8 zones ─────
+  // ═══════════════════════════════════════════════════════
+  dire_wolf: [
+    { key: 'head', name: 'Head', targetWeight: 0.08,
+      muscle: 2.00, structural: 1.60, neural: 1.26, sensory: 0.90, connective: 2.24, mass: 8.0,
+      neuralAllocation: { chemicalProcessing: 0.38, visualProcessing: 0.20, episodicMemory: 0.26, integration: 0.20, motorCoordination: 0.10, threatAssessment: 0.06, patternLibrary: 0.06 },
+      transducers: { chemical: 7, visual: 4, vibration: 0 },
+      locomotion: false, vital: false,
+      attacks: [{ key: 'bite', name: 'Bite', baseDamage: 8, damageType: 'puncture', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'torso', name: 'Torso', targetWeight: 0.30,
+      muscle: 10.50, structural: 5.50, neural: 0.42, sensory: 0.10, connective: 13.48, mass: 30.0,
+      neuralAllocation: { motorRelay: 0.26, chemicalProcessing: 0.08, patternLibrary: 0.08 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: false, vital: true,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.10,
+      muscle: 3.80, structural: 1.60, neural: 0.08, sensory: 0.12, connective: 2.40, mass: 8.0,
+      neuralAllocation: { motorControl: 0.06, chemicalProcessing: 0.02 },
+      transducers: { chemical: 1, vibration: 1, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 6, damageType: 'slashing', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.10,
+      muscle: 3.80, structural: 1.60, neural: 0.08, sensory: 0.12, connective: 2.40, mass: 8.0,
+      neuralAllocation: { motorControl: 0.06, chemicalProcessing: 0.02 },
+      transducers: { chemical: 1, vibration: 1, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 6, damageType: 'slashing', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_l', name: 'Mid-Left Limb', targetWeight: 0.10,
+      muscle: 4.20, structural: 1.60, neural: 0.06, sensory: 0.00, connective: 2.64, mass: 8.5,
+      neuralAllocation: { motorControl: 0.06 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_r', name: 'Mid-Right Limb', targetWeight: 0.10,
+      muscle: 4.20, structural: 1.60, neural: 0.06, sensory: 0.00, connective: 2.64, mass: 8.5,
+      neuralAllocation: { motorControl: 0.06 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.11,
+      muscle: 4.80, structural: 1.80, neural: 0.06, sensory: 0.00, connective: 2.84, mass: 9.5,
+      neuralAllocation: { motorControl: 0.06 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.11,
+      muscle: 4.80, structural: 1.80, neural: 0.06, sensory: 0.00, connective: 2.84, mass: 9.5,
+      neuralAllocation: { motorControl: 0.06 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+  ],
 
-  // Wading grazer (large herbivore) — bulkier limbs, slightly smaller torso
-  cave_crab: deriveMap(CLADE_A_BASE, {
-    head:        { targetWeight: 0.08 },
-    torso:       { targetWeight: 0.30 },
-    front_limbs: { targetWeight: 0.17 },
-    mid_limbs:   { targetWeight: 0.17 },
-    rear_limbs:  { targetWeight: 0.18 },
-    underside:   { targetWeight: 0.10 },
-  }),
+  // ═══════════════════════════════════════════════════════
+  // ─── Small Herbivore (hare) — 5 kg, 10 zones ────────
+  // ═══════════════════════════════════════════════════════
+  hare: [
+    { key: 'head', name: 'Head', targetWeight: 0.06,
+      muscle: 0.04, structural: 0.06, neural: 0.042, sensory: 0.08, connective: 0.058, mass: 0.28,
+      neuralAllocation: { visualProcessing: 0.020, vibrationProcessing: 0.010, patternLibrary: 0.008, motorControl: 0.004 },
+      transducers: { visual: 4, vibration: 1, chemical: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'torso', name: 'Torso', targetWeight: 0.24,
+      muscle: 0.25, structural: 0.22, neural: 0.022, sensory: 0.02, connective: 0.488, mass: 1.00,
+      neuralAllocation: { motorRelay: 0.010, vibrationProcessing: 0.006, patternLibrary: 0.006 },
+      transducers: { vibration: 1, chemical: 0, visual: 0 },
+      locomotion: false, vital: true,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'fore_l', name: 'Fore-Left Limb', targetWeight: 0.05,
+      muscle: 0.03, structural: 0.03, neural: 0.028, sensory: 0.05, connective: 0.082, mass: 0.22,
+      neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.004 },
+      transducers: { vibration: 5, chemical: 2, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'fore_r', name: 'Fore-Right Limb', targetWeight: 0.05,
+      muscle: 0.03, structural: 0.03, neural: 0.028, sensory: 0.05, connective: 0.082, mass: 0.22,
+      neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.004 },
+      transducers: { vibration: 5, chemical: 2, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_graze_l', name: 'Mid-Graze-Left Limb', targetWeight: 0.05,
+      muscle: 0.04, structural: 0.03, neural: 0.026, sensory: 0.035, connective: 0.089, mass: 0.22,
+      neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.002 },
+      transducers: { vibration: 4, chemical: 1, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_graze_r', name: 'Mid-Graze-Right Limb', targetWeight: 0.05,
+      muscle: 0.04, structural: 0.03, neural: 0.026, sensory: 0.035, connective: 0.089, mass: 0.22,
+      neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.002 },
+      transducers: { vibration: 4, chemical: 1, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_loco_l', name: 'Mid-Loco-Left Limb', targetWeight: 0.10,
+      muscle: 0.35, structural: 0.08, neural: 0.028, sensory: 0.02, connective: 0.102, mass: 0.58,
+      neuralAllocation: { motorControl: 0.012, vibrationProcessing: 0.008, patternLibrary: 0.008 },
+      transducers: { vibration: 3, chemical: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_loco_r', name: 'Mid-Loco-Right Limb', targetWeight: 0.10,
+      muscle: 0.35, structural: 0.08, neural: 0.028, sensory: 0.02, connective: 0.102, mass: 0.58,
+      neuralAllocation: { motorControl: 0.012, vibrationProcessing: 0.008, patternLibrary: 0.008 },
+      transducers: { vibration: 3, chemical: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.15,
+      muscle: 0.55, structural: 0.10, neural: 0.030, sensory: 0.02, connective: 0.140, mass: 0.84,
+      neuralAllocation: { motorControl: 0.014, vibrationProcessing: 0.008, patternLibrary: 0.008 },
+      transducers: { vibration: 3, chemical: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.15,
+      muscle: 0.55, structural: 0.10, neural: 0.030, sensory: 0.02, connective: 0.140, mass: 0.84,
+      neuralAllocation: { motorControl: 0.014, vibrationProcessing: 0.008, patternLibrary: 0.008 },
+      transducers: { vibration: 3, chemical: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+  ],
 
-  // ─── Clade B creatures ───────────────────────────────
+  // ═══════════════════════════════════════════════════════
+  // ─── Large Herbivore (cave_crab) — 200 kg, 8 zones ──
+  // ═══════════════════════════════════════════════════════
+  cave_crab: [
+    { key: 'head', name: 'Head', targetWeight: 0.06,
+      muscle: 2.50, structural: 2.80, neural: 1.10, sensory: 1.00, connective: 4.60, mass: 12.0,
+      neuralAllocation: { chemicalProcessing: 0.28, visualProcessing: 0.26, episodicMemory: 0.22, integration: 0.14, motorCoordination: 0.10, patternLibrary: 0.08, threatAssessment: 0.02 },
+      transducers: { chemical: 5, visual: 5, vibration: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'torso', name: 'Torso', targetWeight: 0.34,
+      muscle: 26.00, structural: 20.00, neural: 0.54, sensory: 0.10, connective: 33.36, mass: 80.0,
+      neuralAllocation: { motorRelay: 0.38, chemicalProcessing: 0.08, patternLibrary: 0.08 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: false, vital: true,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.08,
+      muscle: 5.00, structural: 4.20, neural: 0.10, sensory: 0.15, connective: 5.55, mass: 15.0,
+      neuralAllocation: { motorControl: 0.08, chemicalProcessing: 0.02 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'shove', name: 'Shove', baseDamage: 6, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.08,
+      muscle: 5.00, structural: 4.20, neural: 0.10, sensory: 0.15, connective: 5.55, mass: 15.0,
+      neuralAllocation: { motorControl: 0.08, chemicalProcessing: 0.02 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'shove', name: 'Shove', baseDamage: 6, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_l', name: 'Mid-Left Limb', targetWeight: 0.10,
+      muscle: 9.00, structural: 3.80, neural: 0.08, sensory: 0.00, connective: 5.12, mass: 18.0,
+      neuralAllocation: { motorControl: 0.08 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_r', name: 'Mid-Right Limb', targetWeight: 0.10,
+      muscle: 9.00, structural: 3.80, neural: 0.08, sensory: 0.00, connective: 5.12, mass: 18.0,
+      neuralAllocation: { motorControl: 0.08 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.12,
+      muscle: 11.00, structural: 4.40, neural: 0.08, sensory: 0.00, connective: 5.52, mass: 21.0,
+      neuralAllocation: { motorControl: 0.08 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 8, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.12,
+      muscle: 11.00, structural: 4.40, neural: 0.08, sensory: 0.00, connective: 5.52, mass: 21.0,
+      neuralAllocation: { motorControl: 0.08 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 8, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+  ],
 
-  // Small herbivore — standard Clade B
-  hare: deriveMap(CLADE_B_BASE),
+  // ═══════════════════════════════════════════════════════
+  // ─── Colonial Chemotroph (mushroom) — placeholder ────
+  // ═══════════════════════════════════════════════════════
+  // No body map in Surface-Creatures.md yet.  Minimal placeholder values
+  // so the data structure is consistent.  Will be replaced when colonial
+  // architecture is designed.
+  mushroom: [
+    { key: 'head', name: 'head', targetWeight: 0.08,
+      muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
+      neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
+      transducers: { vibration: 1, chemical: 0, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
+    { key: 'central_body', name: 'central body', targetWeight: 0.25,
+      muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
+      neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
+      transducers: { vibration: 1, chemical: 0, visual: 0 },
+      locomotion: false, vital: true,
+      attacks: [],
+      bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_sensory', name: 'sensory fronds', targetWeight: 0.12,
+      muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
+      neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
+      transducers: { vibration: 1, chemical: 0, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
+    { key: 'second_limbs', name: 'mid fronds', targetWeight: 0.15,
+      muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
+      neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
+      transducers: { vibration: 1, chemical: 0, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_limbs_a', name: 'rear limbs', targetWeight: 0.15,
+      muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
+      neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
+      transducers: { vibration: 1, chemical: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_limbs_b', name: 'hind limbs', targetWeight: 0.15,
+      muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
+      neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
+      transducers: { vibration: 1, chemical: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
+    { key: 'integument', name: 'outer rind', targetWeight: 0.10,
+      muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
+      neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
+      transducers: { vibration: 1, chemical: 0, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
+  ],
 
-  // Colonial chemotroph — sessile, no melee on front limbs
-  mushroom: deriveMap(CLADE_B_BASE, {
-    front_sensory: { name: 'sensory fronds', functions: ['sensory'] },
-    second_limbs:  { name: 'mid fronds',     functions: ['grip'] },
-    integument:    { name: 'outer rind',     targetWeight: 0.10 },
-  }),
-
-  // Ambush predator — front sensory limbs double as attack weapons
-  ambush_pred: deriveMap(CLADE_B_BASE, {
-    front_sensory: { name: 'strike limbs', functions: ['sensory', 'attack_melee'] },
-    second_limbs:  { functions: ['attack_melee', 'grip'] },
-  }),
+  // ═══════════════════════════════════════════════════════
+  // ─── Ambush Predator — 24 kg, 8 zones ────────────────
+  // ═══════════════════════════════════════════════════════
+  ambush_pred: [
+    { key: 'head', name: 'Head', targetWeight: 0.10,
+      muscle: 0.40, structural: 0.50, neural: 0.28, sensory: 0.35, connective: 0.67, mass: 2.2,
+      neuralAllocation: { visualProcessing: 0.12, vibrationProcessing: 0.06, integration: 0.05, motorControl: 0.03, patternLibrary: 0.02 },
+      transducers: { visual: 3, vibration: 2, chemical: 0 },
+      locomotion: false, vital: false,
+      attacks: [{ key: 'bite', name: 'Bite', baseDamage: 4, damageType: 'puncture', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'torso', name: 'Torso', targetWeight: 0.31,
+      muscle: 2.20, structural: 1.30, neural: 0.20, sensory: 0.15, connective: 2.15, mass: 6.0,
+      neuralAllocation: { motorRelay: 0.08, vibrationProcessing: 0.06, patternLibrary: 0.06 },
+      transducers: { vibration: 2, chemical: 0, visual: 0 },
+      locomotion: false, vital: true,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'sensor_l', name: 'Sensor-Left Limb', targetWeight: 0.08,
+      muscle: 0.50, structural: 0.25, neural: 0.28, sensory: 0.40, connective: 0.37, mass: 1.8,
+      neuralAllocation: { vibrationProcessing: 0.15, chemicalProcessing: 0.06, patternLibrary: 0.05, motorControl: 0.02 },
+      transducers: { vibration: 5, chemical: 2, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [{ key: 'probe', name: 'Probe', baseDamage: 2, damageType: 'puncture', accuracy: 0.80, canReflex: true }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'sensor_r', name: 'Sensor-Right Limb', targetWeight: 0.08,
+      muscle: 0.50, structural: 0.25, neural: 0.28, sensory: 0.40, connective: 0.37, mass: 1.8,
+      neuralAllocation: { vibrationProcessing: 0.15, chemicalProcessing: 0.06, patternLibrary: 0.05, motorControl: 0.02 },
+      transducers: { vibration: 5, chemical: 2, visual: 0 },
+      locomotion: false, vital: false,
+      attacks: [{ key: 'probe', name: 'Probe', baseDamage: 2, damageType: 'puncture', accuracy: 0.80, canReflex: true }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.10,
+      muscle: 1.10, structural: 0.35, neural: 0.22, sensory: 0.18, connective: 0.37, mass: 2.2,
+      neuralAllocation: { vibrationProcessing: 0.10, chemicalProcessing: 0.03, motorControl: 0.05, patternLibrary: 0.04 },
+      transducers: { vibration: 4, chemical: 1, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'hook', name: 'Hook', baseDamage: 3, damageType: 'puncture', accuracy: 0.80, canReflex: true }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.10,
+      muscle: 1.10, structural: 0.35, neural: 0.22, sensory: 0.18, connective: 0.37, mass: 2.2,
+      neuralAllocation: { vibrationProcessing: 0.10, chemicalProcessing: 0.03, motorControl: 0.05, patternLibrary: 0.04 },
+      transducers: { vibration: 4, chemical: 1, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'hook', name: 'Hook', baseDamage: 3, damageType: 'puncture', accuracy: 0.80, canReflex: true }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.12,
+      muscle: 1.80, structural: 0.45, neural: 0.18, sensory: 0.12, connective: 0.35, mass: 2.9,
+      neuralAllocation: { vibrationProcessing: 0.06, visualProcessing: 0.04, motorControl: 0.05, patternLibrary: 0.03 },
+      transducers: { vibration: 2, visual: 1, chemical: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 4, damageType: 'blunt', accuracy: 0.80, canReflex: true }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.11,
+      muscle: 1.80, structural: 0.45, neural: 0.18, sensory: 0.12, connective: 0.35, mass: 2.9,
+      neuralAllocation: { vibrationProcessing: 0.06, visualProcessing: 0.04, motorControl: 0.05, patternLibrary: 0.03 },
+      transducers: { vibration: 2, visual: 1, chemical: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 4, damageType: 'blunt', accuracy: 0.80, canReflex: true }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+  ],
 
   // ─── Boss ────────────────────────────────────────────
   // Dread King — undead armored biped.  Simplified body map.
+  // No tissue composition (not a biological creature).
   dread_king: [
-    { key: 'head',      name: 'crowned skull', targetWeight: 0.10, vital: true,  functions: ['sensory', 'organ'] },
-    { key: 'torso',     name: 'ribcage',       targetWeight: 0.35, vital: true,  functions: ['organ'] },
-    { key: 'left_arm',  name: 'shield arm',    targetWeight: 0.15, vital: false, functions: ['defense', 'grip'] },
-    { key: 'right_arm', name: 'sword arm',     targetWeight: 0.15, vital: false, functions: ['attack_melee'] },
-    { key: 'legs',      name: 'legs',          targetWeight: 0.20, vital: false, functions: ['locomotion'] },
-    { key: 'mantle',    name: 'mantle',        targetWeight: 0.05, vital: false, functions: ['defense'] },
+    { key: 'head',      name: 'crowned skull', targetWeight: 0.10, vital: true,
+      muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
+      neuralAllocation: {}, transducers: {},
+      locomotion: false,
+      attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
+    { key: 'torso',     name: 'ribcage',       targetWeight: 0.35, vital: true,
+      muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
+      neuralAllocation: {}, transducers: {},
+      locomotion: false,
+      attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
+    { key: 'left_arm',  name: 'shield arm',    targetWeight: 0.15, vital: false,
+      muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
+      neuralAllocation: {}, transducers: {},
+      locomotion: false,
+      attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
+    { key: 'right_arm', name: 'sword arm',     targetWeight: 0.15, vital: false,
+      muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
+      neuralAllocation: {}, transducers: {},
+      locomotion: false,
+      attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
+    { key: 'legs',      name: 'legs',          targetWeight: 0.20, vital: false,
+      muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
+      neuralAllocation: {}, transducers: {},
+      locomotion: true,
+      attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
+    { key: 'mantle',    name: 'mantle',        targetWeight: 0.05, vital: false,
+      muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
+      neuralAllocation: {}, transducers: {},
+      locomotion: false,
+      attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
   ],
 
-  // ─── Player body maps (all Clade A) ─────────────────
-  // All three player body types use Clade A layout with minor tweaks.
-  player_meso: deriveMap(CLADE_A_BASE),
+  // ─── Player body maps ───────────────────────────────
+  // Player uses meso-predator template (8 zones, same tissue composition).
+  // Front limbs carry a basic unarmed strike instead of claws.
+  player_meso: [
+    { key: 'head', name: 'Head', targetWeight: 0.11,
+      muscle: 0.80, structural: 0.60, neural: 0.85, sensory: 0.50, connective: 0.75, mass: 3.5,
+      neuralAllocation: { chemicalProcessing: 0.25, visualProcessing: 0.10, episodicMemory: 0.18, integration: 0.15, motorCoordination: 0.08, threatAssessment: 0.04, patternLibrary: 0.05 },
+      transducers: { chemical: 6, visual: 3, vibration: 0 },
+      locomotion: false, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'torso', name: 'Torso', targetWeight: 0.34,
+      muscle: 3.00, structural: 1.50, neural: 0.22, sensory: 0.08, connective: 2.70, mass: 7.5,
+      neuralAllocation: { motorRelay: 0.12, chemicalProcessing: 0.05, patternLibrary: 0.05 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: false, vital: true,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.09,
+      muscle: 0.85, structural: 0.35, neural: 0.05, sensory: 0.05, connective: 0.30, mass: 1.6,
+      neuralAllocation: { motorControl: 0.04, chemicalProcessing: 0.01 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'strike', name: 'Strike', baseDamage: 3, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.09,
+      muscle: 0.85, structural: 0.35, neural: 0.05, sensory: 0.05, connective: 0.30, mass: 1.6,
+      neuralAllocation: { motorControl: 0.04, chemicalProcessing: 0.01 },
+      transducers: { chemical: 1, vibration: 0, visual: 0 },
+      locomotion: true, vital: false,
+      attacks: [{ key: 'strike', name: 'Strike', baseDamage: 3, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_l', name: 'Mid-Left Limb', targetWeight: 0.10,
+      muscle: 1.10, structural: 0.40, neural: 0.04, sensory: 0.00, connective: 0.36, mass: 1.9,
+      neuralAllocation: { motorControl: 0.04 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'mid_r', name: 'Mid-Right Limb', targetWeight: 0.10,
+      muscle: 1.10, structural: 0.40, neural: 0.04, sensory: 0.00, connective: 0.36, mass: 1.9,
+      neuralAllocation: { motorControl: 0.04 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.09,
+      muscle: 1.30, structural: 0.42, neural: 0.04, sensory: 0.00, connective: 0.34, mass: 2.1,
+      neuralAllocation: { motorControl: 0.04 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+    { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.08,
+      muscle: 1.30, structural: 0.42, neural: 0.04, sensory: 0.00, connective: 0.34, mass: 2.1,
+      neuralAllocation: { motorControl: 0.04 },
+      transducers: {},
+      locomotion: true, vital: false,
+      attacks: [],
+      bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
+  ],
 
-  player_apex: deriveMap(CLADE_A_BASE, {
-    head:        { targetWeight: 0.08 },
-    torso:       { targetWeight: 0.38 },
-    front_limbs: { targetWeight: 0.14 },
-    mid_limbs:   { targetWeight: 0.14 },
-    rear_limbs:  { targetWeight: 0.14 },
-    underside:   { targetWeight: 0.12 },
-  }),
+  // player_apex and player_grazer are placeholders — they will be revised
+  // when chargen is reworked.  For now they mirror player_meso.
+  player_apex: null,   // filled below
+  player_grazer: null,  // filled below
+};
 
-  player_grazer: deriveMap(CLADE_A_BASE, {
-    head:        { targetWeight: 0.08 },
-    torso:       { targetWeight: 0.30 },
-    front_limbs: { targetWeight: 0.17 },
-    mid_limbs:   { targetWeight: 0.17 },
-    rear_limbs:  { targetWeight: 0.18 },
-    underside:   { targetWeight: 0.10 },
-  }),
+// Deep-copy meso map for the other two player body types
+// (distinct arrays so future chargen can diverge them)
+BODY_MAPS.player_apex   = BODY_MAPS.player_meso.map(z => ({ ...z, neuralAllocation: { ...z.neuralAllocation }, transducers: { ...z.transducers }, attacks: z.attacks.map(a => ({ ...a })) }));
+BODY_MAPS.player_grazer = BODY_MAPS.player_meso.map(z => ({ ...z, neuralAllocation: { ...z.neuralAllocation }, transducers: { ...z.transducers }, attacks: z.attacks.map(a => ({ ...a })) }));
+
+// ==================== CREATURE PATHWAYS ====================
+// Neural pathway topology for each creature type.  Data only — nothing
+// reads these yet.  Defined here so future prompts don't need a data migration.
+// `from` and `to` values match zone keys within the creature's body map.
+// `bandwidth` is an abstract 0–1 signal quality measure.
+export const CREATURE_PATHWAYS = {
+
+  // Meso-predator — star topology, head-to-torso hub
+  wolf: [
+    { from: 'head',  to: 'torso',   bandwidth: 0.9 },
+    { from: 'torso', to: 'front_l', bandwidth: 0.7 },
+    { from: 'torso', to: 'front_r', bandwidth: 0.7 },
+    { from: 'torso', to: 'mid_l',   bandwidth: 0.5 },
+    { from: 'torso', to: 'mid_r',   bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_l',  bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_r',  bandwidth: 0.5 },
+  ],
+
+  // Apex predator — same star topology as meso-predator
+  dire_wolf: [
+    { from: 'head',  to: 'torso',   bandwidth: 0.9 },
+    { from: 'torso', to: 'front_l', bandwidth: 0.7 },
+    { from: 'torso', to: 'front_r', bandwidth: 0.7 },
+    { from: 'torso', to: 'mid_l',   bandwidth: 0.5 },
+    { from: 'torso', to: 'mid_r',   bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_l',  bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_r',  bandwidth: 0.5 },
+  ],
+
+  // Small herbivore — mesh topology, fully distributed ganglia
+  hare: [
+    { from: 'head',        to: 'torso',       bandwidth: 0.3 },
+    { from: 'torso',       to: 'fore_l',      bandwidth: 0.3 },
+    { from: 'torso',       to: 'fore_r',      bandwidth: 0.3 },
+    { from: 'torso',       to: 'mid_graze_l', bandwidth: 0.3 },
+    { from: 'torso',       to: 'mid_graze_r', bandwidth: 0.3 },
+    { from: 'torso',       to: 'mid_loco_l',  bandwidth: 0.3 },
+    { from: 'torso',       to: 'mid_loco_r',  bandwidth: 0.3 },
+    { from: 'torso',       to: 'rear_l',      bandwidth: 0.2 },
+    { from: 'torso',       to: 'rear_r',      bandwidth: 0.2 },
+    { from: 'fore_l',      to: 'fore_r',      bandwidth: 0.2 },
+    { from: 'fore_l',      to: 'mid_graze_l', bandwidth: 0.2 },
+    { from: 'fore_r',      to: 'mid_graze_r', bandwidth: 0.2 },
+    { from: 'mid_graze_l', to: 'mid_graze_r', bandwidth: 0.2 },
+    { from: 'mid_graze_l', to: 'mid_loco_l',  bandwidth: 0.2 },
+    { from: 'mid_graze_r', to: 'mid_loco_r',  bandwidth: 0.2 },
+    { from: 'mid_loco_l',  to: 'mid_loco_r',  bandwidth: 0.2 },
+    { from: 'mid_loco_l',  to: 'rear_l',      bandwidth: 0.2 },
+    { from: 'mid_loco_r',  to: 'rear_r',      bandwidth: 0.2 },
+    { from: 'rear_l',      to: 'rear_r',      bandwidth: 0.2 },
+  ],
+
+  // Large herbivore — star topology
+  cave_crab: [
+    { from: 'head',  to: 'torso',   bandwidth: 0.8 },
+    { from: 'torso', to: 'front_l', bandwidth: 0.6 },
+    { from: 'torso', to: 'front_r', bandwidth: 0.6 },
+    { from: 'torso', to: 'mid_l',   bandwidth: 0.5 },
+    { from: 'torso', to: 'mid_r',   bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_l',  bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_r',  bandwidth: 0.5 },
+  ],
+
+  // Colonial chemotroph — simple star placeholder (torso hub)
+  mushroom: [
+    { from: 'central_body', to: 'head',          bandwidth: 0.3 },
+    { from: 'central_body', to: 'front_sensory',  bandwidth: 0.3 },
+    { from: 'central_body', to: 'second_limbs',   bandwidth: 0.3 },
+    { from: 'central_body', to: 'rear_limbs_a',   bandwidth: 0.3 },
+    { from: 'central_body', to: 'rear_limbs_b',   bandwidth: 0.3 },
+    { from: 'central_body', to: 'integument',     bandwidth: 0.3 },
+  ],
+
+  // Ambush predator — mesh topology with direct detection-to-strike paths
+  ambush_pred: [
+    { from: 'head',     to: 'torso',    bandwidth: 0.5 },
+    { from: 'torso',    to: 'sensor_l', bandwidth: 0.4 },
+    { from: 'torso',    to: 'sensor_r', bandwidth: 0.4 },
+    { from: 'torso',    to: 'front_l',  bandwidth: 0.5 },
+    { from: 'torso',    to: 'front_r',  bandwidth: 0.5 },
+    { from: 'torso',    to: 'rear_l',   bandwidth: 0.4 },
+    { from: 'torso',    to: 'rear_r',   bandwidth: 0.4 },
+    { from: 'sensor_l', to: 'front_l',  bandwidth: 0.3 },
+    { from: 'sensor_r', to: 'front_r',  bandwidth: 0.3 },
+    { from: 'front_l',  to: 'front_r',  bandwidth: 0.2 },
+    { from: 'rear_l',   to: 'rear_r',   bandwidth: 0.2 },
+  ],
+
+  // Player — same topology as meso-predator
+  player_meso: [
+    { from: 'head',  to: 'torso',   bandwidth: 0.9 },
+    { from: 'torso', to: 'front_l', bandwidth: 0.7 },
+    { from: 'torso', to: 'front_r', bandwidth: 0.7 },
+    { from: 'torso', to: 'mid_l',   bandwidth: 0.5 },
+    { from: 'torso', to: 'mid_r',   bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_l',  bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_r',  bandwidth: 0.5 },
+  ],
+  player_apex: [
+    { from: 'head',  to: 'torso',   bandwidth: 0.9 },
+    { from: 'torso', to: 'front_l', bandwidth: 0.7 },
+    { from: 'torso', to: 'front_r', bandwidth: 0.7 },
+    { from: 'torso', to: 'mid_l',   bandwidth: 0.5 },
+    { from: 'torso', to: 'mid_r',   bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_l',  bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_r',  bandwidth: 0.5 },
+  ],
+  player_grazer: [
+    { from: 'head',  to: 'torso',   bandwidth: 0.9 },
+    { from: 'torso', to: 'front_l', bandwidth: 0.7 },
+    { from: 'torso', to: 'front_r', bandwidth: 0.7 },
+    { from: 'torso', to: 'mid_l',   bandwidth: 0.5 },
+    { from: 'torso', to: 'mid_r',   bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_l',  bandwidth: 0.5 },
+    { from: 'torso', to: 'rear_r',  bandwidth: 0.5 },
+  ],
+
+  // Dread King — no pathways (undead, not biological)
+  dread_king: [],
 };
 
 // Look up a body map for any combatant (player or monster).
@@ -654,6 +1166,19 @@ export function getBodyMap(entity) {
     return BODY_MAPS[entity.key] || null;
   }
   return null;
+}
+
+// Look up pathways for any combatant (player or monster).
+// Returns the pathway array or an empty array.
+export function getPathways(entity) {
+  if (entity.isPlayer) {
+    const bt = entity.bodyType || 'meso';
+    return CREATURE_PATHWAYS['player_' + bt] || CREATURE_PATHWAYS.player_meso || [];
+  }
+  if (entity.key) {
+    return CREATURE_PATHWAYS[entity.key] || [];
+  }
+  return [];
 }
 
 // Weighted random zone selection.  Takes a body map (zone array),
