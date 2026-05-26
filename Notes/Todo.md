@@ -27,20 +27,26 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Added minimap system (press M key)
 - [x] Removed visual grain effect and grass tile added noise (was not part of the ground tile sprite)
 - [x] Added beach biome (removed beach logic when next to water tile)
+- [x] Update world map until it looks good
+- [x] Add a corpse/item drop system (enemies drop a corpse upon death which can be looted, objects can be seen and picked up on the ground)
+- [x] Update UI to have no icons and use key presses to bring up info screens
+- [x] Designed systems around a 3d body map as a core game system (visualizes weight, muscularity, connective tissue, neural mass, armor, sensory organs, neural pathways, etc)
+- [x] Created a cognitive system where centralized neuron clusters are more efficient at communication (smell is more efficient if the "nose" is near the "brain" so to speak)
 
 ## Up Next
-- [ ] Create ability to generate dozens of underground levels (that are properly connected by entrances)
+- 
 
 ## Near-Term Plans
 - [ ] Update biomes (new groundcover options, ground tile options and ground palette)  
-- [ ] Update world map until it looks good
-- [ ] Make "homes" for enemies (forest village with buildings for forest goblin, routes for pack hunters, dense area of fungal forest for mushrooms, rock golem "village" underground, treent "home" area in deep woods, frost troll "cave" it returns too at night, etc)
-- [ ] Add a corpse/item drop system (enemies drop a corpse upon death which can be looted, objects can be seen and picked up on the ground)  
 
 ## Long-Term Plans
-- [ ] Ecological overhaul (create environments, then creatures, then a dynamic ecology based on in-universe "evolution" through mutation)
+- [ ] Implement underground generation of new floors and cave systems 
 - [ ] Historical record overhaul (canon events across history, inventions, demigod interventions, factions, major events, wars, etc)
-- [ ] AI overhaul (INT based detection, creatures use stealth to hide or ambush, complex personality for each individual creature)
+- [ ] "Modernity" as a concept (religion, trade, communication, animals with complex sapience or similar level of societal complexity)
+- [ ] Build functional underground ecosystem on parity with surface (in terms of complexity and thoroughness, not fully complete though) 
+- [ ] AI overhaul (complex creature behavior based on instincts, body plan and evolutionary principles)
+
+## Very Long-Term Plans
 - [ ] World editing (base building, tree cutting, ore mining, wall destroying, village creating, etc)
 - [ ] Follower system (unclear if pet system, follower system or more of a niche possibility) 
 - [ ] Online interactivity (ability to share worlds and upload them, spectate, view/enter leaderboards, chat with other players/spectators, shared saves, etc)
