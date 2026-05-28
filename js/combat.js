@@ -5,7 +5,7 @@ import { state, worlds, monsters } from './state.js';
 import { DMG, GOLD_DROP_MUL, resistMult, getBodyMap, selectHitZone,
          checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
          getPathways, computeBleedPenalty, BLOOD_FRACTION, BURST_COEFF,
-         BLOOD_DEATH_THRESHOLD } from './constants.js';
+         BLOOD_DEATH_THRESHOLD, DAMAGE_SCALAR } from './constants.js';
 import { T, coverBonus } from './terrain.js';
 import { rand, randi, randRange, roll100 } from './rng.js';
 import { playerMelee, playerAcc, playerDodge, playerDef, playerCritChance,
@@ -36,7 +36,7 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
 
   // Apply damage to the zone
   if (hitZone.hp == null) return false;  // zone HP not initialized
-  hitZone.hp = Math.max(0, hitZone.hp - dmg);
+  hitZone.hp = Math.max(0, hitZone.hp - Math.round(dmg * DAMAGE_SCALAR));
 
   // Clotting reset — new damage tears open any clotting progress
   if (hitZone.clotting > 0) {

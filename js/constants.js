@@ -128,6 +128,11 @@ export const PRICE_CAT = { STAPLE:'staple', STANDARD:'standard', LUXURY:'luxury'
 // ==================== FED MAX ====================
 export const FED_MAX = 100;
 
+// ==================== DAMAGE SCALAR ====================
+// Global multiplier applied to all outgoing damage after all other calculations.
+// Scales down damage relative to zone HP values.
+export const DAMAGE_SCALAR = 0.25;
+
 // ==================== DAMAGE TYPES ====================
 export const DMG = {
   BLADE:'blade', BLUNT:'blunt', FIRE:'fire', COLD:'cold', ELEC:'electric', POISON:'poison'
