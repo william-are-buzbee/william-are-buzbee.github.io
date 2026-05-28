@@ -33,6 +33,23 @@ const INTERACTABLE_TYPES = new Set([
 
 const $ = id => document.getElementById(id);
 
+/** Blood status — qualitative word, not a number. */
+function getBloodStatus(p) {
+  if (!p || p.blood == null || p.bloodMax == null || p.bloodMax <= 0) return null;
+  const ratio = p.blood / p.bloodMax;
+  // Check if any zones are actively bleeding (below 50% HP, not fully clotted)
+  const bodyMap = p.bodyMap || [];
+  const activelyBleeding = bodyMap.some(z =>
+    !z.destroyed && z.hp != null && z.maxHp != null &&
+    z.hp < z.maxHp * 0.5 && (z.clotting || 0) < 1.0
+  );
+
+  if (ratio > 0.75) return activelyBleeding ? { label: 'bleeding', css: 'blood-bleeding' } : null;
+  if (ratio > 0.50) return { label: 'weakened', css: 'blood-weakened' };
+  if (ratio > 0.25) return { label: 'weakened', css: 'blood-weakened' };
+  return { label: 'critical', css: 'blood-critical' };
+}
+
 /** Shared empty-state markup — one source of truth. */
 const EMPTY_HTML = '<div class="empty-state">— None —</div>';
 
@@ -96,6 +113,9 @@ function computeUIData() {
     xpPct:    Math.min(100, (p.xp / p.xpNext) * 100),
     hpText:   `${p.hp} / ${p.hpMax}`,
     hpPct:    Math.max(0, (p.hp / p.hpMax) * 100),
+
+    // blood status
+    bloodStatus: getBloodStatus(p),
 
     // hunger
     fedPct:   Math.max(0, p.fed),
@@ -315,6 +335,29 @@ function updateHud(d) {
   _hudFoodBar.style.width = fedPct + '%';
   _hudFoodBar.className = 'hud-bar-fill food' + (d.fedWarn ? ' warn' : '');
   _hudFoodNum.textContent = Math.round(state.player.fed) + '%';
+
+  // Blood status indicator (added dynamically if element exists)
+  let bloodEl = document.getElementById('hud-blood');
+  if (!bloodEl && d.bloodStatus) {
+    // Create blood status element if it doesn't exist
+    bloodEl = document.createElement('div');
+    bloodEl.id = 'hud-blood';
+    bloodEl.style.cssText = 'font-size:10px;margin-top:2px;';
+    _hudEl.appendChild(bloodEl);
+  }
+  if (bloodEl) {
+    if (d.bloodStatus) {
+      bloodEl.textContent = 'Blood: ' + d.bloodStatus.label;
+      bloodEl.className = d.bloodStatus.css;
+      bloodEl.style.display = '';
+      // Color coding
+      if (d.bloodStatus.css === 'blood-critical') bloodEl.style.color = '#d04040';
+      else if (d.bloodStatus.css === 'blood-weakened') bloodEl.style.color = '#c08040';
+      else if (d.bloodStatus.css === 'blood-bleeding') bloodEl.style.color = '#b07060';
+    } else {
+      bloodEl.style.display = 'none';
+    }
+  }
 }
 
 function hideHud() {
@@ -399,6 +442,27 @@ function buildPlayerStatGroupsHTML(p) {
     }
   }
 
+  // Blood status — qualitative, not numeric
+  if (p.blood != null && p.bloodMax > 0) {
+    const ratio = p.blood / p.bloodMax;
+    let label = 'stable';
+    if (ratio <= 0.25) label = 'critical';
+    else if (ratio <= 0.50) label = 'weakened';
+    else if (ratio <= 0.75) {
+      // Check if actively bleeding
+      const bm = p.bodyMap || [];
+      const activelyBleeding = bm.some(z =>
+        !z.destroyed && z.hp != null && z.maxHp != null &&
+        z.hp < z.maxHp * 0.5 && (z.clotting || 0) < 1.0
+      );
+      label = activelyBleeding ? 'bleeding' : 'stable';
+    }
+    if (label !== 'stable') {
+      html += `<div class="ov-section">CONDITION</div>`;
+      html += `<div class="ov-row"><span class="ov-k">Blood</span><span class="ov-v">${label}</span></div>`;
+    }
+  }
+
   return html;
 }
 
@@ -453,6 +517,29 @@ function buildExamineStatGroupsHTML(target, playerCentral, fullDetail) {
       for (const s of proc) {
         html += `<div class="ov-row"><span class="ov-k">${s.name}</span><span class="ov-v">${s.val}</span></div>`;
       }
+    }
+  }
+
+  // Blood status — gated by player Central for examined enemies
+  if (target.blood != null && target.bloodMax > 0) {
+    const ratio = target.blood / target.bloodMax;
+    if (fullDetail) {
+      // Self-examine: always show qualitative status
+      let label = 'stable';
+      if (ratio <= 0.25) label = 'critical';
+      else if (ratio <= 0.50) label = 'weakened';
+      else if (ratio <= 0.75) label = 'bleeding';
+      if (label !== 'stable') {
+        html += `<div class="ov-section">CONDITION</div>`;
+        html += `<div class="ov-row"><span class="ov-k">Blood</span><span class="ov-v">${label}</span></div>`;
+      }
+    } else if (showProc && ratio < 0.75) {
+      // Tier 3 player examining enemy: show blood status
+      let label = 'bleeding';
+      if (ratio <= 0.25) label = 'weakened from blood loss';
+      else if (ratio <= 0.50) label = 'bleeding heavily';
+      html += `<div class="ov-section">CONDITION</div>`;
+      html += `<div class="ov-row"><span class="ov-k">Blood</span><span class="ov-v">${label}</span></div>`;
     }
   }
 

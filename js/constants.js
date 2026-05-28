@@ -449,6 +449,27 @@ export function getAtmosphere(x, y) {
 // If remaining neural mass fraction falls below this, the creature dies.
 export const NEURAL_DEATH_THRESHOLD = 0.20;
 
+// ==================== BLOOD SYSTEM CONSTANTS ====================
+export const BLOOD_FRACTION         = 0.07;   // blood volume as fraction of total mass
+export const SEEP_COEFF             = 0.02;   // bleed rate multiplier per kg connective tissue
+export const BURST_COEFF            = 0.03;   // burst multiplier per bandwidth point severed
+export const CLOT_RATE              = 0.05;   // clotting progress per turn (1.0 = fully clotted)
+export const REGEN_FRACTION         = 0.002;  // blood regeneration per turn as fraction of max
+export const BLOOD_DEATH_THRESHOLD  = 0.10;   // die at 10% blood remaining
+export const BLOOD_WEAKENED_THRESHOLD = 0.50; // speed/damage penalty begins
+export const BLOOD_CRITICAL_THRESHOLD = 0.25; // severe penalty, AI flee trigger
+
+// Compute the bleed penalty multiplier from current blood level.
+// Returns 0, 0.10, 0.25, or 0.45 — applied as (1 - penalty) to speed and damage.
+export function computeBleedPenalty(entity) {
+  if (!entity.bloodMax || entity.bloodMax <= 0) return 0;
+  const ratio = entity.blood / entity.bloodMax;
+  if (ratio > 0.75) return 0;
+  if (ratio > 0.50) return 0.10;
+  if (ratio > 0.25) return 0.25;
+  return 0.45;
+}
+
 // Zone HP derived from zone mass. Each kg of zone tissue = this many HP.
 export const HP_PER_KG = 5;
 
@@ -1181,7 +1202,7 @@ export function getBodyMap(entity) {
 }
 
 // Initialize a per-instance body map for a creature or player.
-// Deep-copies the template and adds zone HP fields.
+// Deep-copies the template and adds zone HP fields + blood system fields.
 // Call at spawn time and store the result on the entity.
 export function initBodyMap(entity) {
   let template;
@@ -1205,10 +1226,25 @@ export function initBodyMap(entity) {
     zone.maxHp = Math.max(1, Math.floor(z.mass * HP_PER_KG));
     zone.hp = zone.maxHp;
     zone.destroyed = false;
+    // Blood system — clotting per zone
+    zone.clotting = 0.0;
     return zone;
   });
 
   entity.bodyMap = bodyMap;
+
+  // Blood system — compute total mass and initialize blood pool
+  const totalMass = bodyMap.reduce((sum, z) => sum + z.mass, 0);
+  entity.totalMass = totalMass;
+  entity.bloodMax = totalMass * BLOOD_FRACTION;
+  entity.blood = entity.bloodMax;
+  entity.bleedPenalty = 0;
+
+  // Precompute zone blood shares (used for destruction dump)
+  for (const zone of bodyMap) {
+    zone.bloodShare = (totalMass > 0) ? (zone.mass / totalMass) * entity.bloodMax : 0;
+  }
+
   return bodyMap;
 }
 

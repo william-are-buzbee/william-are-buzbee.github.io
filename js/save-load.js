@@ -3,7 +3,7 @@
 // Handles circular references (bondPartner), Set objects, and item registry refs.
 
 import { state, worlds, covers, monsters, features, groundItems } from './state.js';
-import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, initBodyMap, getBodyMap } from './constants.js';
+import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, initBodyMap, getBodyMap, computeBleedPenalty } from './constants.js';
 import { findWeapon, findArmor } from './items.js';
 import { render } from './rendering.js';
 import { log } from './log.js';
@@ -107,6 +107,7 @@ function restoreZoneState(bodyMap, savedState) {
       zone.hp = saved.hp != null ? saved.hp : zone.maxHp;
       zone.destroyed = saved.destroyed || false;
       if (saved.maxHp != null) zone.maxHp = saved.maxHp;
+      zone.clotting = saved.clotting != null ? saved.clotting : 0;
     }
   }
 }
@@ -119,6 +120,7 @@ function extractZoneState(bodyMap) {
     hp: z.hp,
     maxHp: z.maxHp,
     destroyed: z.destroyed,
+    clotting: z.clotting || 0,
   }));
 }
 
@@ -138,16 +140,19 @@ function serializePlayer(p) {
   out._booksRead = p.booksRead ? [...p.booksRead] : [];
   delete out.npcsMet;
   delete out.booksRead;
-  // Body map → save only zone runtime state (hp, maxHp, destroyed)
+  // Body map → save only zone runtime state (hp, maxHp, destroyed, clotting)
   if (p.bodyMap) {
     out._zoneState = p.bodyMap.map(z => ({
       key: z.key,
       hp: z.hp,
       maxHp: z.maxHp,
       destroyed: z.destroyed,
+      clotting: z.clotting || 0,
     }));
   }
   delete out.bodyMap;  // don't persist full body map (static data reloaded from template)
+  // Blood system — save current blood level (bloodMax/bleedPenalty/bloodShare are derived on load)
+  // Keep blood on out — it's a simple float, JSON-safe
   return out;
 }
 
@@ -182,9 +187,15 @@ function deserializePlayer(raw) {
   // Reconstruct body map from template, then restore zone state
   const savedZoneState = raw._zoneState || null;
   delete p._zoneState;
+  const savedBlood = p.blood;  // save before initBodyMap overwrites
   initBodyMap(p);
   if (savedZoneState && p.bodyMap) {
     restoreZoneState(p.bodyMap, savedZoneState);
+  }
+  // Restore blood level (initBodyMap sets blood = bloodMax; override with saved value)
+  if (savedBlood != null && p.bloodMax > 0) {
+    p.blood = Math.min(savedBlood, p.bloodMax);
+    p.bleedPenalty = computeBleedPenalty(p);
   }
   return p;
 }
@@ -259,10 +270,16 @@ function deserializeMonsters(allLayers) {
         if (mon.immobilized == null) mon.immobilized = false;
         // Restore body map from template, then apply saved zone state
         const savedZoneState = mon._zoneState || null;
+        const savedBlood = mon.blood;  // save before initBodyMap overwrites
         delete mon._zoneState;
         initBodyMap(mon);
         if (savedZoneState && mon.bodyMap) {
           restoreZoneState(mon.bodyMap, savedZoneState);
+        }
+        // Restore blood level (initBodyMap sets blood = bloodMax; override with saved value)
+        if (savedBlood != null && mon.bloodMax > 0) {
+          mon.blood = Math.min(savedBlood, mon.bloodMax);
+          mon.bleedPenalty = computeBleedPenalty(mon);
         }
       }
     }

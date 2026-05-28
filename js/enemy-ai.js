@@ -4,7 +4,9 @@
 import { state, worlds, covers, monsters } from './state.js';
 import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, STAT_MAX, TURN_AGILITY_COEFF,
-         facingSteps, checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss } from './constants.js';
+         facingSteps, checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
+         getPathways, computeBleedPenalty, SEEP_COEFF, CLOT_RATE, REGEN_FRACTION,
+         BLOOD_DEATH_THRESHOLD, BURST_COEFF, BLOOD_CRITICAL_THRESHOLD } from './constants.js';
 import { T, isWalkable } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -27,6 +29,89 @@ export function setUseActionCallback(fn){ _useActionCallback = fn; }
 
 
 function monstersHere(){ return monsters[state.player.layer] || []; }
+
+// ==================== BLOOD SYSTEM — PER-TURN PROCESSING ====================
+// Runs once per turn for each creature (player or monster).
+// Handles wound seep, blood regeneration, clotting, and blood death.
+// Returns true if the creature died from blood loss.
+
+function processBleed(creature, isPlayer) {
+  if (creature.blood == null || creature.bloodMax == null || creature.bloodMax <= 0) return false;
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return false;
+
+  const prevBloodRatio = creature.blood / creature.bloodMax;
+
+  // 1. Seep from wounded zones (below 50% HP, not destroyed)
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    if (zone.hp == null || zone.maxHp == null) continue;
+    if (zone.hp < zone.maxHp * 0.5) {
+      const damageFraction = 1 - (zone.hp / zone.maxHp);
+      const connective = zone.connective || 0;
+      const clotting = zone.clotting || 0;
+      const seep = connective * SEEP_COEFF * damageFraction * (1 - clotting);
+      creature.blood -= seep;
+      // Advance clotting (only if no new damage — clotting is reset on hit in combat.js)
+      zone.clotting = Math.min((zone.clotting || 0) + CLOT_RATE, 1.0);
+    }
+  }
+
+  // 2. Regeneration
+  creature.blood = Math.min(creature.blood + creature.bloodMax * REGEN_FRACTION, creature.bloodMax);
+
+  // 3. Clamp
+  creature.blood = Math.max(creature.blood, 0);
+
+  // 4. Compute bleed penalty
+  creature.bleedPenalty = computeBleedPenalty(creature);
+
+  const newBloodRatio = creature.blood / creature.bloodMax;
+
+  // 5. Player threshold-crossing log messages
+  if (isPlayer) {
+    if (prevBloodRatio >= 0.75 && newBloodRatio < 0.75) {
+      log('Blood seeps from your wounds.', 'warn');
+    }
+    if (prevBloodRatio >= 0.50 && newBloodRatio < 0.50) {
+      log('You feel lightheaded. Blood runs freely.', 'warn');
+    }
+    if (prevBloodRatio >= 0.25 && newBloodRatio < 0.25) {
+      log('Your vision darkens at the edges. You\'re losing too much blood.', 'crit');
+    }
+
+    // Clotting feedback (player only)
+    const woundedZones = bodyMap.filter(z => !z.destroyed && z.hp != null && z.maxHp != null && z.hp < z.maxHp * 0.5);
+    if (woundedZones.length > 0) {
+      const allNearlyClotted = woundedZones.every(z => (z.clotting || 0) > 0.8);
+      const allFullyClotted = woundedZones.every(z => (z.clotting || 0) >= 1.0);
+      if (allFullyClotted && newBloodRatio < 1.0 && !creature._bleedClotMsg) {
+        log('The bleeding has stopped, but you feel drained.', 'muted');
+        creature._bleedClotMsg = true;
+      } else if (allNearlyClotted && !allFullyClotted && !creature._bleedClosingMsg) {
+        log('Your wounds are closing.', 'muted');
+        creature._bleedClosingMsg = true;
+      }
+      // Reset flags if new wounds open
+      if (!allNearlyClotted) {
+        creature._bleedClosingMsg = false;
+        creature._bleedClotMsg = false;
+      }
+    }
+  }
+
+  // 6. Check death
+  if (creature.blood <= creature.bloodMax * BLOOD_DEATH_THRESHOLD) {
+    if (isPlayer) {
+      log('Everything narrows. Fades. Goes still.', 'dead');
+    } else {
+      log(`${creature.name} collapses from blood loss.`, 'dead');
+    }
+    return true; // caller handles death
+  }
+
+  return false;
+}
 
 let turnCount = 0;
 
@@ -342,12 +427,25 @@ function performBonusMove(mon){
   }
   state.player.effects = survivingEffects;
 
+  // Blood system — process player bleed (seep, regen, clotting, death check)
+  if (processBleed(state.player, true)) {
+    state.player.hp = 0;
+    state.player.deathCause = 'blood_loss';
+    if (_onPlayerDeathCallback) _onPlayerDeathCallback();
+    return;
+  }
+
   // Enemies act — only on current layer, town cells are safe
   if (!isTownCell(state.player.layer)){
     const mons = monstersHere();
     // Phase 1: Each enemy takes its normal action (speed skip + instant turn + AI)
     for (const m of mons){
       if (m.hp <= 0) continue;
+      // Blood system — process monster bleed each turn
+      if (processBleed(m, false)) {
+        m.hp = 0;  // blood loss death
+        continue;
+      }
       enemyAct(m);
       if (state.player.hp <= 0){ _onPlayerDeathCallback && _onPlayerDeathCallback(); return; }
     }
@@ -359,7 +457,9 @@ function performBonusMove(mon){
       const plrPTW  = state.player.strength / state.player.siz;
       const ratio   = monPTW / plrPTW;
       if (ratio >= 1) {
-        const bonusChance = Math.min(ratio - 1, MAX_BONUS_MOVE_CHANCE);
+        // Apply bleedPenalty to effective speed
+        const bleedMul = 1 - (m.bleedPenalty || 0);
+        const bonusChance = Math.min((ratio - 1) * bleedMul, MAX_BONUS_MOVE_CHANCE);
         if (Math.random() < bonusChance) {
           performBonusMove(m);
         }
@@ -755,6 +855,24 @@ function enemyAct(mon){
   if (mon.personality === 'skittish' && (mon.key === 'wolf' || mon.key === 'dire_wolf')){
     if (mon.hp < mon.hpMax * 0.3 && d <= 3){
       // Run away from player
+      const fdx = Math.sign(mon.x - state.player.x);
+      const fdy = Math.sign(mon.y - state.player.y);
+      const nx = mon.x + (fdx || (rand()<0.5?1:-1));
+      const ny = mon.y + (fdy || (rand()<0.5?1:-1));
+      if (inBounds(state.player.layer, nx, ny)
+          && isWalkable(worlds[state.player.layer][ny][nx], getCover(state.player.layer, nx, ny))
+          && !monsterAt(nx,ny,state.player.layer)){
+        if (mon.facing) { mon.facing.dx = Math.sign(nx - mon.x); mon.facing.dy = Math.sign(ny - mon.y); }
+        mon.x = nx; mon.y = ny;
+      }
+      return;
+    }
+  }
+
+  // Blood loss flee — Tier 3 creatures (central > 40) flee at critical blood level
+  if (mon.blood != null && mon.bloodMax > 0 && mon.central > 40) {
+    if (mon.blood < mon.bloodMax * BLOOD_CRITICAL_THRESHOLD && d <= 6) {
+      // Flee from player — blood loss is critical
       const fdx = Math.sign(mon.x - state.player.x);
       const fdy = Math.sign(mon.y - state.player.y);
       const nx = mon.x + (fdx || (rand()<0.5?1:-1));
@@ -1335,11 +1453,47 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
   if (hitZone.hp == null) return;
   hitZone.hp = Math.max(0, hitZone.hp - dmg);
 
+  // Clotting reset — new damage tears open any clotting progress
+  if (hitZone.clotting > 0) {
+    hitZone.clotting = 0;
+  }
+
   if (hitZone.hp <= 0 && !hitZone.destroyed) {
     hitZone.hp = 0;
     hitZone.destroyed = true;
 
     log(`Your ${hitZone.name} is destroyed!`, 'crit');
+
+    // Blood system — destruction dump + severance burst
+    const player = state.player;
+    if (player.blood != null && player.bloodMax > 0) {
+      // Dump — zone's blood share is lost
+      const dump = hitZone.bloodShare || 0;
+      player.blood -= dump;
+
+      // Burst — severed pathway connections
+      const pathways = getPathways(player);
+      let severedBandwidth = 0;
+      for (const pw of pathways) {
+        if (pw.from === hitZone.key || pw.to === hitZone.key) {
+          severedBandwidth += pw.bandwidth;
+        }
+      }
+      const burst = severedBandwidth * BURST_COEFF * player.bloodMax;
+      player.blood -= burst;
+
+      // Clamp and recompute penalty
+      player.blood = Math.max(0, player.blood);
+      player.bleedPenalty = computeBleedPenalty(player);
+
+      // Check blood death
+      if (player.blood <= player.bloodMax * BLOOD_DEATH_THRESHOLD) {
+        log(`Everything narrows. Fades. Goes still.`, 'dead');
+        state.player.hp = 0;
+        state.player.deathCause = 'blood_loss';
+        return;
+      }
+    }
 
     // Vital check — player dies
     if (hitZone.vital) {
@@ -1387,4 +1541,4 @@ export { endPlayerTurn, enemyAct, playerInTerritory, monInOwnTerritory,
          syncSwarmAI, mushroomPackAI, mushroomTouch, wanderInTerritory, moveMonsterToward,
          wanderMonster, moveMonsterTowardPlayer,
          hasCladeTerritory, wouldExceedTerritory,
-         isWaterLocked, isWaterTile };
+         isWaterLocked, isWaterTile, processBleed };

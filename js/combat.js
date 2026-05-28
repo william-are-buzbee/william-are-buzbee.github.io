@@ -3,7 +3,9 @@ import { render } from './rendering.js';
 import { monsterMelee } from './enemy-ai.js';
 import { state, worlds, monsters } from './state.js';
 import { DMG, GOLD_DROP_MUL, resistMult, getBodyMap, selectHitZone,
-         checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss } from './constants.js';
+         checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
+         getPathways, computeBleedPenalty, BLOOD_FRACTION, BURST_COEFF,
+         BLOOD_DEATH_THRESHOLD } from './constants.js';
 import { T, coverBonus } from './terrain.js';
 import { rand, randi, randRange, roll100 } from './rng.js';
 import { playerMelee, playerAcc, playerDodge, playerDef, playerCritChance,
@@ -36,12 +38,49 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
   if (hitZone.hp == null) return false;  // zone HP not initialized
   hitZone.hp = Math.max(0, hitZone.hp - dmg);
 
+  // Clotting reset — new damage tears open any clotting progress
+  if (hitZone.clotting > 0) {
+    hitZone.clotting = 0;
+  }
+
   // Check if zone is newly destroyed
   if (hitZone.hp <= 0 && !hitZone.destroyed) {
     hitZone.hp = 0;
     hitZone.destroyed = true;
 
     log(`${entityName}'s ${hitZone.name} is destroyed!`, 'crit');
+
+    // Blood system — destruction dump + severance burst
+    if (entity.blood != null && entity.bloodMax > 0) {
+      // Dump — zone's blood share is lost
+      const dump = hitZone.bloodShare || 0;
+      entity.blood -= dump;
+
+      // Burst — severed pathway connections
+      const pathways = getPathways(entity);
+      let severedBandwidth = 0;
+      for (const pw of pathways) {
+        if (pw.from === hitZone.key || pw.to === hitZone.key) {
+          severedBandwidth += pw.bandwidth;
+        }
+      }
+      const burst = severedBandwidth * BURST_COEFF * entity.bloodMax;
+      entity.blood -= burst;
+
+      // Clamp and recompute penalty
+      entity.blood = Math.max(0, entity.blood);
+      entity.bleedPenalty = computeBleedPenalty(entity);
+
+      // Check blood death
+      if (entity.blood <= entity.bloodMax * BLOOD_DEATH_THRESHOLD) {
+        if (entity.isPlayer) {
+          log(`Everything narrows. Fades. Goes still.`, 'dead');
+        } else {
+          log(`${entityName} collapses. Its wounds finally emptied it.`, 'dead');
+        }
+        return true; // caller handles death
+      }
+    }
 
     // Step 2 — Vital check
     if (hitZone.vital) {
@@ -167,6 +206,26 @@ function playerAttack(mon){
     zoneDeath = resolveZoneDamage(mon, hitZone, totalZoneDmg, mon.name, monBodyMap);
     if (zoneDeath) {
       mon.hp = 0;  // ensure global HP reflects death
+    }
+  }
+
+  // Enemy bleed feedback — gated by player centralization
+  if (!zoneDeath && mon.hp > 0 && mon.blood != null && mon.bloodMax > 0) {
+    const bloodRatio = mon.blood / mon.bloodMax;
+    if (bloodRatio < 0.75) {
+      const cent = state.player.central || 0;
+      if (cent >= 60) {
+        // Tier 3 player: detailed bleed info
+        if (bloodRatio < 0.25) log(`${mon.name}'s movements are sluggish. Blood loss.`, 'muted');
+        else if (bloodRatio < 0.50) log(`${mon.name} is bleeding heavily — it's weakening.`, 'muted');
+        else log(`${mon.name} bleeds from its wounds.`, 'muted');
+      } else if (cent >= 30) {
+        // Moderate centralization
+        log(`${mon.name} bleeds from its wounds.`, 'muted');
+      } else {
+        // Low centralization: generic
+        log(`The creature is wounded.`, 'muted');
+      }
     }
   }
 

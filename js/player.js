@@ -75,6 +75,8 @@ function playerMelee(p){
   let base = Math.floor(p.siz * DAMAGE_SIZE_COEFF) + Math.floor(p.strength * DAMAGE_STR_COEFF) + (p.weapon.atk || 0) + Math.floor((p.level-1)*0.5);
   if (p.perks && p.perks.blade_bonus && p.weapon.type === DMG.BLADE) base += 1;
   if (p.perks && p.perks.blunt_bonus && p.weapon.type === DMG.BLUNT) base += 1;
+  // Blood loss penalty — less oxygen to muscles, less force output
+  if (p.bleedPenalty > 0) base = Math.max(1, Math.round(base * (1 - p.bleedPenalty)));
   return base;
 }
 

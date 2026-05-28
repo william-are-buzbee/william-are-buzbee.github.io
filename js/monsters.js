@@ -381,7 +381,10 @@ function monCritChance(mon){
 function monCritMult(mon){ return 1.5 + mon.strength * 0.003; }
 function monDamage(mon){
   // baseDamage = floor(Size * DAMAGE_SIZE_COEFF) + floor(Strength * DAMAGE_STR_COEFF)
-  return Math.floor(mon.siz * DAMAGE_SIZE_COEFF) + Math.floor(mon.strength * DAMAGE_STR_COEFF);
+  let base = Math.floor(mon.siz * DAMAGE_SIZE_COEFF) + Math.floor(mon.strength * DAMAGE_STR_COEFF);
+  // Blood loss penalty — less oxygen to muscles, less force output
+  if (mon.bleedPenalty > 0) base = Math.max(1, Math.round(base * (1 - mon.bleedPenalty)));
+  return base;
 }
 
 // ==================== VISION PROFILES ====================
