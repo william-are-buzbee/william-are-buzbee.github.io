@@ -131,7 +131,7 @@ export const FED_MAX = 100;
 // ==================== PHYSICS-BASED DAMAGE ====================
 // Strike damage derives entirely from the attacking zone's tissue composition.
 // Muscle generates force, mass adds momentum, structural fraction sets transfer efficiency.
-export const MUSCLE_FORCE_COEFF = 8.0;    // base damage per kg of effective muscle
+export const MUSCLE_FORCE_COEFF = 4.0;    // base damage per kg of effective muscle
 export const MOMENTUM_COEFF    = 0.15;    // damage bonus per kg of effective mass
 export const BASE_TRANSFER     = 0.6;     // minimum force transfer (soft tissue)
 export const HARDNESS_BONUS    = 1.5;     // additional transfer per point of structural fraction
