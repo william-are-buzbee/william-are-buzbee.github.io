@@ -204,6 +204,10 @@ function deserializePlayer(raw) {
     p.blood = Math.min(savedBlood, p.bloodMax);
     p.bleedPenalty = computeBleedPenalty(p);
   }
+  // Prompt H: ensure originalNeural exists (recompute if missing from old saves)
+  if (p.originalNeural == null && p.bodyMap) {
+    p.originalNeural = p.bodyMap.reduce((sum, z) => sum + (z.neural || 0), 0);
+  }
   return p;
 }
 
@@ -287,6 +291,10 @@ function deserializeMonsters(allLayers) {
         if (savedBlood != null && mon.bloodMax > 0) {
           mon.blood = Math.min(savedBlood, mon.bloodMax);
           mon.bleedPenalty = computeBleedPenalty(mon);
+        }
+        // Prompt H: ensure originalNeural exists (recompute if missing from old saves)
+        if (mon.originalNeural == null && mon.bodyMap) {
+          mon.originalNeural = mon.bodyMap.reduce((sum, z) => sum + (z.neural || 0), 0);
         }
       }
     }

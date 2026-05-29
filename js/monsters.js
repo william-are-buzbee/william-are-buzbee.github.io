@@ -680,6 +680,10 @@ function spawnMonster(key){
   m.immobilized = false;
   // Initialize per-instance body map with zone HP
   initBodyMap(m);
+  // Prompt H: store original neural mass for neural death threshold ratio
+  if (m.bodyMap) {
+    m.originalNeural = m.bodyMap.reduce((sum, z) => sum + (z.neural || 0), 0);
+  }
   return m;
 }
 

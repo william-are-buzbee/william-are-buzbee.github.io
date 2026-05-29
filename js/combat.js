@@ -72,27 +72,50 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
       // Clamp and recompute penalty
       entity.blood = Math.max(0, entity.blood);
       entity.bleedPenalty = computeBleedPenalty(entity);
-
-      // Check blood death
-      if (entity.blood <= entity.bloodMax * BLOOD_DEATH_THRESHOLD) {
-        if (entity.isPlayer) {
-          log(`Everything narrows. Fades. Goes still.`, 'dead');
-        } else {
-          log(`${entityName} collapses. Its wounds finally emptied it.`, 'dead');
-        }
-        return true; // caller handles death
-      }
     }
 
-    // Step 2 — Vital check
+    // ── Death checks (Prompt H) — vital → neural → blood ──
+    // First condition met is the cause of death.
+
+    // Step 1 — Vital zone destruction (torso)
     if (hitZone.vital) {
-      log(`${entityName}'s ${hitZone.name} is destroyed — a fatal blow.`, 'dead');
+      if (entity.isPlayer) {
+        log(`Something vital tears loose inside you. Everything stops.`, 'dead');
+      } else {
+        log(`The ${entityName}'s body gives out. It collapses.`, 'dead');
+      }
+      entity.deathCause = 'vital';
       return true; // caller handles death
     }
 
-    // Step 3 — Neural death check
+    // Step 2 — Neural death check
     if (checkNeuralDeath(bodyMap)) {
-      log(`${entityName} collapses — too much neural tissue destroyed.`, 'dead');
+      const headDestroyed = hitZone.key === 'head';
+      if (entity.isPlayer) {
+        if (headDestroyed) {
+          log(`A flash of nothing. Then nothing.`, 'dead');
+        } else {
+          log(`Your limbs stop answering. The world blurs. Silence.`, 'dead');
+        }
+      } else {
+        if (headDestroyed) {
+          log(`The ${entityName}'s body seizes and falls. It doesn't get up.`, 'dead');
+        } else {
+          log(`The ${entityName} shudders, limbs twitching without coordination. It goes still.`, 'dead');
+        }
+      }
+      entity.deathCause = 'neural';
+      return true; // caller handles death
+    }
+
+    // Step 3 — Blood loss death (from dump + burst)
+    if (entity.blood != null && entity.blood <= entity.bloodMax * BLOOD_DEATH_THRESHOLD) {
+      if (entity.isPlayer) {
+        log(`Everything narrows. Fades. Goes still.`, 'dead');
+      } else {
+        log(`The ${entityName} collapses. Its wounds finally emptied it.`, 'dead');
+      }
+      entity.deathCause = 'blood';
       return true; // caller handles death
     }
 
@@ -231,8 +254,9 @@ log(`[DBG] dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z
     contactedZones = fallbackZone ? [fallbackZone] : [];
   }
 
-  // Apply total damage to monster global HP
-  mon.hp -= dmg;
+  // Prompt H: creature-wide HP is no longer decremented by combat damage.
+  // Death is determined by zone destruction (vital/neural/blood) only.
+  // hitFlash and damageTaken are kept for visual feedback and AI evaluation.
   if (dmg > 0){ mon.hitFlash = 3; mon.damageTaken = (mon.damageTaken||0) + dmg; }
 
   // Compute total damage including elemental (for zone distribution)
@@ -273,7 +297,7 @@ log(`[DBG] dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z
       let esuf = '';
       if (emul >= 1.4) esuf = ' [WEAK]';
       else if (emul <= 0.6) esuf = ' [RESIST]';
-      mon.hp -= edmg;
+      // Prompt H: no creature-wide HP decrement; elemental damage enters zone pipeline
       totalDmg += edmg;
       log(`  + ${edmg} ${state.player.weapon.elem}${esuf}.`, 'hit');
     }
@@ -348,7 +372,10 @@ log(`[DBG] dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z
     alertNearby(mon, 4);
   }
 
-  if (mon.hp <= 0 || zoneDeath) killMonster(mon);
+  if (zoneDeath) {
+    mon.hp = 0;  // sync global HP for alive-check filters
+    killMonster(mon);
+  }
   return true;  // hit
 }
 

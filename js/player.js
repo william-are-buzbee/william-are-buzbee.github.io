@@ -54,6 +54,11 @@ function freshPlayer(speciesKey, colorPalette){
   // Initialize body map from creature template (Prompt F)
   initBodyMap(p);
 
+  // Prompt H: store original neural mass for neural death threshold ratio
+  if (p.bodyMap) {
+    p.originalNeural = p.bodyMap.reduce((sum, z) => sum + (z.neural || 0), 0);
+  }
+
   // Derive legacy stats from body map so old systems don't crash
   if (p.bodyMap) {
     const totalMuscle = p.bodyMap.reduce((s, z) => s + (z.muscle || 0), 0);

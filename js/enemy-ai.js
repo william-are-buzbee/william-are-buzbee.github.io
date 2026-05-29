@@ -106,8 +106,9 @@ function processBleed(creature, isPlayer) {
     if (isPlayer) {
       log('Everything narrows. Fades. Goes still.', 'dead');
     } else {
-      log(`${creature.name} collapses from blood loss.`, 'dead');
+      log(`The ${creature.name} collapses. Its wounds finally emptied it.`, 'dead');
     }
+    creature.deathCause = 'blood';
     return true; // caller handles death
   }
 
@@ -431,7 +432,7 @@ function performBonusMove(mon){
   // Blood system — process player bleed (seep, regen, clotting, death check)
   if (processBleed(state.player, true)) {
     state.player.hp = 0;
-    state.player.deathCause = 'blood_loss';
+    // deathCause already set by processBleed
     if (_onPlayerDeathCallback) _onPlayerDeathCallback();
     return;
   }
@@ -1466,7 +1467,8 @@ export function monsterMelee(mon){
     contactedZones = fallbackZone ? [fallbackZone] : [];
   }
 
-  state.player.hp -= dmg;
+  // Prompt H: creature-wide HP is no longer decremented by combat damage.
+  // Death is determined by zone destruction (vital/neural/blood) only.
   state.player.hitFlash = 3;
 
   // Build log message with attack verb
@@ -1571,29 +1573,36 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
       // Clamp and recompute penalty
       player.blood = Math.max(0, player.blood);
       player.bleedPenalty = computeBleedPenalty(player);
-
-      // Check blood death
-      if (player.blood <= player.bloodMax * BLOOD_DEATH_THRESHOLD) {
-        log(`Everything narrows. Fades. Goes still.`, 'dead');
-        state.player.hp = 0;
-        state.player.deathCause = 'blood_loss';
-        return;
-      }
     }
 
-    // Vital check — player dies
+    // ── Death checks (Prompt H) — vital → neural → blood ──
+
+    // Step 1 — Vital zone destruction (torso)
     if (hitZone.vital) {
-      log(`Your ${hitZone.name} is destroyed — a fatal blow.`, 'dead');
+      log(`Something vital tears loose inside you. Everything stops.`, 'dead');
       state.player.hp = 0;
-      state.player.deathCause = 'zone_vital';
+      state.player.deathCause = 'vital';
       return;
     }
 
-    // Neural death check
+    // Step 2 — Neural death check
     if (checkNeuralDeath(bodyMap)) {
-      log(`You collapse — too much neural tissue destroyed.`, 'dead');
+      const headDestroyed = hitZone.key === 'head';
+      if (headDestroyed) {
+        log(`A flash of nothing. Then nothing.`, 'dead');
+      } else {
+        log(`Your limbs stop answering. The world blurs. Silence.`, 'dead');
+      }
       state.player.hp = 0;
-      state.player.deathCause = 'neural_death';
+      state.player.deathCause = 'neural';
+      return;
+    }
+
+    // Step 3 — Blood loss death (from dump + burst)
+    if (player.blood != null && player.blood <= player.bloodMax * BLOOD_DEATH_THRESHOLD) {
+      log(`Everything narrows. Fades. Goes still.`, 'dead');
+      state.player.hp = 0;
+      state.player.deathCause = 'blood';
       return;
     }
 

@@ -479,7 +479,7 @@ export function getAtmosphere(x, y) {
 
 // ==================== ZONE DESTRUCTION CONSTANTS ====================
 // If remaining neural mass fraction falls below this, the creature dies.
-export const NEURAL_DEATH_THRESHOLD = 0.20;
+export const NEURAL_DEATH_THRESHOLD = 0.35;  // die when surviving neural mass drops to 35% of original
 
 // ==================== FOOTPRINT SYSTEM ====================
 // Armor derived from structural tissue mass per zone
