@@ -5,11 +5,12 @@ import { state, worlds, monsters } from './state.js';
 import { DMG, GOLD_DROP_MUL, resistMult, getBodyMap, selectHitZone,
          checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
          getPathways, computeBleedPenalty, BLOOD_FRACTION, BURST_COEFF,
-         BLOOD_DEATH_THRESHOLD, DAMAGE_SCALAR, ARMOR_PER_STRUCTURAL_KG,
-         getAttackDirection, getExposedZones, selectContactedZones } from './constants.js';
+         BLOOD_DEATH_THRESHOLD, ARMOR_PER_STRUCTURAL_KG,
+         getAttackDirection, getExposedZones, selectContactedZones,
+         computeStrikeDamage } from './constants.js';
 import { T, coverBonus } from './terrain.js';
 import { rand, randi, randRange, roll100 } from './rng.js';
-import { playerMelee, playerAcc, playerDodge, playerDef, playerCritChance,
+import { playerAcc, playerDodge, playerDef, playerCritChance,
          playerCritMult, effectiveAP, cursedBaneMul, xpFromKill, deriveHP,
          stealthBonus, poisonResistance } from './player.js';
 import { monDodge, monAcc, monCritChance, monCritMult, monDamage } from './monsters.js';
@@ -37,7 +38,7 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
 
   // Apply damage to the zone
   if (hitZone.hp == null) return false;  // zone HP not initialized
-  hitZone.hp = Math.max(0, hitZone.hp - Math.round(dmg * DAMAGE_SCALAR));
+  hitZone.hp = Math.max(0, hitZone.hp - Math.round(dmg));
 
   // Clotting reset — new damage tears open any clotting progress
   if (hitZone.clotting > 0) {
@@ -141,7 +142,23 @@ function playerAttack(mon){
     mon.lastSeenX = state.player.x; mon.lastSeenY = state.player.y;
     return false;  // missed
   }
-  let base = playerMelee(player) + randi(3);
+  // ─── Determine player's attacking zone (needed for damage + footprint) ───
+  const playerBodyMap = getBodyMap(player);
+  let attackingZone = null;
+  let usedAttack = null;
+  if (playerBodyMap) {
+    const availAtks = getAvailableAttacks(playerBodyMap);
+    if (availAtks.length > 0) {
+      usedAttack = availAtks[0]; // front limb strike
+      attackingZone = playerBodyMap.find(z => z.key === usedAttack.sourceZone);
+    }
+  }
+
+  // ─── Physics-based damage: tissue composition + weapon bonuses ───
+  let base = computeStrikeDamage(player, attackingZone)
+           + (state.player.weapon.atk || 0) + Math.floor((player.level - 1) * 0.5) + randi(3);
+  if (player.perks && player.perks.blade_bonus && state.player.weapon.type === DMG.BLADE) base += 1;
+  if (player.perks && player.perks.blunt_bonus && state.player.weapon.type === DMG.BLUNT) base += 1;
   const crit = roll100() <= playerCritChance(player);
   if (crit) base = Math.floor(base * playerCritMult(player));
   const effDef = Math.max(0, mon.def - effectiveAP(player));
@@ -171,8 +188,6 @@ function playerAttack(mon){
   // ─── Footprint-based zone resolution ───
   const monBodyMap = getBodyMap(mon);
   let contactedZones = null;
-  let attackingZone = null;
-  let usedAttack = null;
 
   if (monBodyMap) {
     // Determine defender facing (default south if no facing)
@@ -188,16 +203,6 @@ function playerAttack(mon){
     // Build exposed zone pool
     const exposedZones = getExposedZones(monBodyMap, attackDir);
     if (exposedZones.length > 0) {
-      // Determine player's attacking zone and footprint
-      const playerBodyMap = getBodyMap(player);
-      if (playerBodyMap) {
-        const availAtks = getAvailableAttacks(playerBodyMap);
-        if (availAtks.length > 0) {
-          usedAttack = availAtks[0]; // front limb strike
-          attackingZone = playerBodyMap.find(z => z.key === usedAttack.sourceZone);
-        }
-      }
-
       // Map weapon type to body sim damage type for footprint behavior
       const wType = state.player.weapon.type;
       const bodyDmgType = (wType === DMG.BLADE) ? 'slashing' :

@@ -1,9 +1,10 @@
 // ==================== PLAYER ====================
 import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META,
          HP_PER_SIZE, HP_PER_LEVEL_FACTOR, STAT_MAX,
-         MAX_DODGE_CHANCE, DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF,
+         MAX_DODGE_CHANCE,
          BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF,
-         CREATURE_PATHWAYS, initBodyMap } from './constants.js';
+         CREATURE_PATHWAYS, initBodyMap, getAvailableAttacks,
+         computeStrikeDamage } from './constants.js';
 import { getTimePhase } from './time-cycle.js';
 import { state } from './state.js';
 import { rand, randomRound } from './rng.js';
@@ -70,13 +71,22 @@ function totalWeight(p){ return p.inventory.reduce((s,it) => s + (it.weight||1),
 function bagFull(p){ return p.inventory.length >= INV_SLOTS; }
 function overWeight(p, extra=0){ return (totalWeight(p)+extra) > carryCapacity(p); }
 
-// Melee dmg: baseDamage = floor(Size * DAMAGE_SIZE_COEFF) + floor(Strength * DAMAGE_STR_COEFF), plus weapon + level bonus
+// Melee dmg: physics-based from attacking zone tissue + weapon + level bonus
+// NOTE: playerAttack in combat.js computes damage inline using computeStrikeDamage.
+// This function is kept for display/tooltip callers that need a quick melee estimate.
 function playerMelee(p){
-  let base = Math.floor(p.siz * DAMAGE_SIZE_COEFF) + Math.floor(p.strength * DAMAGE_STR_COEFF) + (p.weapon.atk || 0) + Math.floor((p.level-1)*0.5);
+  let base = 0;
+  const bodyMap = p.bodyMap;
+  if (bodyMap) {
+    const attacks = getAvailableAttacks(bodyMap);
+    if (attacks.length > 0) {
+      const zone = bodyMap.find(z => z.key === attacks[0].sourceZone);
+      if (zone) base = computeStrikeDamage(p, zone);
+    }
+  }
+  base += (p.weapon.atk || 0) + Math.floor((p.level - 1) * 0.5);
   if (p.perks && p.perks.blade_bonus && p.weapon.type === DMG.BLADE) base += 1;
   if (p.perks && p.perks.blunt_bonus && p.weapon.type === DMG.BLUNT) base += 1;
-  // Blood loss penalty — less oxygen to muscles, less force output
-  if (p.bleedPenalty > 0) base = Math.max(1, Math.round(base * (1 - p.bleedPenalty)));
   return base;
 }
 
@@ -328,8 +338,6 @@ function describeAttributePerks(p){
   const lines = [];
   // Size: HP
   lines.push(`Size ${p.siz}: ${p.siz * HP_PER_SIZE} base HP, +${Math.ceil(p.siz * HP_PER_LEVEL_FACTOR)} HP/level`);
-  // Size: base damage contribution
-  lines.push(`Size ${p.siz}: base melee +${Math.floor(p.siz * DAMAGE_SIZE_COEFF)}`);
   // Size: dodge
   lines.push(`Size ${p.siz}: dodge ${Math.floor(((STAT_MAX + 1 - p.siz) / STAT_MAX) * MAX_DODGE_CHANCE)}%`);
   // Size: stealth
@@ -351,10 +359,6 @@ function describeAttributePerks(p){
   if (p.siz >= 20){
     const pr = poisonResistance(p);
     lines.push(`Size ${p.siz}: poison dmg -${Math.round(pr.damageReduction*100)}%`);
-  }
-  // Strength: melee damage contribution
-  if (p.strength > 0){
-    lines.push(`Strength ${p.strength}: melee +${Math.floor(p.strength * DAMAGE_STR_COEFF)}`);
   }
   // Strength: blunt AP scales linearly
   if (p.strength > 10 && p.weapon && p.weapon.type === DMG.BLUNT){

@@ -128,10 +128,37 @@ export const PRICE_CAT = { STAPLE:'staple', STANDARD:'standard', LUXURY:'luxury'
 // ==================== FED MAX ====================
 export const FED_MAX = 100;
 
-// ==================== DAMAGE SCALAR ====================
-// Global multiplier applied to all outgoing damage after all other calculations.
-// Scales down damage relative to zone HP values.
-export const DAMAGE_SCALAR = 0.25;
+// ==================== PHYSICS-BASED DAMAGE ====================
+// Strike damage derives entirely from the attacking zone's tissue composition.
+// Muscle generates force, mass adds momentum, structural fraction sets transfer efficiency.
+export const MUSCLE_FORCE_COEFF = 8.0;    // base damage per kg of effective muscle
+export const MOMENTUM_COEFF    = 0.15;    // damage bonus per kg of effective mass
+export const BASE_TRANSFER     = 0.6;     // minimum force transfer (soft tissue)
+export const HARDNESS_BONUS    = 1.5;     // additional transfer per point of structural fraction
+
+// Compute physics-based strike damage from the attacking zone's tissue.
+// Called once per attack — the result enters the footprint distribution pipeline.
+// attacker: the creature (for bleedPenalty)
+// atkZone: the zone object performing the strike (from the attacker's body map)
+// Returns integer damage.
+export function computeStrikeDamage(attacker, atkZone) {
+  if (!atkZone) return 1;
+
+  const hpFrac = (atkZone.maxHp > 0) ? (atkZone.hp / atkZone.maxHp) : 1;
+
+  const effMuscle = (atkZone.muscle || 0) * hpFrac;
+  const effMass   = (atkZone.mass   || 0) * hpFrac;
+  const structFrac = (atkZone.mass > 0) ? ((atkZone.structural || 0) / atkZone.mass) : 0;
+
+  let damage = effMuscle * MUSCLE_FORCE_COEFF
+             * (1 + effMass * MOMENTUM_COEFF)
+             * (BASE_TRANSFER + structFrac * HARDNESS_BONUS);
+
+  // Blood loss penalty — less oxygen to muscles, less force output
+  damage *= (1 - (attacker.bleedPenalty || 0));
+
+  return Math.max(1, Math.round(damage));
+}
 
 // ==================== DAMAGE TYPES ====================
 export const DMG = {
@@ -503,9 +530,8 @@ export const STAT_MAX = 100;
 export const HP_PER_SIZE           = 1;
 export const HP_PER_LEVEL_FACTOR   = 0.05;  // hpPerLevel = Math.ceil(Size * HP_PER_LEVEL_FACTOR)
 
-// Damage — rebalanced so fights last 4-6 hits
-export const DAMAGE_SIZE_COEFF     = 0.12;
-export const DAMAGE_STR_COEFF      = 0.08;
+// Damage — LEGACY Size/Strength coefficients removed (Prompt E).
+// Damage now derives from attacking zone tissue via computeStrikeDamage().
 
 // Dodge — scaled to 1-100 stat range
 export const MAX_DODGE_CHANCE      = 30;    // dodgeChance = floor(((STAT_MAX+1-Size)/STAT_MAX)*MAX_DODGE_CHANCE)

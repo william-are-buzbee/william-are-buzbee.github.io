@@ -1,7 +1,8 @@
 // ==================== MONSTER DATA ====================
 import { DMG, LAYER_SURFACE, LAYER_UNDER,
          HP_PER_SIZE, STAT_MAX, MAX_DODGE_CHANCE, BASE_ACCURACY, ACC_PER_VISUAL,
-         DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF, CREATURE_PATHWAYS, initBodyMap } from './constants.js';
+         CREATURE_PATHWAYS, initBodyMap, getAvailableAttacks,
+         computeStrikeDamage } from './constants.js';
 import { T } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 
@@ -379,12 +380,23 @@ function monCritChance(mon){
   return Math.min(50, base * m);
 }
 function monCritMult(mon){ return 1.5 + mon.strength * 0.003; }
-function monDamage(mon){
-  // baseDamage = floor(Size * DAMAGE_SIZE_COEFF) + floor(Strength * DAMAGE_STR_COEFF)
-  let base = Math.floor(mon.siz * DAMAGE_SIZE_COEFF) + Math.floor(mon.strength * DAMAGE_STR_COEFF);
-  // Blood loss penalty — less oxygen to muscles, less force output
-  if (mon.bleedPenalty > 0) base = Math.max(1, Math.round(base * (1 - mon.bleedPenalty)));
-  return base;
+function monDamage(mon, attackingZone){
+  // Physics-based damage — derive from attacking zone tissue composition.
+  // If an attacking zone is passed directly, use it.
+  if (attackingZone) {
+    return computeStrikeDamage(mon, attackingZone);
+  }
+  // Otherwise, find the primary attacking zone from the monster's body map.
+  const bodyMap = mon.bodyMap;
+  if (bodyMap) {
+    const attacks = getAvailableAttacks(bodyMap);
+    if (attacks.length > 0) {
+      const zone = bodyMap.find(z => z.key === attacks[0].sourceZone);
+      if (zone) return computeStrikeDamage(mon, zone);
+    }
+  }
+  // Safety fallback — no body map or no attacks (shouldn't happen post-Phase 1)
+  return 1;
 }
 
 // ==================== VISION PROFILES ====================
