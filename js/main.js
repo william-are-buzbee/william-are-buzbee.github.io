@@ -67,6 +67,10 @@ function canvasToWorld(ev) {
   };
 }
 
+// ==================== EARLY DOM REFS ====================
+// Must be declared before event handlers that reference them.
+const restartConfirmEl = document.getElementById('restart-confirm');
+
 // ==================== INPUT: MOUSE ====================
 canvas.addEventListener('click', (ev) => {
   if (state.gameState !== 'play' || modalEl.classList.contains('show')) return;
@@ -356,12 +360,18 @@ document.getElementById('modal-inner').addEventListener('click', (ev) => {
 });
 
 // ==================== CHARGEN CONTROLS ====================
-document.getElementById('cg-random').addEventListener('click', randomizeAttrs);
-document.getElementById('cg-reset').addEventListener('click', () => {
-  state.cgAttrs = { str: 1, con: 1, dex: 1, int: 1, per: 1 };
+// Prompt F: old stat-allocation buttons (cg-random, cg-reset, cg-begin) removed.
+// Species selection wiring is handled inside chargen.js openCharGen().
+// Guard legacy elements in case old HTML is still cached.
+const _cgRandom = document.getElementById('cg-random');
+const _cgReset  = document.getElementById('cg-reset');
+const _cgBegin  = document.getElementById('cg-begin');
+if (_cgRandom) _cgRandom.addEventListener('click', randomizeAttrs);
+if (_cgReset) _cgReset.addEventListener('click', () => {
+  state.cgAttrs = { siz: 1, strength: 1, chem: 1, vib: 1, vis: 1, central: 1, distributed: 1 };
   renderCharGen();
 });
-document.getElementById('cg-begin').addEventListener('click', beginGame);
+if (_cgBegin) _cgBegin.addEventListener('click', beginGame);
 
 // ==================== STATE MACHINE TRANSITIONS ====================
 function showScreen(id) {
@@ -377,7 +387,6 @@ function showScreen(id) {
 const titleEl = document.getElementById('title');
 const titleContinueBtn = document.getElementById('title-continue');
 const titleNewGameBtn  = document.getElementById('title-newgame');
-const restartConfirmEl = document.getElementById('restart-confirm');
 
 function updateTitleButtons() {
   if (hasSave()) {
