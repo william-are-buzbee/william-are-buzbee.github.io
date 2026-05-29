@@ -454,6 +454,13 @@ export function getAtmosphere(x, y) {
 // If remaining neural mass fraction falls below this, the creature dies.
 export const NEURAL_DEATH_THRESHOLD = 0.20;
 
+// ==================== FOOTPRINT SYSTEM ====================
+// Armor derived from structural tissue mass per zone
+export const ARMOR_PER_STRUCTURAL_KG = 1.5;
+
+// 8-directional exposure labels, indexed clockwise from north (0=N facing → 'front')
+export const EXPOSURE_LABELS = ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'];
+
 // ==================== BLOOD SYSTEM CONSTANTS ====================
 export const BLOOD_FRACTION         = 0.07;   // blood volume as fraction of total mass
 export const SEEP_COEFF             = 0.02;   // bleed rate multiplier per kg connective tissue
@@ -581,13 +588,15 @@ export const BODY_MAPS = {
   // ═══════════════════════════════════════════════════════
   wolf: [
     { key: 'head', name: 'Head', targetWeight: 0.11,
+      exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.80, structural: 0.60, neural: 0.85, sensory: 0.50, connective: 0.75, mass: 3.5,
       neuralAllocation: { chemicalProcessing: 0.25, visualProcessing: 0.10, episodicMemory: 0.18, integration: 0.15, motorCoordination: 0.08, threatAssessment: 0.04, patternLibrary: 0.05 },
       transducers: { chemical: 6, visual: 3, vibration: 0 },
       locomotion: false, vital: false,
-      attacks: [{ key: 'bite', name: 'Bite', baseDamage: 4, damageType: 'puncture', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'bite', name: 'Bite', baseDamage: 4, damageType: 'puncture', accuracy: 0.80, canReflex: false, footprintModifier: 0.15 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'torso', name: 'Torso', targetWeight: 0.34,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 3.00, structural: 1.50, neural: 0.22, sensory: 0.08, connective: 2.70, mass: 7.5,
       neuralAllocation: { motorRelay: 0.12, chemicalProcessing: 0.05, patternLibrary: 0.05 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
@@ -595,20 +604,23 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.09,
+      exposure: ['front', 'front_left', 'left'],
       muscle: 0.85, structural: 0.35, neural: 0.05, sensory: 0.05, connective: 0.30, mass: 1.6,
       neuralAllocation: { motorControl: 0.04, chemicalProcessing: 0.01 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 3, damageType: 'slashing', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 3, damageType: 'slashing', accuracy: 0.80, canReflex: false, footprintModifier: 0.45 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.09,
+      exposure: ['front', 'front_right', 'right'],
       muscle: 0.85, structural: 0.35, neural: 0.05, sensory: 0.05, connective: 0.30, mass: 1.6,
       neuralAllocation: { motorControl: 0.04, chemicalProcessing: 0.01 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 3, damageType: 'slashing', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 3, damageType: 'slashing', accuracy: 0.80, canReflex: false, footprintModifier: 0.45 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_l', name: 'Mid-Left Limb', targetWeight: 0.10,
+      exposure: ['left', 'front_left', 'rear_left'],
       muscle: 1.10, structural: 0.40, neural: 0.04, sensory: 0.00, connective: 0.36, mass: 1.9,
       neuralAllocation: { motorControl: 0.04 },
       transducers: {},
@@ -616,6 +628,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_r', name: 'Mid-Right Limb', targetWeight: 0.10,
+      exposure: ['right', 'front_right', 'rear_right'],
       muscle: 1.10, structural: 0.40, neural: 0.04, sensory: 0.00, connective: 0.36, mass: 1.9,
       neuralAllocation: { motorControl: 0.04 },
       transducers: {},
@@ -623,6 +636,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.09,
+      exposure: ['rear', 'rear_left', 'left'],
       muscle: 1.30, structural: 0.42, neural: 0.04, sensory: 0.00, connective: 0.34, mass: 2.1,
       neuralAllocation: { motorControl: 0.04 },
       transducers: {},
@@ -630,6 +644,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.08,
+      exposure: ['rear', 'rear_right', 'right'],
       muscle: 1.30, structural: 0.42, neural: 0.04, sensory: 0.00, connective: 0.34, mass: 2.1,
       neuralAllocation: { motorControl: 0.04 },
       transducers: {},
@@ -643,13 +658,15 @@ export const BODY_MAPS = {
   // ═══════════════════════════════════════════════════════
   dire_wolf: [
     { key: 'head', name: 'Head', targetWeight: 0.08,
+      exposure: ['front', 'front_left', 'front_right'],
       muscle: 2.00, structural: 1.60, neural: 1.26, sensory: 0.90, connective: 2.24, mass: 8.0,
       neuralAllocation: { chemicalProcessing: 0.38, visualProcessing: 0.20, episodicMemory: 0.26, integration: 0.20, motorCoordination: 0.10, threatAssessment: 0.06, patternLibrary: 0.06 },
       transducers: { chemical: 7, visual: 4, vibration: 0 },
       locomotion: false, vital: false,
-      attacks: [{ key: 'bite', name: 'Bite', baseDamage: 8, damageType: 'puncture', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'bite', name: 'Bite', baseDamage: 8, damageType: 'puncture', accuracy: 0.80, canReflex: false, footprintModifier: 0.15 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'torso', name: 'Torso', targetWeight: 0.30,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 10.50, structural: 5.50, neural: 0.42, sensory: 0.10, connective: 13.48, mass: 30.0,
       neuralAllocation: { motorRelay: 0.26, chemicalProcessing: 0.08, patternLibrary: 0.08 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
@@ -657,20 +674,23 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.10,
+      exposure: ['front', 'front_left', 'left'],
       muscle: 3.80, structural: 1.60, neural: 0.08, sensory: 0.12, connective: 2.40, mass: 8.0,
       neuralAllocation: { motorControl: 0.06, chemicalProcessing: 0.02 },
       transducers: { chemical: 1, vibration: 1, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 6, damageType: 'slashing', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 6, damageType: 'slashing', accuracy: 0.80, canReflex: false, footprintModifier: 0.45 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.10,
+      exposure: ['front', 'front_right', 'right'],
       muscle: 3.80, structural: 1.60, neural: 0.08, sensory: 0.12, connective: 2.40, mass: 8.0,
       neuralAllocation: { motorControl: 0.06, chemicalProcessing: 0.02 },
       transducers: { chemical: 1, vibration: 1, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 6, damageType: 'slashing', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'claw', name: 'Claw', baseDamage: 6, damageType: 'slashing', accuracy: 0.80, canReflex: false, footprintModifier: 0.45 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_l', name: 'Mid-Left Limb', targetWeight: 0.10,
+      exposure: ['left', 'front_left', 'rear_left'],
       muscle: 4.20, structural: 1.60, neural: 0.06, sensory: 0.00, connective: 2.64, mass: 8.5,
       neuralAllocation: { motorControl: 0.06 },
       transducers: {},
@@ -678,6 +698,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_r', name: 'Mid-Right Limb', targetWeight: 0.10,
+      exposure: ['right', 'front_right', 'rear_right'],
       muscle: 4.20, structural: 1.60, neural: 0.06, sensory: 0.00, connective: 2.64, mass: 8.5,
       neuralAllocation: { motorControl: 0.06 },
       transducers: {},
@@ -685,6 +706,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.11,
+      exposure: ['rear', 'rear_left', 'left'],
       muscle: 4.80, structural: 1.80, neural: 0.06, sensory: 0.00, connective: 2.84, mass: 9.5,
       neuralAllocation: { motorControl: 0.06 },
       transducers: {},
@@ -692,6 +714,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.11,
+      exposure: ['rear', 'rear_right', 'right'],
       muscle: 4.80, structural: 1.80, neural: 0.06, sensory: 0.00, connective: 2.84, mass: 9.5,
       neuralAllocation: { motorControl: 0.06 },
       transducers: {},
@@ -705,6 +728,7 @@ export const BODY_MAPS = {
   // ═══════════════════════════════════════════════════════
   hare: [
     { key: 'head', name: 'Head', targetWeight: 0.06,
+      exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.04, structural: 0.06, neural: 0.042, sensory: 0.08, connective: 0.058, mass: 0.28,
       neuralAllocation: { visualProcessing: 0.020, vibrationProcessing: 0.010, patternLibrary: 0.008, motorControl: 0.004 },
       transducers: { visual: 4, vibration: 1, chemical: 0 },
@@ -712,6 +736,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'torso', name: 'Torso', targetWeight: 0.24,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 0.25, structural: 0.22, neural: 0.022, sensory: 0.02, connective: 0.488, mass: 1.00,
       neuralAllocation: { motorRelay: 0.010, vibrationProcessing: 0.006, patternLibrary: 0.006 },
       transducers: { vibration: 1, chemical: 0, visual: 0 },
@@ -719,6 +744,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'fore_l', name: 'Fore-Left Limb', targetWeight: 0.05,
+      exposure: ['front', 'front_left', 'left'],
       muscle: 0.03, structural: 0.03, neural: 0.028, sensory: 0.05, connective: 0.082, mass: 0.22,
       neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.004 },
       transducers: { vibration: 5, chemical: 2, visual: 0 },
@@ -726,6 +752,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'fore_r', name: 'Fore-Right Limb', targetWeight: 0.05,
+      exposure: ['front', 'front_right', 'right'],
       muscle: 0.03, structural: 0.03, neural: 0.028, sensory: 0.05, connective: 0.082, mass: 0.22,
       neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.004 },
       transducers: { vibration: 5, chemical: 2, visual: 0 },
@@ -733,6 +760,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_graze_l', name: 'Mid-Graze-Left Limb', targetWeight: 0.05,
+      exposure: ['front', 'front_left', 'left'],
       muscle: 0.04, structural: 0.03, neural: 0.026, sensory: 0.035, connective: 0.089, mass: 0.22,
       neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.002 },
       transducers: { vibration: 4, chemical: 1, visual: 0 },
@@ -740,6 +768,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_graze_r', name: 'Mid-Graze-Right Limb', targetWeight: 0.05,
+      exposure: ['front', 'front_right', 'right'],
       muscle: 0.04, structural: 0.03, neural: 0.026, sensory: 0.035, connective: 0.089, mass: 0.22,
       neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.002 },
       transducers: { vibration: 4, chemical: 1, visual: 0 },
@@ -747,6 +776,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_loco_l', name: 'Mid-Loco-Left Limb', targetWeight: 0.10,
+      exposure: ['left', 'rear_left', 'rear'],
       muscle: 0.35, structural: 0.08, neural: 0.028, sensory: 0.02, connective: 0.102, mass: 0.58,
       neuralAllocation: { motorControl: 0.012, vibrationProcessing: 0.008, patternLibrary: 0.008 },
       transducers: { vibration: 3, chemical: 0, visual: 0 },
@@ -754,6 +784,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_loco_r', name: 'Mid-Loco-Right Limb', targetWeight: 0.10,
+      exposure: ['right', 'rear_right', 'rear'],
       muscle: 0.35, structural: 0.08, neural: 0.028, sensory: 0.02, connective: 0.102, mass: 0.58,
       neuralAllocation: { motorControl: 0.012, vibrationProcessing: 0.008, patternLibrary: 0.008 },
       transducers: { vibration: 3, chemical: 0, visual: 0 },
@@ -761,6 +792,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.15,
+      exposure: ['rear', 'rear_left', 'left'],
       muscle: 0.55, structural: 0.10, neural: 0.030, sensory: 0.02, connective: 0.140, mass: 0.84,
       neuralAllocation: { motorControl: 0.014, vibrationProcessing: 0.008, patternLibrary: 0.008 },
       transducers: { vibration: 3, chemical: 0, visual: 0 },
@@ -768,6 +800,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.15,
+      exposure: ['rear', 'rear_right', 'right'],
       muscle: 0.55, structural: 0.10, neural: 0.030, sensory: 0.02, connective: 0.140, mass: 0.84,
       neuralAllocation: { motorControl: 0.014, vibrationProcessing: 0.008, patternLibrary: 0.008 },
       transducers: { vibration: 3, chemical: 0, visual: 0 },
@@ -781,6 +814,7 @@ export const BODY_MAPS = {
   // ═══════════════════════════════════════════════════════
   cave_crab: [
     { key: 'head', name: 'Head', targetWeight: 0.06,
+      exposure: ['front', 'front_left', 'front_right'],
       muscle: 2.50, structural: 2.80, neural: 1.10, sensory: 1.00, connective: 4.60, mass: 12.0,
       neuralAllocation: { chemicalProcessing: 0.28, visualProcessing: 0.26, episodicMemory: 0.22, integration: 0.14, motorCoordination: 0.10, patternLibrary: 0.08, threatAssessment: 0.02 },
       transducers: { chemical: 5, visual: 5, vibration: 0 },
@@ -788,6 +822,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'torso', name: 'Torso', targetWeight: 0.34,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 26.00, structural: 20.00, neural: 0.54, sensory: 0.10, connective: 33.36, mass: 80.0,
       neuralAllocation: { motorRelay: 0.38, chemicalProcessing: 0.08, patternLibrary: 0.08 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
@@ -795,20 +830,23 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.08,
+      exposure: ['front', 'front_left', 'left'],
       muscle: 5.00, structural: 4.20, neural: 0.10, sensory: 0.15, connective: 5.55, mass: 15.0,
       neuralAllocation: { motorControl: 0.08, chemicalProcessing: 0.02 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'shove', name: 'Shove', baseDamage: 6, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'shove', name: 'Shove', baseDamage: 6, damageType: 'blunt', accuracy: 0.80, canReflex: false, footprintModifier: 0.6 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.08,
+      exposure: ['front', 'front_right', 'right'],
       muscle: 5.00, structural: 4.20, neural: 0.10, sensory: 0.15, connective: 5.55, mass: 15.0,
       neuralAllocation: { motorControl: 0.08, chemicalProcessing: 0.02 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'shove', name: 'Shove', baseDamage: 6, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'shove', name: 'Shove', baseDamage: 6, damageType: 'blunt', accuracy: 0.80, canReflex: false, footprintModifier: 0.6 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_l', name: 'Mid-Left Limb', targetWeight: 0.10,
+      exposure: ['left', 'front_left', 'rear_left'],
       muscle: 9.00, structural: 3.80, neural: 0.08, sensory: 0.00, connective: 5.12, mass: 18.0,
       neuralAllocation: { motorControl: 0.08 },
       transducers: {},
@@ -816,6 +854,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_r', name: 'Mid-Right Limb', targetWeight: 0.10,
+      exposure: ['right', 'front_right', 'rear_right'],
       muscle: 9.00, structural: 3.80, neural: 0.08, sensory: 0.00, connective: 5.12, mass: 18.0,
       neuralAllocation: { motorControl: 0.08 },
       transducers: {},
@@ -823,18 +862,20 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.12,
+      exposure: ['rear', 'rear_left', 'left'],
       muscle: 11.00, structural: 4.40, neural: 0.08, sensory: 0.00, connective: 5.52, mass: 21.0,
       neuralAllocation: { motorControl: 0.08 },
       transducers: {},
       locomotion: true, vital: false,
-      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 8, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 8, damageType: 'blunt', accuracy: 0.80, canReflex: false, footprintModifier: 0.3 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.12,
+      exposure: ['rear', 'rear_right', 'right'],
       muscle: 11.00, structural: 4.40, neural: 0.08, sensory: 0.00, connective: 5.52, mass: 21.0,
       neuralAllocation: { motorControl: 0.08 },
       transducers: {},
       locomotion: true, vital: false,
-      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 8, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 8, damageType: 'blunt', accuracy: 0.80, canReflex: false, footprintModifier: 0.3 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
   ],
 
@@ -846,6 +887,7 @@ export const BODY_MAPS = {
   // architecture is designed.
   mushroom: [
     { key: 'head', name: 'head', targetWeight: 0.08,
+      exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
       neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
       transducers: { vibration: 1, chemical: 0, visual: 0 },
@@ -853,6 +895,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
     { key: 'central_body', name: 'central body', targetWeight: 0.25,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
       neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
       transducers: { vibration: 1, chemical: 0, visual: 0 },
@@ -860,6 +903,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_sensory', name: 'sensory fronds', targetWeight: 0.12,
+      exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
       neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
       transducers: { vibration: 1, chemical: 0, visual: 0 },
@@ -867,6 +911,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
     { key: 'second_limbs', name: 'mid fronds', targetWeight: 0.15,
+      exposure: ['left', 'front_left', 'rear_left', 'right', 'front_right', 'rear_right'],
       muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
       neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
       transducers: { vibration: 1, chemical: 0, visual: 0 },
@@ -874,6 +919,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_limbs_a', name: 'rear limbs', targetWeight: 0.15,
+      exposure: ['rear', 'rear_left', 'left'],
       muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
       neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
       transducers: { vibration: 1, chemical: 0, visual: 0 },
@@ -881,6 +927,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_limbs_b', name: 'hind limbs', targetWeight: 0.15,
+      exposure: ['rear', 'rear_right', 'right'],
       muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
       neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
       transducers: { vibration: 1, chemical: 0, visual: 0 },
@@ -888,6 +935,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.3, bleedThreshold: 0.3, destroyed: false },
     { key: 'integument', name: 'outer rind', targetWeight: 0.10,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 0.02, structural: 0.02, neural: 0.01, sensory: 0.01, connective: 0.02, mass: 0.08,
       neuralAllocation: { patternLibrary: 0.005, motorControl: 0.005 },
       transducers: { vibration: 1, chemical: 0, visual: 0 },
@@ -901,13 +949,15 @@ export const BODY_MAPS = {
   // ═══════════════════════════════════════════════════════
   ambush_pred: [
     { key: 'head', name: 'Head', targetWeight: 0.10,
+      exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.40, structural: 0.50, neural: 0.28, sensory: 0.35, connective: 0.67, mass: 2.2,
       neuralAllocation: { visualProcessing: 0.12, vibrationProcessing: 0.06, integration: 0.05, motorControl: 0.03, patternLibrary: 0.02 },
       transducers: { visual: 3, vibration: 2, chemical: 0 },
       locomotion: false, vital: false,
-      attacks: [{ key: 'bite', name: 'Bite', baseDamage: 4, damageType: 'puncture', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'bite', name: 'Bite', baseDamage: 4, damageType: 'puncture', accuracy: 0.80, canReflex: false, footprintModifier: 0.15 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'torso', name: 'Torso', targetWeight: 0.31,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 2.20, structural: 1.30, neural: 0.20, sensory: 0.15, connective: 2.15, mass: 6.0,
       neuralAllocation: { motorRelay: 0.08, vibrationProcessing: 0.06, patternLibrary: 0.06 },
       transducers: { vibration: 2, chemical: 0, visual: 0 },
@@ -915,46 +965,52 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'sensor_l', name: 'Sensor-Left Limb', targetWeight: 0.08,
+      exposure: ['front', 'front_left', 'left'],
       muscle: 0.50, structural: 0.25, neural: 0.28, sensory: 0.40, connective: 0.37, mass: 1.8,
       neuralAllocation: { vibrationProcessing: 0.15, chemicalProcessing: 0.06, patternLibrary: 0.05, motorControl: 0.02 },
       transducers: { vibration: 5, chemical: 2, visual: 0 },
       locomotion: false, vital: false,
-      attacks: [{ key: 'probe', name: 'Probe', baseDamage: 2, damageType: 'puncture', accuracy: 0.80, canReflex: true }],
+      attacks: [{ key: 'probe', name: 'Probe', baseDamage: 2, damageType: 'puncture', accuracy: 0.80, canReflex: true, footprintModifier: 0.1 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'sensor_r', name: 'Sensor-Right Limb', targetWeight: 0.08,
+      exposure: ['front', 'front_right', 'right'],
       muscle: 0.50, structural: 0.25, neural: 0.28, sensory: 0.40, connective: 0.37, mass: 1.8,
       neuralAllocation: { vibrationProcessing: 0.15, chemicalProcessing: 0.06, patternLibrary: 0.05, motorControl: 0.02 },
       transducers: { vibration: 5, chemical: 2, visual: 0 },
       locomotion: false, vital: false,
-      attacks: [{ key: 'probe', name: 'Probe', baseDamage: 2, damageType: 'puncture', accuracy: 0.80, canReflex: true }],
+      attacks: [{ key: 'probe', name: 'Probe', baseDamage: 2, damageType: 'puncture', accuracy: 0.80, canReflex: true, footprintModifier: 0.1 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.10,
+      exposure: ['front', 'front_left', 'left'],
       muscle: 1.10, structural: 0.35, neural: 0.22, sensory: 0.18, connective: 0.37, mass: 2.2,
       neuralAllocation: { vibrationProcessing: 0.10, chemicalProcessing: 0.03, motorControl: 0.05, patternLibrary: 0.04 },
       transducers: { vibration: 4, chemical: 1, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'hook', name: 'Hook', baseDamage: 3, damageType: 'puncture', accuracy: 0.80, canReflex: true }],
+      attacks: [{ key: 'hook', name: 'Hook', baseDamage: 3, damageType: 'puncture', accuracy: 0.80, canReflex: true, footprintModifier: 0.2 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.10,
+      exposure: ['front', 'front_right', 'right'],
       muscle: 1.10, structural: 0.35, neural: 0.22, sensory: 0.18, connective: 0.37, mass: 2.2,
       neuralAllocation: { vibrationProcessing: 0.10, chemicalProcessing: 0.03, motorControl: 0.05, patternLibrary: 0.04 },
       transducers: { vibration: 4, chemical: 1, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'hook', name: 'Hook', baseDamage: 3, damageType: 'puncture', accuracy: 0.80, canReflex: true }],
+      attacks: [{ key: 'hook', name: 'Hook', baseDamage: 3, damageType: 'puncture', accuracy: 0.80, canReflex: true, footprintModifier: 0.2 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.12,
+      exposure: ['rear', 'rear_left', 'left'],
       muscle: 1.80, structural: 0.45, neural: 0.18, sensory: 0.12, connective: 0.35, mass: 2.9,
       neuralAllocation: { vibrationProcessing: 0.06, visualProcessing: 0.04, motorControl: 0.05, patternLibrary: 0.03 },
       transducers: { vibration: 2, visual: 1, chemical: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 4, damageType: 'blunt', accuracy: 0.80, canReflex: true }],
+      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 4, damageType: 'blunt', accuracy: 0.80, canReflex: true, footprintModifier: 0.35 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.11,
+      exposure: ['rear', 'rear_right', 'right'],
       muscle: 1.80, structural: 0.45, neural: 0.18, sensory: 0.12, connective: 0.35, mass: 2.9,
       neuralAllocation: { vibrationProcessing: 0.06, visualProcessing: 0.04, motorControl: 0.05, patternLibrary: 0.03 },
       transducers: { vibration: 2, visual: 1, chemical: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 4, damageType: 'blunt', accuracy: 0.80, canReflex: true }],
+      attacks: [{ key: 'kick', name: 'Kick', baseDamage: 4, damageType: 'blunt', accuracy: 0.80, canReflex: true, footprintModifier: 0.35 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
   ],
 
@@ -963,31 +1019,37 @@ export const BODY_MAPS = {
   // No tissue composition (not a biological creature).
   dread_king: [
     { key: 'head',      name: 'crowned skull', targetWeight: 0.10, vital: true,
+      exposure: ['front', 'front_left', 'front_right'],
       muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
       neuralAllocation: {}, transducers: {},
       locomotion: false,
       attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
     { key: 'torso',     name: 'ribcage',       targetWeight: 0.35, vital: true,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
       neuralAllocation: {}, transducers: {},
       locomotion: false,
       attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
     { key: 'left_arm',  name: 'shield arm',    targetWeight: 0.15, vital: false,
+      exposure: ['front', 'front_left', 'left'],
       muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
       neuralAllocation: {}, transducers: {},
       locomotion: false,
       attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
     { key: 'right_arm', name: 'sword arm',     targetWeight: 0.15, vital: false,
+      exposure: ['front', 'front_right', 'right'],
       muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
       neuralAllocation: {}, transducers: {},
       locomotion: false,
       attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
     { key: 'legs',      name: 'legs',          targetWeight: 0.20, vital: false,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
       neuralAllocation: {}, transducers: {},
       locomotion: true,
       attacks: [], bleedRate: 0, bleedThreshold: 0, destroyed: false },
     { key: 'mantle',    name: 'mantle',        targetWeight: 0.05, vital: false,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 0, structural: 0, neural: 0, sensory: 0, connective: 0, mass: 0,
       neuralAllocation: {}, transducers: {},
       locomotion: false,
@@ -999,6 +1061,7 @@ export const BODY_MAPS = {
   // Front limbs carry a basic unarmed strike instead of claws.
   player_meso: [
     { key: 'head', name: 'Head', targetWeight: 0.11,
+      exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.80, structural: 0.60, neural: 0.85, sensory: 0.50, connective: 0.75, mass: 3.5,
       neuralAllocation: { chemicalProcessing: 0.25, visualProcessing: 0.10, episodicMemory: 0.18, integration: 0.15, motorCoordination: 0.08, threatAssessment: 0.04, patternLibrary: 0.05 },
       transducers: { chemical: 6, visual: 3, vibration: 0 },
@@ -1006,6 +1069,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'torso', name: 'Torso', targetWeight: 0.34,
+      exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 3.00, structural: 1.50, neural: 0.22, sensory: 0.08, connective: 2.70, mass: 7.5,
       neuralAllocation: { motorRelay: 0.12, chemicalProcessing: 0.05, patternLibrary: 0.05 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
@@ -1013,20 +1077,23 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_l', name: 'Front-Left Limb', targetWeight: 0.09,
+      exposure: ['front', 'front_left', 'left'],
       muscle: 0.85, structural: 0.35, neural: 0.05, sensory: 0.05, connective: 0.30, mass: 1.6,
       neuralAllocation: { motorControl: 0.04, chemicalProcessing: 0.01 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'strike', name: 'Strike', baseDamage: 3, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'strike', name: 'Strike', baseDamage: 3, damageType: 'blunt', accuracy: 0.80, canReflex: false, footprintModifier: 0.45 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'front_r', name: 'Front-Right Limb', targetWeight: 0.09,
+      exposure: ['front', 'front_right', 'right'],
       muscle: 0.85, structural: 0.35, neural: 0.05, sensory: 0.05, connective: 0.30, mass: 1.6,
       neuralAllocation: { motorControl: 0.04, chemicalProcessing: 0.01 },
       transducers: { chemical: 1, vibration: 0, visual: 0 },
       locomotion: true, vital: false,
-      attacks: [{ key: 'strike', name: 'Strike', baseDamage: 3, damageType: 'blunt', accuracy: 0.80, canReflex: false }],
+      attacks: [{ key: 'strike', name: 'Strike', baseDamage: 3, damageType: 'blunt', accuracy: 0.80, canReflex: false, footprintModifier: 0.45 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_l', name: 'Mid-Left Limb', targetWeight: 0.10,
+      exposure: ['left', 'front_left', 'rear_left'],
       muscle: 1.10, structural: 0.40, neural: 0.04, sensory: 0.00, connective: 0.36, mass: 1.9,
       neuralAllocation: { motorControl: 0.04 },
       transducers: {},
@@ -1034,6 +1101,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'mid_r', name: 'Mid-Right Limb', targetWeight: 0.10,
+      exposure: ['right', 'front_right', 'rear_right'],
       muscle: 1.10, structural: 0.40, neural: 0.04, sensory: 0.00, connective: 0.36, mass: 1.9,
       neuralAllocation: { motorControl: 0.04 },
       transducers: {},
@@ -1041,6 +1109,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.09,
+      exposure: ['rear', 'rear_left', 'left'],
       muscle: 1.30, structural: 0.42, neural: 0.04, sensory: 0.00, connective: 0.34, mass: 2.1,
       neuralAllocation: { motorControl: 0.04 },
       transducers: {},
@@ -1048,6 +1117,7 @@ export const BODY_MAPS = {
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.08,
+      exposure: ['rear', 'rear_right', 'right'],
       muscle: 1.30, structural: 0.42, neural: 0.04, sensory: 0.00, connective: 0.34, mass: 2.1,
       neuralAllocation: { motorControl: 0.04 },
       transducers: {},
@@ -1064,8 +1134,8 @@ export const BODY_MAPS = {
 
 // Deep-copy meso map for the other two player body types
 // (distinct arrays so future chargen can diverge them)
-BODY_MAPS.player_apex   = BODY_MAPS.player_meso.map(z => ({ ...z, neuralAllocation: { ...z.neuralAllocation }, transducers: { ...z.transducers }, attacks: z.attacks.map(a => ({ ...a })) }));
-BODY_MAPS.player_grazer = BODY_MAPS.player_meso.map(z => ({ ...z, neuralAllocation: { ...z.neuralAllocation }, transducers: { ...z.transducers }, attacks: z.attacks.map(a => ({ ...a })) }));
+BODY_MAPS.player_apex   = BODY_MAPS.player_meso.map(z => ({ ...z, exposure: z.exposure ? [...z.exposure] : [], neuralAllocation: { ...z.neuralAllocation }, transducers: { ...z.transducers }, attacks: z.attacks.map(a => ({ ...a })) }));
+BODY_MAPS.player_grazer = BODY_MAPS.player_meso.map(z => ({ ...z, exposure: z.exposure ? [...z.exposure] : [], neuralAllocation: { ...z.neuralAllocation }, transducers: { ...z.transducers }, attacks: z.attacks.map(a => ({ ...a })) }));
 
 // ==================== CREATURE PATHWAYS ====================
 // Neural pathway topology for each creature type.  Data only — nothing
@@ -1223,6 +1293,7 @@ export function initBodyMap(entity) {
   const bodyMap = template.map(z => {
     const zone = {
       ...z,
+      exposure: z.exposure ? [...z.exposure] : [],
       neuralAllocation: { ...z.neuralAllocation },
       transducers: { ...(z.transducers || {}) },
       attacks: z.attacks ? z.attacks.map(a => ({ ...a })) : [],
@@ -1281,6 +1352,81 @@ export function selectHitZone(bodyMap) {
   }
   // Floating-point safety — return last alive zone
   return alive[alive.length - 1];
+}
+
+// ==================== FOOTPRINT-BASED HIT RESOLUTION ====================
+
+// 8 directions as [dx, dy], clockwise from north (index 0)
+const _DIR_VECS = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
+
+// Convert dx/dy to direction index 0-7
+function directionIndex(dx, dy) {
+  for (let i = 0; i < 8; i++) {
+    if (_DIR_VECS[i][0] === dx && _DIR_VECS[i][1] === dy) return i;
+  }
+  return 0; // fallback — facing north
+}
+
+// Determine the attack direction in the defender's frame of reference.
+// attackerPos/defenderPos: {x, y}
+// defenderFacing: {dx, dy} — the direction the defender is facing
+// Returns one of the 8 EXPOSURE_LABELS strings.
+export function getAttackDirection(attackerPos, defenderPos, defenderFacing) {
+  // Raw vector from defender to attacker
+  const dx = Math.sign(attackerPos.x - defenderPos.x);
+  const dy = Math.sign(attackerPos.y - defenderPos.y);
+
+  // Absolute direction the attack comes from
+  const absDirection = directionIndex(dx, dy);
+
+  // Defender's facing as index
+  const facingIdx = directionIndex(defenderFacing.dx, defenderFacing.dy);
+
+  // Rotate so defender's facing becomes 'front' (index 0)
+  const relIndex = (absDirection - facingIdx + 8) % 8;
+
+  return EXPOSURE_LABELS[relIndex];
+}
+
+// Build the exposed zone pool: only surviving zones exposed from the attack direction.
+export function getExposedZones(bodyMap, attackDirection) {
+  return bodyMap.filter(z => !z.destroyed && z.exposure && z.exposure.includes(attackDirection));
+}
+
+// Weighted random selection from a zone array using targetWeight.
+// Returns the selected zone. Does not modify the input array.
+function weightedRandomSelect(zones) {
+  const totalWeight = zones.reduce((sum, z) => sum + z.targetWeight, 0);
+  let r = Math.random() * totalWeight;
+  for (const zone of zones) {
+    r -= zone.targetWeight;
+    if (r <= 0) return zone;
+  }
+  return zones[zones.length - 1];
+}
+
+// Select contacted zones based on footprint size.
+// Returns an array of zone objects that the attack physically contacts.
+// If damageType is 'puncture', always selects exactly 1 zone.
+export function selectContactedZones(exposedZones, footprint, damageType) {
+  if (exposedZones.length === 0) return [];
+  // Puncture always contacts exactly 1 zone
+  if (damageType === 'puncture') {
+    return [weightedRandomSelect(exposedZones)];
+  }
+
+  const contacted = [];
+  let coveredMass = 0;
+  const remaining = [...exposedZones]; // copy to draw without replacement
+
+  while (coveredMass < footprint && remaining.length > 0) {
+    const zone = weightedRandomSelect(remaining);
+    contacted.push(zone);
+    coveredMass += zone.mass;
+    remaining.splice(remaining.indexOf(zone), 1);
+  }
+
+  return contacted;
 }
 
 // ==================== ZONE DESTRUCTION HELPERS ====================

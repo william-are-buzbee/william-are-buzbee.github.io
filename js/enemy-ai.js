@@ -6,7 +6,8 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, STAT_MAX, TURN_AGILITY_COEFF,
          facingSteps, checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
          getPathways, computeBleedPenalty, SEEP_COEFF, CLOT_RATE, REGEN_FRACTION,
-         BLOOD_DEATH_THRESHOLD, BURST_COEFF, BLOOD_CRITICAL_THRESHOLD } from './constants.js';
+         BLOOD_DEATH_THRESHOLD, BURST_COEFF, BLOOD_CRITICAL_THRESHOLD,
+         ARMOR_PER_STRUCTURAL_KG, getAttackDirection, getExposedZones, selectContactedZones } from './constants.js';
 import { T, isWalkable } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -1389,9 +1390,10 @@ export function monsterMelee(mon){
 
   // Check if monster has available attacks (zone destruction may have removed them)
   const monBodyMap = getBodyMap(mon);
+  let availableAttacks = [];
   if (monBodyMap) {
-    const available = getAvailableAttacks(monBodyMap);
-    if (available.length === 0) return;  // no attacks available
+    availableAttacks = getAvailableAttacks(monBodyMap);
+    if (availableAttacks.length === 0) return;  // no attacks available
   }
 
   const acc = monAcc(mon);
@@ -1406,24 +1408,90 @@ export function monsterMelee(mon){
   const effDef = Math.max(0, playerDef(player));
   let dmg = Math.max(1, base - effDef);
 
-  // Zone selection — roll which body zone was hit on the player
+  // ─── Footprint-based zone resolution on player ───
   const playerBodyMap = getBodyMap(player);
-  const hitZone = playerBodyMap ? selectHitZone(playerBodyMap) : null;
+  let contactedZones = null;
+  let usedAttack = null;
+  let attackingZone = null;
+
+  if (playerBodyMap && availableAttacks.length > 0) {
+    // Pick a random attack from the monster's available attacks
+    usedAttack = availableAttacks[randi(availableAttacks.length)];
+    attackingZone = monBodyMap.find(z => z.key === usedAttack.sourceZone);
+
+    // Determine player facing (use state.facing)
+    const defFacing = state.facing || { dx: 0, dy: 1 };
+
+    // Attack direction from monster position into player's frame
+    const attackDir = getAttackDirection(
+      { x: mon.x, y: mon.y },
+      { x: player.x, y: player.y },
+      defFacing
+    );
+
+    // Build exposed zone pool on the player
+    const exposedZones = getExposedZones(playerBodyMap, attackDir);
+
+    if (exposedZones.length > 0 && attackingZone) {
+      // Compute footprint
+      const footprintMod = usedAttack.footprintModifier || 0.3;
+      const footprint = attackingZone.mass * footprintMod;
+      const bodyDmgType = usedAttack.damageType || 'blunt';
+
+      contactedZones = selectContactedZones(exposedZones, footprint, bodyDmgType);
+    }
+  }
+
+  // Fallback: single zone selection
+  if (!contactedZones || contactedZones.length === 0) {
+    const fallbackZone = playerBodyMap ? selectHitZone(playerBodyMap) : null;
+    contactedZones = fallbackZone ? [fallbackZone] : [];
+  }
 
   state.player.hp -= dmg;
   state.player.hitFlash = 3;
 
-  // Combat log with zone name when available
-  const zoneSuffix = hitZone ? ` your ${hitZone.name}` : '';
-  const verb = mon.dmgType === DMG.BLUNT ? 'crushes' :
+  // Build log message with attack verb
+  const atkName = usedAttack ? usedAttack.name.toLowerCase() : null;
+  const dmgType = usedAttack ? usedAttack.damageType : (mon.dmgType || 'blunt');
+  const verb = dmgType === 'puncture' ? (atkName === 'bite' ? 'bites' : atkName === 'hook' ? 'hooks' : 'pierces') :
+               dmgType === 'slashing' ? (atkName === 'claw' ? 'claws' : 'rakes') :
+               mon.dmgType === DMG.BLUNT ? 'crushes' :
                mon.dmgType === DMG.BLADE ? 'strikes' :
                mon.dmgType === DMG.POISON ? 'stings' : 'hits';
-  if (crit) log(`${mon.name} CRITS — ${verb}${zoneSuffix}! ${dmg} ${mon.dmgType}.`, 'crit');
-  else log(`${mon.name} ${verb}${zoneSuffix}. ${dmg} ${mon.dmgType}.`, 'dmg');
 
-  // Zone destruction resolution for player
-  if (hitZone && playerBodyMap && dmg > 0) {
-    resolvePlayerZoneDamage(hitZone, dmg, playerBodyMap);
+  if (contactedZones.length === 1) {
+    const zn = contactedZones[0].name;
+    if (crit) log(`${mon.name} CRITS — ${verb} your ${zn}! ${dmg} ${mon.dmgType}.`, 'crit');
+    else log(`${mon.name} ${verb} your ${zn}. ${dmg} ${mon.dmgType}.`, 'dmg');
+  } else if (contactedZones.length === 2) {
+    const names = contactedZones.map(z => z.name).join(' and ');
+    if (crit) log(`${mon.name} CRITS — ${verb} your ${names}! ${dmg} ${mon.dmgType}.`, 'crit');
+    else log(`${mon.name}'s attack catches your ${names}. ${dmg} ${mon.dmgType}.`, 'dmg');
+  } else if (contactedZones.length >= 3) {
+    const last = contactedZones[contactedZones.length - 1].name;
+    const rest = contactedZones.slice(0, -1).map(z => z.name).join(', ');
+    if (crit) log(`${mon.name} CRITS — slams into your ${rest}, and ${last}! ${dmg} ${mon.dmgType}.`, 'crit');
+    else log(`${mon.name} crashes into you — hits your ${rest}, and ${last}. ${dmg} ${mon.dmgType}.`, 'dmg');
+  } else {
+    if (crit) log(`${mon.name} CRITS — ${verb}! ${dmg} ${mon.dmgType}.`, 'crit');
+    else log(`${mon.name} ${verb}. ${dmg} ${mon.dmgType}.`, 'dmg');
+  }
+
+  // ─── Distribute damage across contacted zones ───
+  if (contactedZones.length > 0 && playerBodyMap && dmg > 0) {
+    const totalContactedMass = contactedZones.reduce((sum, z) => sum + z.mass, 0);
+
+    for (const zone of contactedZones) {
+      const share = (totalContactedMass > 0) ? (zone.mass / totalContactedMass) : (1 / contactedZones.length);
+      let zoneDmg = dmg * share;
+
+      // Per-zone structural armor
+      const zoneArmor = (zone.structural || 0) * ARMOR_PER_STRUCTURAL_KG;
+      zoneDmg = Math.max(1, zoneDmg - zoneArmor);
+
+      resolvePlayerZoneDamage(zone, zoneDmg, playerBodyMap);
+    }
   }
 
   // Poison application — probability reduced by 75% Size / 25% Strength

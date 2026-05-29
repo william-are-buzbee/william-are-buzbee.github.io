@@ -5,7 +5,8 @@ import { state, worlds, monsters } from './state.js';
 import { DMG, GOLD_DROP_MUL, resistMult, getBodyMap, selectHitZone,
          checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
          getPathways, computeBleedPenalty, BLOOD_FRACTION, BURST_COEFF,
-         BLOOD_DEATH_THRESHOLD, DAMAGE_SCALAR } from './constants.js';
+         BLOOD_DEATH_THRESHOLD, DAMAGE_SCALAR, ARMOR_PER_STRUCTURAL_KG,
+         getAttackDirection, getExposedZones, selectContactedZones } from './constants.js';
 import { T, coverBonus } from './terrain.js';
 import { rand, randi, randRange, roll100 } from './rng.js';
 import { playerMelee, playerAcc, playerDodge, playerDef, playerCritChance,
@@ -167,24 +168,95 @@ function playerAttack(mon){
   }
   if (crit) suffix += ' ‼';
 
-  // Zone selection — roll which body zone was hit
+  // ─── Footprint-based zone resolution ───
   const monBodyMap = getBodyMap(mon);
-  const hitZone = monBodyMap ? selectHitZone(monBodyMap) : null;
+  let contactedZones = null;
+  let attackingZone = null;
+  let usedAttack = null;
 
+  if (monBodyMap) {
+    // Determine defender facing (default south if no facing)
+    const defFacing = mon.facing || { dx: 0, dy: 1 };
+
+    // Attack direction from player position into defender's frame
+    const attackDir = getAttackDirection(
+      { x: state.player.x, y: state.player.y },
+      { x: mon.x, y: mon.y },
+      defFacing
+    );
+
+    // Build exposed zone pool
+    const exposedZones = getExposedZones(monBodyMap, attackDir);
+
+    if (exposedZones.length > 0) {
+      // Determine player's attacking zone and footprint
+      const playerBodyMap = getBodyMap(player);
+      if (playerBodyMap) {
+        const availAtks = getAvailableAttacks(playerBodyMap);
+        if (availAtks.length > 0) {
+          usedAttack = availAtks[0]; // front limb strike
+          attackingZone = playerBodyMap.find(z => z.key === usedAttack.sourceZone);
+        }
+      }
+
+      // Map weapon type to body sim damage type for footprint behavior
+      const wType = state.player.weapon.type;
+      const bodyDmgType = (wType === DMG.BLADE) ? 'slashing' :
+                          (wType === DMG.BLUNT) ? 'blunt' : 'blunt';
+
+      // Compute footprint
+      let footprint = 0;
+      if (attackingZone && usedAttack && usedAttack.footprintModifier) {
+        footprint = attackingZone.mass * usedAttack.footprintModifier;
+      } else if (attackingZone) {
+        footprint = attackingZone.mass * 0.3; // default modifier
+      } else {
+        footprint = 0.5; // fallback: small footprint
+      }
+
+      contactedZones = selectContactedZones(exposedZones, footprint, bodyDmgType);
+    }
+  }
+
+  // Fallback: single zone selection if footprint resolution didn't work
+  if (!contactedZones || contactedZones.length === 0) {
+    const fallbackZone = monBodyMap ? selectHitZone(monBodyMap) : null;
+    contactedZones = fallbackZone ? [fallbackZone] : [];
+  }
+
+  // Apply total damage to monster global HP
   mon.hp -= dmg;
   if (dmg > 0){ mon.hitFlash = 3; mon.damageTaken = (mon.damageTaken||0) + dmg; }
-  let totalZoneDmg = dmg;  // accumulate all damage for zone HP
 
-  // Combat log with zone name when available
-  const zoneSuffix = hitZone ? `'s ${hitZone.name}` : '';
+  // Compute total damage including elemental (for zone distribution)
+  let totalDmg = dmg;
+
+  // Combat log verb
   const verb = state.player.weapon.type === DMG.BLUNT ? 'crush' :
                state.player.weapon.type === DMG.BLADE ? 'strike' : 'hit';
-  if (crit) log(`CRIT! You ${verb} ${mon.name}${zoneSuffix}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
-  else log(`You ${verb} ${mon.name}${zoneSuffix}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+
+  // Build zone contact log message
+  if (contactedZones.length === 1) {
+    const zn = contactedZones[0].name;
+    if (crit) log(`CRIT! You ${verb} ${mon.name}'s ${zn}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
+    else log(`You ${verb} ${mon.name}'s ${zn}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+  } else if (contactedZones.length === 2) {
+    const names = contactedZones.map(z => z.name).join(' and ');
+    if (crit) log(`CRIT! You ${verb} across ${mon.name}'s ${names}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
+    else log(`You ${verb} across ${mon.name}'s ${names}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+  } else if (contactedZones.length >= 3) {
+    const last = contactedZones[contactedZones.length - 1].name;
+    const rest = contactedZones.slice(0, -1).map(z => z.name).join(', ');
+    if (crit) log(`CRIT! Your strike slams into ${mon.name}'s ${rest}, and ${last}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
+    else log(`Your ${verb} catches ${mon.name}'s ${rest}, and ${last}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+  } else {
+    // No zones (no body map)
+    if (crit) log(`CRIT! You ${verb} ${mon.name}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
+    else log(`You ${verb} ${mon.name}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+  }
 
   // Elemental bonus
   if (state.player.weapon.elem && mon.hp > 0){
-    const player = state.player;
     const emul = resistMult(mon.tags, state.player.weapon.elem);
     if (emul === 0){
       log(`  ${state.player.weapon.elem}: no effect.`, 'muted');
@@ -195,15 +267,28 @@ function playerAttack(mon){
       if (emul >= 1.4) esuf = ' [WEAK]';
       else if (emul <= 0.6) esuf = ' [RESIST]';
       mon.hp -= edmg;
-      totalZoneDmg += edmg;
+      totalDmg += edmg;
       log(`  + ${edmg} ${state.player.weapon.elem}${esuf}.`, 'hit');
     }
   }
 
-  // Zone destruction resolution — apply accumulated damage to the hit zone
+  // ─── Distribute damage across contacted zones ───
   let zoneDeath = false;
-  if (hitZone && monBodyMap && totalZoneDmg > 0) {
-    zoneDeath = resolveZoneDamage(mon, hitZone, totalZoneDmg, mon.name, monBodyMap);
+  if (contactedZones.length > 0 && monBodyMap && totalDmg > 0) {
+    const totalContactedMass = contactedZones.reduce((sum, z) => sum + z.mass, 0);
+
+    for (const zone of contactedZones) {
+      const share = (totalContactedMass > 0) ? (zone.mass / totalContactedMass) : (1 / contactedZones.length);
+      let zoneDmg = totalDmg * share;
+
+      // Per-zone structural armor
+      const zoneArmor = (zone.structural || 0) * ARMOR_PER_STRUCTURAL_KG;
+      zoneDmg = Math.max(1, zoneDmg - zoneArmor);
+
+      const died = resolveZoneDamage(mon, zone, zoneDmg, mon.name, monBodyMap);
+      if (died) zoneDeath = true;
+    }
+
     if (zoneDeath) {
       mon.hp = 0;  // ensure global HP reflects death
     }
