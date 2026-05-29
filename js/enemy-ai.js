@@ -614,6 +614,16 @@ function enemyAct(mon){
   // This flag is read by the bonus move pass in endPlayerTurn.
   mon._actedNormally = true;
 
+  // ── Facing initialization for large herbivore (cave_crab) ──
+  // The crab AI template never initializes mon.facing, but this Clade A
+  // creature needs it for directional exposure (shove/kick zones, head
+  // reachability).  All movement helpers guard on `if (mon.facing)`, so
+  // without an object here facing is never updated.  Default to south to
+  // match the rendering fallback, then let normal movement overwrite it.
+  if (!mon.facing && mon.key === 'cave_crab') {
+    mon.facing = { dx: 0, dy: 1 };
+  }
+
   // ====== IMMOBILIZED CHECK ======
   // Creatures with all locomotion zones destroyed can't move but can still
   // attack if adjacent to a target and have surviving attack zones.
@@ -1394,6 +1404,14 @@ export function monsterMelee(mon){
   if (monBodyMap) {
     availableAttacks = getAvailableAttacks(monBodyMap);
     if (availableAttacks.length === 0) return;  // no attacks available
+  }
+
+  // Face the target when attacking — ensures directional exposure zones
+  // (front shove, rear kick, head reachability) are correct for this hit
+  // and for the player's next retaliatory strike.
+  if (mon.facing) {
+    mon.facing.dx = Math.sign(player.x - mon.x);
+    mon.facing.dy = Math.sign(player.y - mon.y);
   }
 
   const acc = monAcc(mon);
