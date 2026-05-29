@@ -12,6 +12,7 @@ import {
   playerCritChance, playerCritMult, buyPriceMul,
   poisonResistance, passiveRegenInterval, describeAttributePerks
 } from './player.js';
+import { getBodyMap, getAvailableAttacks, computeStrikeDamage } from './constants.js';
 import { inBounds, getFeature } from './world-state.js';
 
 // ───────────────────────────────────────────────────────
@@ -32,6 +33,21 @@ const INTERACTABLE_TYPES = new Set([
 ]);
 
 const $ = id => document.getElementById(id);
+
+/** Convert a facing {dx, dy} to a human-readable compass label. */
+function facingToLabel(facing) {
+  if (!facing) return 'unknown';
+  const { dx, dy } = facing;
+  if (dx === 0  && dy === -1) return 'north';
+  if (dx === 1  && dy === -1) return 'northeast';
+  if (dx === 1  && dy === 0)  return 'east';
+  if (dx === 1  && dy === 1)  return 'southeast';
+  if (dx === 0  && dy === 1)  return 'south';
+  if (dx === -1 && dy === 1)  return 'southwest';
+  if (dx === -1 && dy === 0)  return 'west';
+  if (dx === -1 && dy === -1) return 'northwest';
+  return 'unknown';
+}
 
 /** Blood status — qualitative word, not a number. */
 function getBloodStatus(p) {
@@ -403,6 +419,136 @@ function updateUISync() {
 // ───────────────────────────────────────────────────────
 
 // ───────────────────────────────────────────────────────
+//  §6b  ZONE HP + ATTACK LIST BUILDERS (Prompt G)
+// ───────────────────────────────────────────────────────
+
+/** Format a zone key for display: underscores→hyphens, capitalize first letter. */
+function formatZoneKey(key) {
+  return key.replace(/_/g, '-').replace(/^./, c => c.toUpperCase());
+}
+
+/** Build a 10-char HP bar string: ████████░░ */
+function hpBar(current, max) {
+  const BAR_LEN = 10;
+  const filled = max > 0 ? Math.round((current / max) * BAR_LEN) : 0;
+  return '█'.repeat(filled) + '░'.repeat(BAR_LEN - filled);
+}
+
+/** CSS color class for a zone based on HP ratio. */
+function zoneColorClass(zone) {
+  if (zone.destroyed) return 'zone-destroyed';
+  if (zone.maxHp <= 0) return '';
+  const ratio = zone.hp / zone.maxHp;
+  if (ratio < 0.25) return 'zone-critical';
+  if (ratio < 0.75) return 'zone-wounded';
+  return '';
+}
+
+/**
+ * Build HTML for the player's body map zone HP readout.
+ * Shows each zone with an HP bar, numeric HP, and status flags.
+ */
+function buildZoneHPHTML(player) {
+  const bodyMap = player.bodyMap;
+  if (!bodyMap || bodyMap.length === 0) return '';
+
+  let html = '<div class="ov-section">BODY MAP</div>';
+  html += '<div class="zone-hp-list">';
+
+  for (const zone of bodyMap) {
+    if (zone.hp == null || zone.maxHp == null) continue;
+
+    const label = formatZoneKey(zone.key);
+    const bar = hpBar(zone.hp, zone.maxHp);
+    const colorCls = zoneColorClass(zone);
+
+    // Status flags
+    let flags = '';
+    if (zone.destroyed) {
+      flags = '<span class="zone-flag zone-flag-destroyed">DESTROYED</span>';
+    } else if (zone.hp < zone.maxHp * 0.5 && (zone.clotting || 0) < 1.0) {
+      flags = '<span class="zone-flag zone-flag-bleeding">BLEEDING</span>';
+    }
+
+    html += `<div class="zone-hp-row ${colorCls}">`;
+    html += `<span class="zone-name">${label}</span>`;
+    html += `<span class="zone-bar">${bar}</span>`;
+    html += `<span class="zone-nums">${zone.hp}/${zone.maxHp} HP</span>`;
+    if (flags) html += flags;
+    html += `</div>`;
+  }
+
+  html += '</div>';
+
+  // Blood status line — qualitative + numeric (numeric for dev testing)
+  if (player.blood != null && player.bloodMax > 0) {
+    const ratio = player.blood / player.bloodMax;
+    let label = 'stable';
+    let bloodCls = '';
+    if (ratio <= 0.25)      { label = 'critical';  bloodCls = 'zone-critical'; }
+    else if (ratio <= 0.50) { label = 'weakened';   bloodCls = 'zone-wounded'; }
+    else if (ratio <= 0.75) { label = 'bleeding';   bloodCls = 'zone-wounded'; }
+
+    html += `<div class="zone-blood-line ${bloodCls}">`;
+    html += `Blood: ${label}`;
+    html += `<span class="zone-blood-nums">${player.blood.toFixed(2)} / ${player.bloodMax.toFixed(2)} kg</span>`;
+    html += `</div>`;
+  }
+
+  return html;
+}
+
+/**
+ * Build HTML for the player's available attacks list.
+ * Shows attack name, source zone, damage type, and computed damage.
+ */
+function buildAttackListHTML(player) {
+  const bodyMap = player.bodyMap;
+  if (!bodyMap || bodyMap.length === 0) return '';
+
+  const attacks = getAvailableAttacks(bodyMap);
+  // Also collect destroyed-zone attacks to show them grayed out
+  const destroyedAttacks = [];
+  for (const zone of bodyMap) {
+    if (zone.destroyed && zone.attacks) {
+      for (const atk of zone.attacks) {
+        destroyedAttacks.push({ ...atk, sourceZone: zone.key, _destroyed: true });
+      }
+    }
+  }
+
+  if (attacks.length === 0 && destroyedAttacks.length === 0) return '';
+
+  let html = '<div class="ov-section">ATTACKS</div>';
+  html += '<div class="attack-list">';
+
+  for (const atk of attacks) {
+    const zone = bodyMap.find(z => z.key === atk.sourceZone);
+    const dmg = computeStrikeDamage(player, zone);
+    const zoneName = formatZoneKey(atk.sourceZone);
+    html += `<div class="attack-row">`;
+    html += `<span class="atk-name">${atk.name}</span>`;
+    html += `<span class="atk-zone">(${zoneName})</span>`;
+    html += `<span class="atk-type">— ${atk.damageType}</span>`;
+    html += `<span class="atk-dmg">${dmg} dmg</span>`;
+    html += `</div>`;
+  }
+
+  for (const atk of destroyedAttacks) {
+    const zoneName = formatZoneKey(atk.sourceZone);
+    html += `<div class="attack-row zone-destroyed">`;
+    html += `<span class="atk-name">${atk.name}</span>`;
+    html += `<span class="atk-zone">(${zoneName})</span>`;
+    html += `<span class="atk-type">— ${atk.damageType}</span>`;
+    html += `<span class="atk-dmg">LOST</span>`;
+    html += `</div>`;
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ───────────────────────────────────────────────────────
 //  §6b  STAT GROUP BUILDERS (for status overlay + examine)
 // ───────────────────────────────────────────────────────
 
@@ -419,6 +565,12 @@ function buildPlayerStatGroupsHTML(p) {
     const massLabel = p.totalMass ? ` — ${Math.round(p.totalMass)} kg` : '';
     html += `<div class="ov-section" style="color:var(--accent);">${p.displayName.toUpperCase()}${massLabel}</div>`;
   }
+
+  // Prompt G: Zone HP display — prominent, top-of-screen
+  html += buildZoneHPHTML(p);
+
+  // Prompt G: Attack list
+  html += buildAttackListHTML(p);
 
   // Physical — always show
   html += `<div class="ov-section">PHYSICAL</div>`;
@@ -483,11 +635,49 @@ function buildPlayerStatGroupsHTML(p) {
  * If examining self: always full detail (pass fullDetail=true).
  */
 function buildExamineStatGroupsHTML(target, playerCentral, fullDetail) {
-  if (!fullDetail) {
-    if (playerCentral < 4) return '';  // too low to perceive any stats
+  let html = '';
+
+  // ─── Prompt G: Facing direction (always shown for enemies) ───
+  if (!fullDetail && target.facing) {
+    const facingLabel = facingToLabel(target.facing);
+    html += `<div class="ov-row"><span class="ov-k">Facing</span><span class="ov-v">${facingLabel}</span></div>`;
   }
 
-  let html = '';
+  // ─── Prompt G: Wound/destruction readout for enemies ───
+  if (!fullDetail && target.bodyMap) {
+    const destroyed = [];
+    const wounded = [];
+    for (const zone of target.bodyMap) {
+      if (zone.hp == null || zone.maxHp == null) continue;
+      if (zone.destroyed) {
+        destroyed.push(zone.name);
+      } else if (zone.hp < zone.maxHp * 0.75) {
+        wounded.push(zone.name);
+      }
+    }
+    if (destroyed.length > 0) {
+      html += `<div class="ov-row"><span class="ov-k">Destroyed</span><span class="ov-v zone-destroyed">${destroyed.join(', ')}</span></div>`;
+    }
+    if (wounded.length > 0) {
+      html += `<div class="ov-row"><span class="ov-k">Wounded</span><span class="ov-v zone-wounded">${wounded.join(', ')}</span></div>`;
+    }
+
+    // Blood status — qualitative only for enemies
+    if (target.blood != null && target.bloodMax > 0) {
+      const ratio = target.blood / target.bloodMax;
+      if (ratio < 0.75) {
+        let label = 'bleeding';
+        if (ratio <= 0.25) label = 'near collapse';
+        else if (ratio <= 0.50) label = 'bleeding heavily';
+        html += `<div class="ov-row"><span class="ov-k">Blood</span><span class="ov-v">${label}</span></div>`;
+      }
+    }
+  }
+
+  if (!fullDetail) {
+    if (playerCentral < 4) return html;  // too low to perceive stat details
+  }
+
   const showPhysical = fullDetail || playerCentral >= 4;
   const showSenses   = fullDetail || playerCentral >= 6;
   const showProc     = fullDetail || playerCentral >= 8;
@@ -527,6 +717,7 @@ function buildExamineStatGroupsHTML(target, playerCentral, fullDetail) {
   }
 
   // Blood status — gated by player Central for examined enemies
+  // Prompt G: skip for enemies with bodyMap since wound readout already shows blood
   if (target.blood != null && target.bloodMax > 0) {
     const ratio = target.blood / target.bloodMax;
     if (fullDetail) {
@@ -539,8 +730,8 @@ function buildExamineStatGroupsHTML(target, playerCentral, fullDetail) {
         html += `<div class="ov-section">CONDITION</div>`;
         html += `<div class="ov-row"><span class="ov-k">Blood</span><span class="ov-v">${label}</span></div>`;
       }
-    } else if (showProc && ratio < 0.75) {
-      // Tier 3 player examining enemy: show blood status
+    } else if (!target.bodyMap && showProc && ratio < 0.75) {
+      // Tier 3 player examining enemy without bodyMap: show blood status
       let label = 'bleeding';
       if (ratio <= 0.25) label = 'weakened from blood loss';
       else if (ratio <= 0.50) label = 'bleeding heavily';
@@ -603,6 +794,8 @@ export {
   buildEffectsHTML,
   buildPlayerStatGroupsHTML,
   buildExamineStatGroupsHTML,
+  buildZoneHPHTML,
+  buildAttackListHTML,
   interactable,
   adjacentFeature,
   effectLabel,

@@ -375,6 +375,51 @@ function render(){
   updateUI();
 }
 
+// ─── Prompt G: Facing direction indicator for enemies ───
+// Draws a small directional chevron in the top-right corner of the tile.
+// facing: { dx, dy } — the direction the creature is looking.
+// Converts dx/dy to an angle and draws a rotated triangle.
+const _FACING_ANGLES = {
+  '0,-1':  0,                    // N
+  '1,-1':  Math.PI * 0.25,      // NE
+  '1,0':   Math.PI * 0.5,       // E
+  '1,1':   Math.PI * 0.75,      // SE
+  '0,1':   Math.PI,             // S
+  '-1,1':  Math.PI * 1.25,      // SW
+  '-1,0':  Math.PI * 1.5,       // W
+  '-1,-1': Math.PI * 1.75,      // NW
+};
+
+function drawFacingIndicator(ctx, screenX, screenY, tileSize, facing) {
+  const indicatorSize = Math.floor(tileSize * 0.2);
+  // Position in top-right corner of tile
+  const cx = screenX + tileSize - indicatorSize - 2;
+  const cy = screenY + indicatorSize + 2;
+
+  // Facing as angle from dx/dy
+  const key = `${facing.dx},${facing.dy}`;
+  const angle = _FACING_ANGLES[key] ?? 0;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  // Draw a small triangle pointing up (rotated to face correct direction)
+  ctx.beginPath();
+  ctx.moveTo(0, -indicatorSize);                          // tip
+  ctx.lineTo(-indicatorSize * 0.5, indicatorSize * 0.3);  // bottom-left
+  ctx.lineTo(indicatorSize * 0.5, indicatorSize * 0.3);   // bottom-right
+  ctx.closePath();
+
+  ctx.fillStyle = 'white';
+  ctx.fill();
+  ctx.strokeStyle = 'black';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 // Draw monster and player at a tile position
 function drawEntityAtTile(wx, wy, px, py, layer){
   const mon = monsterAt(wx, wy, layer);
@@ -385,6 +430,12 @@ function drawEntityAtTile(wx, wy, px, py, layer){
     }
     const spr = tintColor ? tintedMonsterSprite(mon.spr, tintColor) : spriteCache[mon.spr];
     if (spr) ctx.drawImage(spr, px, py, TILE, TILE);
+
+    // Prompt G: facing indicator overlay
+    if (mon.facing) {
+      drawFacingIndicator(ctx, px, py, TILE, mon.facing);
+    }
+
     if (mon.hitFlash > 0){
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
       ctx.fillRect(px, py, TILE, TILE);
