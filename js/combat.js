@@ -187,7 +187,6 @@ function playerAttack(mon){
 
     // Build exposed zone pool
     const exposedZones = getExposedZones(monBodyMap, attackDir);
-log(`[DBG] ${mon.name} facing=${JSON.stringify(defFacing)} dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z=>!z.destroyed).length} fp=${footprint.toFixed(2)}`, 'muted');
     if (exposedZones.length > 0) {
       // Determine player's attacking zone and footprint
       const playerBodyMap = getBodyMap(player);
@@ -214,7 +213,10 @@ log(`[DBG] ${mon.name} facing=${JSON.stringify(defFacing)} dir=${attackDir} expo
         footprint = 0.5; // fallback: small footprint
       }
 
-      contactedZones = selectContactedZones(exposedZones, footprint, bodyDmgType);
+contactedZones = selectContactedZones(exposedZones, footprint, bodyDmgType);
+
+// DEBUG — remove later
+log(`[DBG] dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z=>!z.destroyed).length} fp=${footprint.toFixed(2)} hit=${contactedZones.map(z=>z.key).join('+')}`, 'muted');
     }
   }
 
