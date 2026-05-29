@@ -7,6 +7,7 @@ export const state = {
   gameState: 'title',
   turnCount: 0,
   cgAttrs: { siz: 1, strength: 1, chem: 1, vib: 1, vis: 1, central: 1, distributed: 1 },
+  selectedSpecies: null,     // Prompt F: species key during character creation
   npcTurnIdx: {},
   shopTab: 'buy',
 

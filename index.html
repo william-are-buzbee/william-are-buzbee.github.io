@@ -768,6 +768,83 @@
     gap:10px;
     margin-top:4px;
   }
+
+  /* ─── Species selection (Prompt F) ─── */
+  .species-select{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    width:96%;
+    max-width:620px;
+    padding:18px;
+    gap:12px;
+  }
+  .species-title{
+    font-size:12px;
+    letter-spacing:3px;
+    text-align:center;
+    margin-bottom:4px;
+    font-weight:normal;
+    color:var(--fg);
+  }
+  .species-options{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    width:100%;
+    max-height:50vh;
+    overflow-y:auto;
+    scrollbar-width:thin;
+    scrollbar-color:#333 #08080c;
+  }
+  .species-options::-webkit-scrollbar{width:4px;}
+  .species-options::-webkit-scrollbar-thumb{background:#222;}
+  .species-option{
+    padding:10px 14px;
+    border:2px solid var(--fg-dark);
+    background:#000;
+    cursor:pointer;
+    transition:none;
+  }
+  .species-option:hover{
+    border-color:var(--fg-dim);
+    background:#0a0a0e;
+  }
+  .species-option.selected{
+    border-color:var(--accent);
+    background:#0c0a06;
+  }
+  .species-name{
+    font-size:11px;
+    color:var(--fg);
+    font-weight:bold;
+    letter-spacing:2px;
+    margin-bottom:3px;
+  }
+  .species-stats{
+    font-size:7px;
+    color:var(--accent);
+    letter-spacing:1px;
+    margin-bottom:5px;
+  }
+  .species-desc{
+    font-size:7px;
+    color:#888;
+    line-height:1.7;
+    letter-spacing:0.3px;
+  }
+  .sp-color-row{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:8px;
+    margin:4px 0;
+  }
+  .species-actions{
+    display:flex;
+    gap:10px;
+    margin-top:6px;
+  }
 </style>
 </head>
 <body>
@@ -824,28 +901,22 @@
       </div>
 
       <div class="centered-screen" id="chargen-screen" style="display:none;">
-        <div class="chargen">
-          <h1>CHARACTER</h1>
-          <div class="pool-label">Points remaining: <b id="cg-pool">10</b></div>
-          <div id="chargen-rows"></div>
-          <div class="chargen-derived" id="cg-derived"></div>
+        <!-- Legacy chargen — hidden, kept for backward compat -->
+      </div>
 
-          <div class="chargen-actions">
-            <button class="btn" id="cg-random" title="Randomize">&#x1F3B2;</button>
-            <button class="btn" id="cg-reset">RESET</button>
-            <button class="btn primary" id="cg-begin" disabled>NEXT</button>
+      <div class="centered-screen" id="species-screen" style="display:none;">
+        <div class="species-select">
+          <h1 class="species-title">CHOOSE YOUR SPECIES</h1>
+          <div class="species-options" id="species-options"></div>
+          <div class="sp-color-row" id="sp-colorpalette-options"></div>
+          <div class="species-actions">
+            <button class="btn primary" id="sp-begin" disabled>BEGIN</button>
           </div>
         </div>
       </div>
 
       <div class="centered-screen" id="bodytype-screen" style="display:none;">
-        <div class="bodytype-select">
-          <div class="bodytype-options" id="bodytype-options"></div>
-          <div class="bodytype-actions">
-            <button class="btn" id="bt-back">BACK</button>
-            <button class="btn primary" id="bt-begin" disabled>BEGIN</button>
-          </div>
-        </div>
+        <!-- Legacy bodytype — hidden, kept for backward compat -->
       </div>
 
       <div class="centered-screen" id="death" style="display:none;">

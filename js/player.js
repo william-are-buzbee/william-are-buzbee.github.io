@@ -3,7 +3,7 @@ import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META,
          HP_PER_SIZE, HP_PER_LEVEL_FACTOR, STAT_MAX,
          MAX_DODGE_CHANCE,
          BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF,
-         CREATURE_PATHWAYS, initBodyMap, getAvailableAttacks,
+         CREATURE_PATHWAYS, SPECIES_TEMPLATES, initBodyMap, getAvailableAttacks,
          computeStrikeDamage } from './constants.js';
 import { getTimePhase } from './time-cycle.js';
 import { state } from './state.js';
@@ -12,14 +12,21 @@ import { findWeapon, findArmor } from './items.js';
 
 // player object lives in state.js — functions here take player as parameter `p`
 
-function freshPlayer(attrs, bodyType, colorPalette){
+function freshPlayer(speciesKey, colorPalette){
+  const species = SPECIES_TEMPLATES[speciesKey];
+  if (!species) throw new Error('Unknown species: ' + speciesKey);
+
   const p = {
     layer: LAYER_SURFACE,
     x:0, y:0,
-    returnLayer: LAYER_SURFACE, returnX:0, returnY:0,  // where to go back after town
-    bodyType: bodyType || 'meso',  // 'meso' | 'apex' | 'grazer'
-    colorPalette: colorPalette || 'meso_predator',  // creature color palette key
-    siz: attrs.siz, strength: attrs.strength, chem: attrs.chem, vib: attrs.vib, vis: attrs.vis, central: attrs.central, distributed: attrs.distributed,
+    returnLayer: LAYER_SURFACE, returnX:0, returnY:0,
+    // Prompt F: species selection replaces stat allocation
+    species: speciesKey,
+    displayName: species.displayName,
+    bodyType: species.bodyType,
+    colorPalette: colorPalette || species.colorPalette,
+    // Legacy stats — set to 1, will be overwritten from body map after initBodyMap
+    siz: 1, strength: 1, chem: 1, vib: 1, vis: 1, central: 1, distributed: 1,
     level:1, xp:0, xpNext:15,
     gold: STARTING_GOLD,
     weapon: findWeapon('dagger'),
@@ -32,22 +39,55 @@ function freshPlayer(attrs, bodyType, colorPalette){
     regenProgress:0,
     npcsMet:new Set(),
     booksRead:new Set(),
-    perks:{},  // {hp_bonus:true, blade_bonus:true, ...}
+    perks:{},
     defeatedBoss:false,
     isPlayer:true,
     hitFlash:0,
-    bodyMapKey: 'player_' + (bodyType || 'meso'),  // Phase 1: body map lookup key
-    pathways: CREATURE_PATHWAYS['player_' + (bodyType || 'meso')] || [],
+    bodyMapKey: species.creatureKey,
+    pathways: CREATURE_PATHWAYS[species.creatureKey] || [],
   };
-  // Starter inventory — each item is its own slot, no stacking
+  // Starter inventory
   p.inventory.push({kind:'food', key:'apple', weight:1});
   p.inventory.push({kind:'food', key:'apple', weight:1});
   p.inventory.push({kind:'food', key:'bread', weight:1});
+
+  // Initialize body map from creature template (Prompt F)
+  initBodyMap(p);
+
+  // Derive legacy stats from body map so old systems don't crash
+  if (p.bodyMap) {
+    const totalMuscle = p.bodyMap.reduce((s, z) => s + (z.muscle || 0), 0);
+    const totalSensory = p.bodyMap.reduce((s, z) => s + (z.sensory || 0), 0);
+    const totalNeural = p.bodyMap.reduce((s, z) => s + (z.neural || 0), 0);
+    const totalMass = p.totalMass || p.bodyMap.reduce((s, z) => s + z.mass, 0);
+
+    // Size: rough mass-to-stat mapping (1-100 range)
+    p.siz = Math.max(1, Math.min(100, Math.round(totalMass)));
+
+    // Strength: muscle percentage as strength proxy
+    p.strength = Math.max(1, Math.min(100, Math.round((totalMuscle / totalMass) * 100)));
+
+    // Senses: derive from best transducer values across zones
+    let bestChem = 0, bestVib = 0, bestVis = 0;
+    for (const z of p.bodyMap) {
+      if (z.transducers) {
+        if ((z.transducers.chemical || 0) > bestChem) bestChem = z.transducers.chemical;
+        if ((z.transducers.vibration || 0) > bestVib) bestVib = z.transducers.vibration;
+        if ((z.transducers.visual || 0) > bestVis) bestVis = z.transducers.visual;
+      }
+    }
+    p.chem = Math.max(1, bestChem * 10);
+    p.vib = Math.max(0, bestVib * 10);
+    p.vis = Math.max(1, bestVis * 10);
+
+    // Processing: derive from total neural mass allocation
+    p.central = Math.max(1, Math.min(100, Math.round(totalNeural * 20)));
+    p.distributed = Math.max(0, Math.min(100, Math.round(totalSensory * 20)));
+  }
+
   p.hpMax = deriveHP(p);
   p.hp = p.hpMax;
   p.immobilized = false;
-  // Initialize per-instance body map with zone HP
-  initBodyMap(p);
   return p;
 }
 

@@ -3,7 +3,7 @@
 // Handles circular references (bondPartner), Set objects, and item registry refs.
 
 import { state, worlds, covers, monsters, features, groundItems } from './state.js';
-import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, initBodyMap, getBodyMap, computeBleedPenalty } from './constants.js';
+import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, SPECIES_TEMPLATES, initBodyMap, getBodyMap, computeBleedPenalty } from './constants.js';
 import { findWeapon, findArmor } from './items.js';
 import { render } from './rendering.js';
 import { log } from './log.js';
@@ -177,6 +177,13 @@ function deserializePlayer(raw) {
   if (p.distributed == null) p.distributed = 0;
   // Backwards compat: colorPalette added post-launch
   if (p.colorPalette == null) p.colorPalette = 'meso_predator';
+  // Backwards compat: species added in Prompt F
+  // Old saves have bodyType but no species. Map bodyType → species key.
+  if (p.species == null) {
+    const bodyTypeToSpecies = { meso: 'prowler', apex: 'ravager', grazer: 'grazer' };
+    p.species = bodyTypeToSpecies[p.bodyType] || 'prowler';
+    p.displayName = p.displayName || (p.species === 'prowler' ? 'Prowler' : p.species === 'ravager' ? 'Ravager' : 'Grazer');
+  }
   // Backwards compat: immobilized flag
   if (p.immobilized == null) p.immobilized = false;
   // Reconstruct Sets

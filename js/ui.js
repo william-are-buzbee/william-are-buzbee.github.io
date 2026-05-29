@@ -414,6 +414,12 @@ function updateUISync() {
 function buildPlayerStatGroupsHTML(p) {
   let html = '';
 
+  // Species identity (Prompt F)
+  if (p.species && p.displayName) {
+    const massLabel = p.totalMass ? ` — ${Math.round(p.totalMass)} kg` : '';
+    html += `<div class="ov-section" style="color:var(--accent);">${p.displayName.toUpperCase()}${massLabel}</div>`;
+  }
+
   // Physical — always show
   html += `<div class="ov-section">PHYSICAL</div>`;
   html += `<div class="ov-row"><span class="ov-k">Size</span><span class="ov-v">${p.siz}</span></div>`;

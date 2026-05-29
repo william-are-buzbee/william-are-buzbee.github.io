@@ -488,6 +488,67 @@ export const ARMOR_PER_STRUCTURAL_KG = 1.5;
 // 8-directional exposure labels, indexed clockwise from north (0=N facing → 'front')
 export const EXPOSURE_LABELS = ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'];
 
+// ==================== SPECIES TEMPLATES (Prompt F) ====================
+// Maps player-selectable species keys to creature template keys and display data.
+// The player inherits the creature's complete body map, pathways, and attacks.
+export const SPECIES_TEMPLATES = {
+  prowler: {
+    displayName: 'Prowler',
+    creatureKey: 'wolf',
+    clade: 'A',
+    mass: 22,
+    limbs: 6,
+    attacks: 3,
+    description: 'Six limbs. Centralized brain, chemical-dominant senses. Bite and two claw attacks. The generalist — good at reading threats, decent in a fight, mobile enough to disengage.',
+    bodyType: 'meso',
+    colorPalette: 'meso_predator',
+  },
+  ravager: {
+    displayName: 'Ravager',
+    creatureKey: 'dire_wolf',
+    clade: 'A',
+    mass: 90,
+    limbs: 6,
+    attacks: 3,
+    description: 'Six limbs. Centralized brain, enhanced chemical senses. Bite and two heavy claw attacks. Hits hard, takes hits, dominates smaller creatures. Vulnerable to being flanked.',
+    bodyType: 'apex',
+    colorPalette: 'meso_predator',
+  },
+  grazer: {
+    displayName: 'Grazer',
+    creatureKey: 'hare',
+    clade: 'B',
+    mass: 5,
+    limbs: 8,
+    attacks: 0,
+    description: 'Eight limbs. Distributed ganglia, vibration-dominant senses. No attacks. Fastest creature in the game. Survives by not being caught. The hard mode.',
+    bodyType: 'grazer',
+    colorPalette: 'meso_predator',
+  },
+  shaleback: {
+    displayName: 'Shale-back',
+    creatureKey: 'cave_crab',
+    clade: 'A',
+    mass: 200,
+    limbs: 6,
+    attacks: 4,
+    description: 'Six limbs. Centralized brain, chemical and visual senses. Front shove and rear kick attacks. Massive, slow, extremely tanky. Almost impossible to kill head-on.',
+    bodyType: 'meso',       // placeholder — no PLAYER_SHALEBACK sprite yet
+    colorPalette: 'meso_predator',
+  },
+  lurker: {
+    displayName: 'Lurker',
+    creatureKey: 'ambush_pred',
+    clade: 'B',
+    mass: 24,
+    limbs: 8,
+    attacks: 7,
+    description: 'Eight limbs. Distributed ganglia, vibration-dominant senses. Seven attacks, mostly puncture. Devastating single-zone damage but fragile. Fights like a stiletto.',
+    bodyType: 'meso',       // placeholder — no PLAYER_LURKER sprite yet
+    colorPalette: 'meso_predator',
+  },
+};
+
 // ==================== BLOOD SYSTEM CONSTANTS ====================
 export const BLOOD_FRACTION         = 0.07;   // blood volume as fraction of total mass
 export const SEEP_COEFF             = 0.02;   // bleed rate multiplier per kg connective tissue
@@ -1293,6 +1354,12 @@ export function getBodyMap(entity) {
 
   // Fallback to shared template (Phase 1 compat — no zone HP)
   if (entity.isPlayer) {
+    // Prompt F: use creature template via species key
+    if (entity.species && SPECIES_TEMPLATES[entity.species]) {
+      const creatureKey = SPECIES_TEMPLATES[entity.species].creatureKey;
+      return BODY_MAPS[creatureKey] || null;
+    }
+    // Legacy fallback
     const bt = entity.bodyType || 'meso';
     return BODY_MAPS['player_' + bt] || BODY_MAPS.player_meso;
   }
@@ -1308,8 +1375,16 @@ export function getBodyMap(entity) {
 export function initBodyMap(entity) {
   let template;
   if (entity.isPlayer) {
-    const bt = entity.bodyType || 'meso';
-    template = BODY_MAPS['player_' + bt] || BODY_MAPS.player_meso;
+    // Prompt F: use creature template via species key
+    if (entity.species && SPECIES_TEMPLATES[entity.species]) {
+      const creatureKey = SPECIES_TEMPLATES[entity.species].creatureKey;
+      template = BODY_MAPS[creatureKey] || null;
+    }
+    // Legacy fallback for old saves without species
+    if (!template) {
+      const bt = entity.bodyType || 'meso';
+      template = BODY_MAPS['player_' + bt] || BODY_MAPS.player_meso;
+    }
   } else if (entity.key) {
     template = BODY_MAPS[entity.key] || null;
   }
@@ -1354,6 +1429,12 @@ export function initBodyMap(entity) {
 // Returns the pathway array or an empty array.
 export function getPathways(entity) {
   if (entity.isPlayer) {
+    // Prompt F: use creature pathways via species key
+    if (entity.species && SPECIES_TEMPLATES[entity.species]) {
+      const creatureKey = SPECIES_TEMPLATES[entity.species].creatureKey;
+      return CREATURE_PATHWAYS[creatureKey] || [];
+    }
+    // Legacy fallback
     const bt = entity.bodyType || 'meso';
     return CREATURE_PATHWAYS['player_' + bt] || CREATURE_PATHWAYS.player_meso || [];
   }
