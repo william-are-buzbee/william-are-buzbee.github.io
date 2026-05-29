@@ -2,7 +2,8 @@
 import { state } from './state.js';
 import { STARTING_POINTS, HP_PER_SIZE, HP_PER_LEVEL_FACTOR,
          STAT_MAX, MAX_DODGE_CHANCE, BASE_ACCURACY, ACC_PER_VISUAL,
-         STEALTH_SIZE_COEFF, DAMAGE_SIZE_COEFF, DAMAGE_STR_COEFF } from './constants.js';
+         STEALTH_SIZE_COEFF, BODY_MAPS, HP_PER_KG,
+         computeStrikeDamage } from './constants.js';
 import { rand, choice } from './rng.js';
 import { freshPlayer, deriveHP, poisonResistance } from './player.js';
 import { findArmor, findWeapon } from './items.js';
@@ -135,8 +136,19 @@ function renderCharGen(){
   // HP per level: Math.ceil(siz * HP_PER_LEVEL_FACTOR)
   const hpPerLvl = Math.ceil(sSiz * HP_PER_LEVEL_FACTOR);
 
-  // Melee: floor(siz * DAMAGE_SIZE_COEFF) + floor(str * DAMAGE_STR_COEFF) + weapon.atk
-  const melee = Math.floor(sSiz * DAMAGE_SIZE_COEFF) + Math.floor(sStr * DAMAGE_STR_COEFF) + (startWeapon.atk || 0);
+  // Melee: physics-based body damage from attacking zone tissue + weapon.atk
+  // Use body map template to preview damage at full HP (no bleedPenalty)
+  let bodyDmg = 0;
+  const tmpl = BODY_MAPS.player_meso; // all player types currently share this map
+  if (tmpl) {
+    const atkZoneTmpl = tmpl.find(z => z.attacks && z.attacks.length > 0);
+    if (atkZoneTmpl) {
+      const maxHp = Math.max(1, Math.floor(atkZoneTmpl.mass * HP_PER_KG));
+      const fakeZone = { ...atkZoneTmpl, hp: maxHp, maxHp };
+      bodyDmg = computeStrikeDamage({ bleedPenalty: 0 }, fakeZone);
+    }
+  }
+  const melee = bodyDmg + (startWeapon.atk || 0);
 
   // Carry: 4 + floor(strength * 0.2)
   const carry = 4 + Math.floor(sStr * 0.2);
@@ -186,7 +198,7 @@ function renderCharGen(){
   document.getElementById('cg-derived').innerHTML = `
     <div class="kv" id="cg-d-hp"><span class="k">Health</span><span class="v">${hp}</span></div>
     <div class="kv" id="cg-d-hplvl"><span class="k">Health per Level</span><span class="v">+${hpPerLvl}</span></div>
-    <div class="kv" id="cg-d-melee"><span class="k">Melee Damage</span><span class="v">${melee} <span style="color:#666;font-weight:normal;font-size:7px;">(${Math.floor(sSiz*DAMAGE_SIZE_COEFF)}+${Math.floor(sStr*DAMAGE_STR_COEFF)}+${startWeapon.atk||0})</span></span></div>
+    <div class="kv" id="cg-d-melee"><span class="k">Melee Damage</span><span class="v">${melee} <span style="color:#666;font-weight:normal;font-size:7px;">(body ${bodyDmg}+wpn ${startWeapon.atk||0})</span></span></div>
     <div class="kv" id="cg-d-acc"><span class="k">Hit Chance</span><span class="v">${hitChance}%</span></div>
     <div class="kv" id="cg-d-dodge"><span class="k">Dodge Chance</span><span class="v">${Math.round(dodge)}%</span></div>
     <div class="kv" id="cg-d-crit"><span class="k">Critical Chance</span><span class="v">${Math.round(crit)}%</span></div>
