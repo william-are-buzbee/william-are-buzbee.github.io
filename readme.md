@@ -1,3 +1,3 @@
-# OverWorld - A Huge Clusterfuck
+# OverWorld - Alien Planet Browser RPG
 
-It's a game dude. Boot it up. 
+Work in progress. You can play in your browser. 
