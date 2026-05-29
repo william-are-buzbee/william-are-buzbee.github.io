@@ -187,7 +187,7 @@ function playerAttack(mon){
 
     // Build exposed zone pool
     const exposedZones = getExposedZones(monBodyMap, attackDir);
-
+log(`[DBG] ${mon.name} facing=${JSON.stringify(defFacing)} dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z=>!z.destroyed).length} fp=${footprint.toFixed(2)}`, 'muted');
     if (exposedZones.length > 0) {
       // Determine player's attacking zone and footprint
       const playerBodyMap = getBodyMap(player);
