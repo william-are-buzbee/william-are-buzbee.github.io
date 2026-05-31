@@ -325,7 +325,8 @@ function applyToDOM(d) {
 }
 
 // ───────────────────────────────────────────────────────
-//  §4b  MINIMAL HUD  (HP + food bars, top-right)
+//  §4b  MINIMAL HUD  (zone HP bars + blood + food, top-right)
+//  Prompt G.3: replaced single HP bar with per-zone bars
 // ───────────────────────────────────────────────────────
 
 const _hudEl      = document.getElementById('hud');
@@ -334,50 +335,205 @@ const _hudFoodBar = document.getElementById('hud-food');
 const _hudHpNum   = document.getElementById('hud-hp-num');
 const _hudFoodNum = document.getElementById('hud-food-num');
 
+// Zone key → short label for HUD bars
+const _ZONE_ABBREV = {
+  head: 'HD', torso: 'TO',
+  front_l: 'FL', front_r: 'FR',
+  mid_l: 'ML', mid_r: 'MR',
+  rear_l: 'RL', rear_r: 'RR',
+  // Grazer extra zones
+  mid_graze_l: 'GL', mid_graze_r: 'GR',
+  mid_loco_l: 'LL', mid_loco_r: 'LR',
+  // Exotic body plans
+  front_sensory: 'FS', second_limbs: 'SL',
+  rear_limbs_a: 'RA', rear_limbs_b: 'RB',
+};
+
+// Persistent references for zone bar DOM elements
+let _zoneContainer = null;   // wrapper div for all zone + blood bars
+let _zoneBars = [];          // array of { key, label, track, fill } per zone
+let _bloodBarEls = null;     // { label, track, fill } for blood
+let _hudInitialized = false;
+
+/**
+ * Build the zone + blood bar DOM structure inside the HUD.
+ * Called once on first frame with a valid player body map.
+ */
+function _initZoneHud(player) {
+  if (!_hudEl || _hudInitialized) return;
+
+  // Hide old HP bar elements — they're replaced by zone bars
+  const hpRow = _hudHpBar && _hudHpBar.closest('.hud-bar-row');
+  if (hpRow) hpRow.style.display = 'none';
+  else {
+    // If no wrapper row, hide individual elements
+    if (_hudHpBar) _hudHpBar.parentElement.style.display = 'none';
+  }
+  if (_hudHpNum) _hudHpNum.style.display = 'none';
+
+  // Remove old dynamic blood text element if present
+  const oldBlood = document.getElementById('hud-blood');
+  if (oldBlood) oldBlood.remove();
+
+  // Create zone container — inserted at top of hud, before food bar
+  _zoneContainer = document.createElement('div');
+  _zoneContainer.id = 'hud-zones';
+  _zoneContainer.style.cssText = 'display:flex;flex-direction:column;gap:1px;margin-bottom:2px;';
+
+  // Determine bar sizing — scale down if many zones
+  const bodyMap = player.bodyMap || [];
+  const zoneCount = bodyMap.filter(z => z.hp != null).length;
+  // +2 for blood + food bars in the total stack
+  const totalBars = zoneCount + 2;
+  // Standard bar height matches existing bars; shrink if too many
+  const barH = totalBars > 10 ? 5 : totalBars > 8 ? 6 : 7;
+
+  // Build zone bar rows
+  _zoneBars = [];
+  for (const zone of bodyMap) {
+    if (zone.hp == null || zone.maxHp == null) continue;
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:3px;';
+
+    const label = document.createElement('span');
+    label.style.cssText = `font-size:8px;color:#888;width:14px;text-align:right;flex-shrink:0;font-family:monospace;`;
+    label.textContent = _ZONE_ABBREV[zone.key] || zone.key.slice(0, 2).toUpperCase();
+
+    const track = document.createElement('div');
+    track.style.cssText = `flex:1;height:${barH}px;background:#1a1a1a;border:1px solid #333;position:relative;min-width:50px;`;
+
+    const fill = document.createElement('div');
+    fill.style.cssText = `height:100%;position:absolute;left:0;top:0;transition:width 0.15s;`;
+
+    track.appendChild(fill);
+    row.appendChild(label);
+    row.appendChild(track);
+    _zoneContainer.appendChild(row);
+
+    _zoneBars.push({ key: zone.key, label, track, fill });
+  }
+
+  // Blood bar row
+  {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:3px;margin-top:2px;';
+
+    const label = document.createElement('span');
+    label.style.cssText = `font-size:8px;color:#7090a0;width:14px;text-align:right;flex-shrink:0;font-family:monospace;`;
+    label.textContent = 'BL';
+
+    const track = document.createElement('div');
+    track.style.cssText = `flex:1;height:${barH}px;background:#1a1a1a;border:1px solid #333;position:relative;min-width:50px;`;
+
+    const fill = document.createElement('div');
+    fill.style.cssText = `height:100%;position:absolute;left:0;top:0;transition:width 0.15s;`;
+
+    track.appendChild(fill);
+    row.appendChild(label);
+    row.appendChild(track);
+    _zoneContainer.appendChild(row);
+
+    _bloodBarEls = { label, track, fill };
+  }
+
+  // Insert zone container at top of HUD (before existing children)
+  _hudEl.insertBefore(_zoneContainer, _hudEl.firstChild);
+
+  _hudInitialized = true;
+}
+
+/**
+ * Tear down zone bar DOM elements so they can be rebuilt for a new body plan.
+ */
+function _resetZoneHud() {
+  if (_zoneContainer && _zoneContainer.parentElement) {
+    _zoneContainer.remove();
+  }
+  _zoneContainer = null;
+  _zoneBars = [];
+  _bloodBarEls = null;
+  _hudInitialized = false;
+}
+
+/** Pick fill color for a zone bar based on HP ratio. */
+function _zoneBarColor(zone) {
+  if (zone.destroyed) return '#333';
+  const ratio = zone.maxHp > 0 ? zone.hp / zone.maxHp : 0;
+  if (ratio > 0.50) return '#5a8a5a';   // green — healthy
+  if (ratio > 0.25) return '#b89a40';   // amber — wounded
+  return '#a04040';                      // red — critical
+}
+
 function updateHud(d) {
   if (!_hudEl) return;
   if (!d || state.gameState !== 'play') { _hudEl.classList.remove('show'); return; }
 
   _hudEl.classList.add('show');
 
-  // HP bar
-  const hpPct = Math.max(0, Math.min(100, d.hpPct));
-  _hudHpBar.style.width = hpPct + '%';
-  _hudHpBar.className = 'hud-bar-fill hp' + (hpPct > 50 ? ' ok' : '');
-  _hudHpNum.textContent = d.hpText;
+  const p = state.player;
 
-  // Food bar
+  // Initialize zone bars on first valid frame
+  if (!_hudInitialized && p && p.bodyMap && p.bodyMap.length > 0) {
+    _initZoneHud(p);
+  }
+
+  // If body map changed (e.g. species change), rebuild
+  if (_hudInitialized && p && p.bodyMap) {
+    const mapKeys = p.bodyMap.filter(z => z.hp != null).map(z => z.key).join(',');
+    const barKeys = _zoneBars.map(b => b.key).join(',');
+    if (mapKeys !== barKeys) {
+      _resetZoneHud();
+      _initZoneHud(p);
+    }
+  }
+
+  // Update zone bars
+  if (p && p.bodyMap) {
+    for (const bar of _zoneBars) {
+      const zone = p.bodyMap.find(z => z.key === bar.key);
+      if (!zone) continue;
+
+      const pct = zone.maxHp > 0
+        ? Math.max(0, Math.min(100, (zone.hp / zone.maxHp) * 100))
+        : 0;
+
+      bar.fill.style.width = pct + '%';
+      bar.fill.style.backgroundColor = _zoneBarColor(zone);
+
+      // Dim label + track for destroyed zones
+      if (zone.destroyed) {
+        bar.label.style.color = '#444';
+        bar.track.style.opacity = '0.4';
+      } else {
+        bar.label.style.color = '#888';
+        bar.track.style.opacity = '1';
+      }
+    }
+  }
+
+  // Update blood bar
+  if (_bloodBarEls && p && p.blood != null && p.bloodMax > 0) {
+    const bloodPct = Math.max(0, Math.min(100, (p.blood / p.bloodMax) * 100));
+    _bloodBarEls.fill.style.width = bloodPct + '%';
+    // Blue-gray for copper-based blood, shifting to red when critical
+    const bloodRatio = p.blood / p.bloodMax;
+    if (bloodRatio > 0.50) _bloodBarEls.fill.style.backgroundColor = '#5a7888';
+    else if (bloodRatio > 0.25) _bloodBarEls.fill.style.backgroundColor = '#887850';
+    else _bloodBarEls.fill.style.backgroundColor = '#a04040';
+  }
+
+  // Food bar — kept as-is, just update
   const fedPct = Math.max(0, Math.min(100, d.fedPct));
   _hudFoodBar.style.width = fedPct + '%';
   _hudFoodBar.className = 'hud-bar-fill food' + (d.fedWarn ? ' warn' : '');
   _hudFoodNum.textContent = Math.round(state.player.fed) + '%';
-
-  // Blood status indicator (added dynamically if element exists)
-  let bloodEl = document.getElementById('hud-blood');
-  if (!bloodEl && d.bloodStatus) {
-    // Create blood status element if it doesn't exist
-    bloodEl = document.createElement('div');
-    bloodEl.id = 'hud-blood';
-    bloodEl.style.cssText = 'font-size:10px;margin-top:2px;';
-    _hudEl.appendChild(bloodEl);
-  }
-  if (bloodEl) {
-    if (d.bloodStatus) {
-      bloodEl.textContent = 'Blood: ' + d.bloodStatus.label;
-      bloodEl.className = d.bloodStatus.css;
-      bloodEl.style.display = '';
-      // Color coding
-      if (d.bloodStatus.css === 'blood-critical') bloodEl.style.color = '#d04040';
-      else if (d.bloodStatus.css === 'blood-weakened') bloodEl.style.color = '#c08040';
-      else if (d.bloodStatus.css === 'blood-bleeding') bloodEl.style.color = '#b07060';
-    } else {
-      bloodEl.style.display = 'none';
-    }
-  }
 }
 
 function hideHud() {
   if (_hudEl) _hudEl.classList.remove('show');
+  // Reset zone bars so they rebuild fresh on next show
+  _resetZoneHud();
 }
 
 

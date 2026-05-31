@@ -441,15 +441,7 @@ function drawEntityAtTile(wx, wy, px, py, layer){
       ctx.fillRect(px, py, TILE, TILE);
       mon.hitFlash--;
     }
-    const frac = mon.hp/mon.hpMax;
-    const barX = px + Math.round(2*S);
-    const barY = py + Math.round(1*S);
-    const barW = TILE - Math.round(4*S);
-    const barH = Math.round(2*S);
-    ctx.fillStyle = '#111';
-    ctx.fillRect(barX, barY, barW, barH);
-    ctx.fillStyle = frac>0.5?'#fff':(frac>0.25?'#aaa':'#888');
-    ctx.fillRect(barX, barY, Math.floor(barW*frac), barH);
+    // Prompt G.3: enemy health bars removed — player assesses condition via examine
     if (mon.alerted){
       ctx.fillStyle = '#d4a050';
       ctx.fillRect(px+TILE-Math.round(4*S), py+Math.round(2*S), Math.round(2*S), Math.round(4*S));
