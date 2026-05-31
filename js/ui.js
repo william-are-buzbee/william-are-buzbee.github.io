@@ -539,8 +539,7 @@ function buildAttackListHTML(player) {
     html += `<div class="attack-row zone-destroyed">`;
     html += `<span class="atk-name">${atk.name}</span>`;
     html += `<span class="atk-zone">(${zoneName})</span>`;
-    html += `<span class="atk-type">— ${atk.damageType}</span>`;
-    html += `<span class="atk-dmg">LOST</span>`;
+    html += `<span class="atk-type">— DESTROYED</span>`;
     html += `</div>`;
   }
 
