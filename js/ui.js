@@ -351,9 +351,42 @@ const _ZONE_ABBREV = {
 
 // Persistent references for zone bar DOM elements
 let _zoneContainer = null;   // wrapper div for all zone + blood bars
-let _zoneBars = [];          // array of { key, label, track, fill } per zone
-let _bloodBarEls = null;     // { label, track, fill } for blood
+let _zoneBars = [];          // array of { key, labelEl, fill, numEl, row } per zone
+let _bloodBarEls = null;     // { labelEl, fill, numEl, row } for blood
 let _hudInitialized = false;
+
+// Reference element for cloning — the HP bar's row wrapper
+let _hpRowTemplate = null;
+
+/**
+ * Build a single bar row by cloning the existing HP bar's DOM structure.
+ * Returns { row, fill, numEl } — the cloned row, its fill div, and its number span.
+ */
+function _cloneBarRow() {
+  // Find the template row on first call
+  if (!_hpRowTemplate) {
+    // The HP bar's parent chain: fill (hud-hp) → track → row (.hud-bar-row)
+    _hpRowTemplate = _hudHpBar && _hudHpBar.closest('.hud-bar-row');
+    if (!_hpRowTemplate) {
+      // Fallback: the fill's grandparent is probably the row
+      _hpRowTemplate = _hudHpBar && _hudHpBar.parentElement;
+    }
+  }
+  if (!_hpRowTemplate) return null;
+
+  const row = _hpRowTemplate.cloneNode(true);
+
+  // Find the fill bar and number span in the clone BEFORE stripping IDs
+  const fill = row.querySelector('.hud-bar-fill');
+  const numEl = row.querySelector('[id*="num"]') || row.querySelector('span');
+
+  // Clear IDs from cloned elements so they don't collide
+  row.removeAttribute('id');
+  const allEls = row.querySelectorAll('[id]');
+  allEls.forEach(el => el.removeAttribute('id'));
+
+  return { row, fill, numEl };
+}
 
 /**
  * Build the zone + blood bar DOM structure inside the HUD.
@@ -362,79 +395,58 @@ let _hudInitialized = false;
 function _initZoneHud(player) {
   if (!_hudEl || _hudInitialized) return;
 
-  // Hide old HP bar elements — they're replaced by zone bars
+  // Test that we can clone the existing bar structure
+  const testClone = _cloneBarRow();
+  if (!testClone) return; // can't find template — leave HUD as-is
+
+  // Hide old HP bar row — replaced by zone bars
   const hpRow = _hudHpBar && _hudHpBar.closest('.hud-bar-row');
   if (hpRow) hpRow.style.display = 'none';
-  else {
-    // If no wrapper row, hide individual elements
-    if (_hudHpBar) _hudHpBar.parentElement.style.display = 'none';
-  }
+  else if (_hudHpBar) _hudHpBar.parentElement.style.display = 'none';
   if (_hudHpNum) _hudHpNum.style.display = 'none';
 
   // Remove old dynamic blood text element if present
   const oldBlood = document.getElementById('hud-blood');
   if (oldBlood) oldBlood.remove();
 
-  // Create zone container — inserted at top of hud, before food bar
+  // Create zone container
   _zoneContainer = document.createElement('div');
   _zoneContainer.id = 'hud-zones';
-  _zoneContainer.style.cssText = 'display:flex;flex-direction:column;gap:1px;margin-bottom:2px;';
 
-  // Determine bar sizing — scale down if many zones
   const bodyMap = player.bodyMap || [];
-  const zoneCount = bodyMap.filter(z => z.hp != null).length;
-  // +2 for blood + food bars in the total stack
-  const totalBars = zoneCount + 2;
-  // Standard bar height matches existing bars; shrink if too many
-  const barH = totalBars > 10 ? 5 : totalBars > 8 ? 6 : 7;
 
-  // Build zone bar rows
+  // Build zone bar rows by cloning the existing HP bar structure
   _zoneBars = [];
   for (const zone of bodyMap) {
     if (zone.hp == null || zone.maxHp == null) continue;
 
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:3px;';
+    const { row, fill, numEl } = _cloneBarRow();
 
-    const label = document.createElement('span');
-    label.style.cssText = `font-size:8px;color:#888;width:14px;text-align:right;flex-shrink:0;font-family:monospace;`;
-    label.textContent = _ZONE_ABBREV[zone.key] || zone.key.slice(0, 2).toUpperCase();
+    // Set the label text to the zone abbreviation
+    if (numEl) {
+      numEl.textContent = _ZONE_ABBREV[zone.key] || zone.key.slice(0, 2).toUpperCase();
+    }
 
-    const track = document.createElement('div');
-    track.style.cssText = `flex:1;height:${barH}px;background:#1a1a1a;border:1px solid #333;position:relative;min-width:50px;`;
+    // Start with correct fill state
+    if (fill) {
+      fill.style.width = '100%';
+      fill.className = 'hud-bar-fill hp ok';
+    }
 
-    const fill = document.createElement('div');
-    fill.style.cssText = `height:100%;position:absolute;left:0;top:0;transition:width 0.15s;`;
-
-    track.appendChild(fill);
-    row.appendChild(label);
-    row.appendChild(track);
     _zoneContainer.appendChild(row);
-
-    _zoneBars.push({ key: zone.key, label, track, fill });
+    _zoneBars.push({ key: zone.key, fill, numEl, row });
   }
 
-  // Blood bar row
+  // Blood bar — same structure, labeled BL
   {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:3px;margin-top:2px;';
-
-    const label = document.createElement('span');
-    label.style.cssText = `font-size:8px;color:#7090a0;width:14px;text-align:right;flex-shrink:0;font-family:monospace;`;
-    label.textContent = 'BL';
-
-    const track = document.createElement('div');
-    track.style.cssText = `flex:1;height:${barH}px;background:#1a1a1a;border:1px solid #333;position:relative;min-width:50px;`;
-
-    const fill = document.createElement('div');
-    fill.style.cssText = `height:100%;position:absolute;left:0;top:0;transition:width 0.15s;`;
-
-    track.appendChild(fill);
-    row.appendChild(label);
-    row.appendChild(track);
+    const { row, fill, numEl } = _cloneBarRow();
+    if (numEl) numEl.textContent = 'BL';
+    if (fill) {
+      fill.style.width = '100%';
+      fill.className = 'hud-bar-fill hp ok';
+    }
     _zoneContainer.appendChild(row);
-
-    _bloodBarEls = { label, track, fill };
+    _bloodBarEls = { fill, numEl, row };
   }
 
   // Insert zone container at top of HUD (before existing children)
@@ -454,15 +466,6 @@ function _resetZoneHud() {
   _zoneBars = [];
   _bloodBarEls = null;
   _hudInitialized = false;
-}
-
-/** Pick fill color for a zone bar based on HP ratio. */
-function _zoneBarColor(zone) {
-  if (zone.destroyed) return '#333';
-  const ratio = zone.maxHp > 0 ? zone.hp / zone.maxHp : 0;
-  if (ratio > 0.50) return '#5a8a5a';   // green — healthy
-  if (ratio > 0.25) return '#b89a40';   // amber — wounded
-  return '#a04040';                      // red — critical
 }
 
 function updateHud(d) {
@@ -488,42 +491,37 @@ function updateHud(d) {
     }
   }
 
-  // Update zone bars
+  // Update zone bars — using the same className pattern as the old HP bar
   if (p && p.bodyMap) {
     for (const bar of _zoneBars) {
       const zone = p.bodyMap.find(z => z.key === bar.key);
-      if (!zone) continue;
+      if (!zone || !bar.fill) continue;
 
-      const pct = zone.maxHp > 0
-        ? Math.max(0, Math.min(100, (zone.hp / zone.maxHp) * 100))
-        : 0;
-
-      bar.fill.style.width = pct + '%';
-      bar.fill.style.backgroundColor = _zoneBarColor(zone);
-
-      // Dim label + track for destroyed zones
       if (zone.destroyed) {
-        bar.label.style.color = '#444';
-        bar.track.style.opacity = '0.4';
+        bar.fill.style.width = '0%';
+        bar.fill.className = 'hud-bar-fill hp';
+        bar.row.style.opacity = '0.35';
       } else {
-        bar.label.style.color = '#888';
-        bar.track.style.opacity = '1';
+        const pct = zone.maxHp > 0
+          ? Math.max(0, Math.min(100, (zone.hp / zone.maxHp) * 100))
+          : 0;
+        bar.fill.style.width = pct + '%';
+        // Same two-state color logic as the original HP bar:
+        // 'ok' when above 50%, default (no 'ok') when at or below 50%
+        bar.fill.className = 'hud-bar-fill hp' + (pct > 50 ? ' ok' : '');
+        bar.row.style.opacity = '1';
       }
     }
   }
 
-  // Update blood bar
-  if (_bloodBarEls && p && p.blood != null && p.bloodMax > 0) {
+  // Update blood bar — same visual treatment as zone bars
+  if (_bloodBarEls && _bloodBarEls.fill && p && p.blood != null && p.bloodMax > 0) {
     const bloodPct = Math.max(0, Math.min(100, (p.blood / p.bloodMax) * 100));
     _bloodBarEls.fill.style.width = bloodPct + '%';
-    // Blue-gray for copper-based blood, shifting to red when critical
-    const bloodRatio = p.blood / p.bloodMax;
-    if (bloodRatio > 0.50) _bloodBarEls.fill.style.backgroundColor = '#5a7888';
-    else if (bloodRatio > 0.25) _bloodBarEls.fill.style.backgroundColor = '#887850';
-    else _bloodBarEls.fill.style.backgroundColor = '#a04040';
+    _bloodBarEls.fill.className = 'hud-bar-fill hp' + (bloodPct > 50 ? ' ok' : '');
   }
 
-  // Food bar — kept as-is, just update
+  // Food bar — kept as-is
   const fedPct = Math.max(0, Math.min(100, d.fedPct));
   _hudFoodBar.style.width = fedPct + '%';
   _hudFoodBar.className = 'hud-bar-fill food' + (d.fedWarn ? ' warn' : '');
