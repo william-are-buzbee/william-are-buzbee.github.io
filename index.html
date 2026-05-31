@@ -845,6 +845,102 @@
     gap:10px;
     margin-top:6px;
   }
+
+  /* ─── Zone HP bars (overlay body map) ─── */
+  .zone-hp-list{
+    display:flex;
+    flex-direction:column;
+    gap:0;
+  }
+  .zone-hp-row{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:4px 0;
+    font-size:8px;
+    border-bottom:1px dashed #1e1e28;
+  }
+  .zone-hp-row:last-child{border-bottom:none;}
+  .zone-name{
+    color:var(--fg-dim);
+    min-width:64px;
+    letter-spacing:0.5px;
+  }
+  .zone-bar{
+    color:var(--fg-dim);
+    font-size:7px;
+    letter-spacing:-0.5px;
+  }
+  .zone-nums{
+    color:#666;
+    font-size:7px;
+    min-width:52px;
+    text-align:right;
+  }
+  .zone-flag{
+    font-size:7px;
+    letter-spacing:1px;
+    margin-left:4px;
+  }
+  .zone-flag-destroyed{color:#666;font-style:italic;}
+  .zone-flag-bleeding{color:#c88;}
+
+  .zone-hp-row.zone-wounded .zone-name{color:var(--fg);}
+  .zone-hp-row.zone-wounded .zone-bar{color:#c88;}
+  .zone-hp-row.zone-wounded .zone-nums{color:#c88;}
+  .zone-hp-row.zone-critical .zone-name{color:var(--fg);}
+  .zone-hp-row.zone-critical .zone-bar{color:#d4a050;}
+  .zone-hp-row.zone-critical .zone-nums{color:#d4a050;}
+  .zone-hp-row.zone-destroyed .zone-name{color:#666;font-style:italic;}
+  .zone-hp-row.zone-destroyed .zone-bar{color:#444;}
+  .zone-hp-row.zone-destroyed .zone-nums{color:#555;}
+
+  /* ─── Blood status line (below body map) ─── */
+  .zone-blood-line{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    font-size:8px;
+    color:var(--fg-dim);
+    padding:6px 0 2px;
+    margin-top:2px;
+    border-top:1px dashed #1e1e28;
+  }
+  .zone-blood-nums{
+    font-size:7px;
+    color:#666;
+  }
+  .zone-blood-line.zone-wounded{color:#c88;}
+  .zone-blood-line.zone-wounded .zone-blood-nums{color:#c88;}
+  .zone-blood-line.zone-critical{color:#d4a050;}
+  .zone-blood-line.zone-critical .zone-blood-nums{color:#d4a050;}
+
+  /* ─── Attack list (overlay) ─── */
+  .attack-list{
+    display:flex;
+    flex-direction:column;
+    gap:0;
+  }
+  .attack-row{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:4px 0;
+    font-size:8px;
+    border-bottom:1px dashed #1e1e28;
+  }
+  .attack-row:last-child{border-bottom:none;}
+  .atk-name{color:var(--fg);min-width:60px;}
+  .atk-zone{color:var(--fg-dim);font-size:7px;}
+  .atk-type{color:#666;font-size:7px;}
+  .atk-dmg{color:var(--accent);font-size:7px;margin-left:auto;}
+  .attack-row.zone-destroyed .atk-name{color:#666;font-style:italic;}
+  .attack-row.zone-destroyed .atk-zone{color:#555;}
+  .attack-row.zone-destroyed .atk-type{color:#555;font-style:italic;}
+
+  /* ─── Examine: zone status (enemies) ─── */
+  .ov-v.zone-destroyed{color:#666;font-style:italic;}
+  .ov-v.zone-wounded{color:#c88;}
 </style>
 </head>
 <body>
@@ -871,6 +967,10 @@
         <div class="hud-row">
           <div class="hud-bar"><div class="hud-bar-fill food" id="hud-food" style="width:100%"></div></div>
           <span class="hud-num" id="hud-food-num"></span>
+        </div>
+        <div class="hud-row" id="hud-blood-row" style="display:none;">
+          <div class="hud-bar"><div class="hud-bar-fill hp" id="hud-blood" style="width:100%"></div></div>
+          <span class="hud-num" id="hud-blood-num"></span>
         </div>
       </div>
 
