@@ -336,18 +336,20 @@ const _hudBloodRow = document.getElementById('hud-blood-row');
 const _hudBloodBar = document.getElementById('hud-blood');
 const _hudBloodNum = document.getElementById('hud-blood-num');
 
-/** Short zone abbreviations for the compact HUD. */
-const _ZONE_ABBR = {
-  head:'HD', torso:'TR', tail:'TL', maw:'MW',
-  left_arm:'LA', right_arm:'RA',
-  left_leg:'LL', right_leg:'RL',
-  left_forelimb:'LF', right_forelimb:'RF',
-  left_hindlimb:'LH', right_hindlimb:'RH',
+/** Readable zone labels for the HUD. */
+const _ZONE_NAMES = {
+  head:'Head', torso:'Torso', tail:'Tail', maw:'Maw',
+  left_arm:'Arm-L', right_arm:'Arm-R',
+  left_leg:'Leg-L', right_leg:'Leg-R',
+  left_forelimb:'Front-L', right_forelimb:'Front-R',
+  left_hindlimb:'Hind-L', right_hindlimb:'Hind-R',
 };
-function zoneAbbr(key) { return _ZONE_ABBR[key] || key.slice(0,2).toUpperCase(); }
+function zoneName(key) {
+  return _ZONE_NAMES[key] || key.replace(/_/g, '-').replace(/^./, c => c.toUpperCase());
+}
 
 /** Cached zone DOM nodes — rebuilt only when the zone count changes. */
-let _zoneBarCache = [];   // [{ row, fill, label }]
+let _zoneBarCache = [];   // [{ row, fill, label, num }]
 let _zoneCacheLen = -1;
 
 function ensureZoneBars(count) {
@@ -369,11 +371,15 @@ function ensureZoneBars(count) {
     fill.className = 'hud-bar-fill hp ok';
     fill.style.width = '100%';
 
+    const num = document.createElement('span');
+    num.className = 'hud-num';
+
     barOuter.appendChild(fill);
     row.appendChild(label);
     row.appendChild(barOuter);
+    row.appendChild(num);
     _hudZones.appendChild(row);
-    _zoneBarCache.push({ row, fill, label });
+    _zoneBarCache.push({ row, fill, label, num });
   }
 }
 
@@ -409,7 +415,8 @@ function updateHud(d) {
       c.fill.className = 'hud-bar-fill hp';
       c.fill.style.background = '#d4a050';
     }
-    c.label.textContent = zoneAbbr(z.key);
+    c.label.textContent = zoneName(z.key);
+    c.num.textContent = Math.round(pct) + '%';
   }
 
   // Food bar
