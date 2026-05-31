@@ -16,6 +16,7 @@ import {
   computeUIData,
   buildPerksHTML,
   buildEffectsHTML,
+  buildPlayerStatGroupsHTML,
 } from './ui.js';
 
 // ───────────────────────────────────────────────────────
@@ -113,34 +114,20 @@ function renderStatus(container) {
   html += row('Region', d.regionName);
   html += row('Layer', d.layerLabel);
 
-  // ── Attributes (merged from Character) ──
-  html += sectionHead('ATTRIBUTES');
-  html += row('STR', p.str);
-  html += row('CON', p.con);
-  html += row('DEX', p.dex);
-  html += row('INT', p.int);
-  html += row('PER', p.per);
-
-  // ── Combat (merged from Character) ──
-  html += sectionHead('COMBAT');
-  html += row('Melee', d.atkText);
-  html += row('Defense', d.defVal);
-  html += row('Accuracy', d.accVal + '%');
-  html += row('Dodge', d.dodgeText + d.dexSuffix);
-  html += row('Crit Chance', d.critChanceText);
-  html += row('Crit Damage', d.critDmgText);
+  // ── Zone HP body map + Attacks + Legacy stats (Prompt G.2) ──
+  html += buildPlayerStatGroupsHTML(p);
 
   // ── Active effects ──
   const effHtml = buildEffectsHTML(p);
   html += sectionHead('EFFECTS');
   html += `<div class="ov-block">${effHtml}</div>`;
 
-  // ── Perks (merged from Character) ──
+  // ── Perks ──
   const perksHtml = buildPerksHTML(p);
   html += sectionHead('PERKS');
   html += `<div class="ov-block">${perksHtml}</div>`;
 
-  html += hint('[S] or [ESC] to close');
+  html += hint('[T] or [ESC] to close');
   container.innerHTML = html;
 }
 
