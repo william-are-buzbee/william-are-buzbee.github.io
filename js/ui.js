@@ -325,17 +325,57 @@ function applyToDOM(d) {
 }
 
 // ───────────────────────────────────────────────────────
-//  §4b  MINIMAL HUD  (HP + food bars, top-right)
+//  §4b  MINIMAL HUD  (zone HP + blood + food bars, top-right)
 // ───────────────────────────────────────────────────────
 
-const _hudEl      = document.getElementById('hud');
-const _hudHpBar   = document.getElementById('hud-hp');
-const _hudFoodBar = document.getElementById('hud-food');
-const _hudHpNum   = document.getElementById('hud-hp-num');
-const _hudFoodNum = document.getElementById('hud-food-num');
+const _hudEl       = document.getElementById('hud');
+const _hudZones    = document.getElementById('hud-zones');
+const _hudFoodBar  = document.getElementById('hud-food');
+const _hudFoodNum  = document.getElementById('hud-food-num');
 const _hudBloodRow = document.getElementById('hud-blood-row');
 const _hudBloodBar = document.getElementById('hud-blood');
 const _hudBloodNum = document.getElementById('hud-blood-num');
+
+/** Short zone abbreviations for the compact HUD. */
+const _ZONE_ABBR = {
+  head:'HD', torso:'TR', tail:'TL', maw:'MW',
+  left_arm:'LA', right_arm:'RA',
+  left_leg:'LL', right_leg:'RL',
+  left_forelimb:'LF', right_forelimb:'RF',
+  left_hindlimb:'LH', right_hindlimb:'RH',
+};
+function zoneAbbr(key) { return _ZONE_ABBR[key] || key.slice(0,2).toUpperCase(); }
+
+/** Cached zone DOM nodes — rebuilt only when the zone count changes. */
+let _zoneBarCache = [];   // [{ row, fill, label }]
+let _zoneCacheLen = -1;
+
+function ensureZoneBars(count) {
+  if (count === _zoneCacheLen) return;
+  _zoneCacheLen = count;
+  _zoneBarCache = [];
+  _hudZones.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const row  = document.createElement('div');
+    row.className = 'hud-row';
+
+    const label = document.createElement('span');
+    label.className = 'hud-zone-label';
+
+    const barOuter = document.createElement('div');
+    barOuter.className = 'hud-bar';
+
+    const fill = document.createElement('div');
+    fill.className = 'hud-bar-fill hp ok';
+    fill.style.width = '100%';
+
+    barOuter.appendChild(fill);
+    row.appendChild(label);
+    row.appendChild(barOuter);
+    _hudZones.appendChild(row);
+    _zoneBarCache.push({ row, fill, label });
+  }
+}
 
 function updateHud(d) {
   if (!_hudEl) return;
@@ -343,11 +383,34 @@ function updateHud(d) {
 
   _hudEl.classList.add('show');
 
-  // HP bar
-  const hpPct = Math.max(0, Math.min(100, d.hpPct));
-  _hudHpBar.style.width = hpPct + '%';
-  _hudHpBar.className = 'hud-bar-fill hp' + (hpPct > 50 ? ' ok' : '');
-  _hudHpNum.textContent = d.hpText;
+  const p = state.player;
+
+  // ── Zone HP bars ──
+  const bodyMap = (p && p.bodyMap) || [];
+  const zones = bodyMap.filter(z => z.hp != null && z.maxHp != null);
+  ensureZoneBars(zones.length);
+
+  for (let i = 0; i < zones.length; i++) {
+    const z = zones[i];
+    const c = _zoneBarCache[i];
+    const pct = z.destroyed ? 0 : Math.max(0, Math.min(100, (z.hp / z.maxHp) * 100));
+    c.fill.style.width = pct + '%';
+    // Reuse existing HP bar color classes: ok (>50%), default (<50%), plus destroyed
+    if (z.destroyed) {
+      c.fill.className = 'hud-bar-fill hp';
+      c.fill.style.background = '#444';
+    } else if (pct > 50) {
+      c.fill.className = 'hud-bar-fill hp ok';
+      c.fill.style.background = '';
+    } else if (pct > 25) {
+      c.fill.className = 'hud-bar-fill hp';
+      c.fill.style.background = '';
+    } else {
+      c.fill.className = 'hud-bar-fill hp';
+      c.fill.style.background = '#d4a050';
+    }
+    c.label.textContent = zoneAbbr(z.key);
+  }
 
   // Food bar
   const fedPct = Math.max(0, Math.min(100, d.fedPct));
@@ -357,7 +420,6 @@ function updateHud(d) {
 
   // Blood bar (matches HP/food bar style)
   if (_hudBloodRow && _hudBloodBar && _hudBloodNum) {
-    const p = state.player;
     if (p && p.blood != null && p.bloodMax > 0 && d.bloodStatus) {
       _hudBloodRow.style.display = '';
       const bloodPct = Math.max(0, Math.min(100, (p.blood / p.bloodMax) * 100));
@@ -372,6 +434,7 @@ function updateHud(d) {
 
 function hideHud() {
   if (_hudEl) _hudEl.classList.remove('show');
+  _zoneCacheLen = -1;
 }
 
 

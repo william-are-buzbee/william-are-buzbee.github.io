@@ -198,6 +198,14 @@
     text-align:right;
     letter-spacing:0;
   }
+  .hud-zone-label{
+    font-family:var(--pixel-font);
+    font-size:7px;
+    color:#555;
+    min-width:24px;
+    text-align:right;
+    letter-spacing:0;
+  }
 
   /* ─── Effects list ─── */
   .effline{
@@ -960,17 +968,14 @@
       </div>
 
       <div class="hud" id="hud">
-        <div class="hud-row">
-          <div class="hud-bar"><div class="hud-bar-fill hp ok" id="hud-hp" style="width:100%"></div></div>
-          <span class="hud-num" id="hud-hp-num"></span>
+        <div id="hud-zones"></div>
+        <div class="hud-row" id="hud-blood-row" style="display:none;">
+          <div class="hud-bar"><div class="hud-bar-fill hp" id="hud-blood" style="width:100%"></div></div>
+          <span class="hud-num" id="hud-blood-num"></span>
         </div>
         <div class="hud-row">
           <div class="hud-bar"><div class="hud-bar-fill food" id="hud-food" style="width:100%"></div></div>
           <span class="hud-num" id="hud-food-num"></span>
-        </div>
-        <div class="hud-row" id="hud-blood-row" style="display:none;">
-          <div class="hud-bar"><div class="hud-bar-fill hp" id="hud-blood" style="width:100%"></div></div>
-          <span class="hud-num" id="hud-blood-num"></span>
         </div>
       </div>
 
