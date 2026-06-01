@@ -573,6 +573,17 @@ export function computeBleedPenalty(entity) {
 // Zone HP derived from zone mass. Each kg of zone tissue = this many HP.
 export const HP_PER_KG = 5;
 
+// ==================== DRIVE SYSTEM ====================
+export const MASS_HUNGER_COEFF   = 0.000015;  // hunger per turn per kg of total mass
+export const NEURAL_HUNGER_COEFF = 0.0003;    // hunger per turn per kg of neural mass
+export const SAFETY_DECAY_RATE   = 0.02;      // safety decays toward 0 per turn
+export const REST_BASE_RATE      = 0.001;     // rest increases per turn (very slow baseline)
+
+// Drive thresholds (used by selectBehavior in future prompts)
+export const SAFETY_THRESHOLD    = 0.5;       // above this → flee (I-B)
+export const HUNGER_THRESHOLD    = 0.6;       // above this → hunt/forage (I-C)
+export const REST_THRESHOLD      = 0.7;       // above this → rest (I-D)
+
 // ==================== BALANCE CONSTANTS ====================
 // Single balance curve (formerly "easy" difficulty).
 export const STARTING_POINTS = 22;  // Math.round(16 * 1.4) — scaled from 5-stat to 7-stat system
