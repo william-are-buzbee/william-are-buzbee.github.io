@@ -243,6 +243,15 @@ function serializeMonsters(allLayers) {
         out._zoneState = extractZoneState(mon.bodyMap);
       }
       delete out.bodyMap;
+      // Prompt I-B: threatSource is an entity reference — save as ID string
+      if (mon.threatSource && mon.threatSource.isPlayer) {
+        out._threatSourceRef = 'player';
+      } else {
+        out._threatSourceRef = null;
+      }
+      delete out.threatSource;
+      // detectedThreats is recomputed each turn — don't persist
+      delete out.detectedThreats;
       serialized.push(out);
     }
     result[li] = serialized;
@@ -323,6 +332,25 @@ function deserializeMonsters(allLayers) {
           };
         }
         if (!mon.currentBehavior) mon.currentBehavior = 'wander';
+
+        // Prompt I-B: restore threat tracking state
+        mon.detectedThreats = [];  // recomputed each turn
+        // Restore threatSource from saved reference
+        if (mon._threatSourceRef === 'player') {
+          mon.threatSource = state.player;  // reconnect to player entity
+        } else {
+          mon.threatSource = null;
+        }
+        delete mon._threatSourceRef;
+        // Ensure diet and fleeMode exist (backward compat for old saves)
+        if (mon.diet == null) {
+          const DIET_MAP = { hare: 'herbivore', cave_crab: 'herbivore', mushroom: 'herbivore' };
+          mon.diet = DIET_MAP[mon.key] || 'predator';
+        }
+        if (mon.fleeMode == null) {
+          const FLEE_MAP = { cave_crab: 'water', ambush_pred: 'home' };
+          mon.fleeMode = FLEE_MAP[mon.key] || 'standard';
+        }
       }
     }
   }

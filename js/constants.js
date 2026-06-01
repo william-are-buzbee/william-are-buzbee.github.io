@@ -584,6 +584,15 @@ export const SAFETY_THRESHOLD    = 0.5;       // above this → flee (I-B)
 export const HUNGER_THRESHOLD    = 0.6;       // above this → hunt/forage (I-C)
 export const REST_THRESHOLD      = 0.7;       // above this → rest (I-D)
 
+// --- Threat Detection (I-B) ---
+export const CHEMICAL_RANGE_MULT  = 2.5;      // chemical 6 → 15 tile detection
+export const VIBRATION_RANGE_MULT = 2.0;      // vibration 5 → 10 tile detection
+export const VISUAL_RANGE_MULT    = 1.5;      // visual 5 → 7.5 tile detection
+
+// --- Safety Spikes (I-B) ---
+export const SAFETY_PROXIMITY_COEFF = 0.15;   // how much proximity-based detection spikes safety per turn
+export const SAFETY_DAMAGE_COEFF    = 3.0;    // how much taking damage spikes safety (multiplied by HP fraction)
+
 // ==================== BALANCE CONSTANTS ====================
 // Single balance curve (formerly "easy" difficulty).
 export const STARTING_POINTS = 22;  // Math.round(16 * 1.4) — scaled from 5-stat to 7-stat system

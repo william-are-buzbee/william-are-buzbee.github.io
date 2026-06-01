@@ -763,6 +763,21 @@ function spawnMonster(key){
     rest:   rand() * 0.15,           // random 0.0–0.15
   };
 
+  // ── Threat detection / flee (Prompt I-B) ──
+  const DIET_MAP = {
+    hare: 'herbivore', cave_crab: 'herbivore',
+    wolf: 'predator',  dire_wolf: 'predator',
+    ambush_pred: 'predator', mushroom: 'herbivore',
+  };
+  const FLEE_MODE_MAP = {
+    cave_crab: 'water',
+    ambush_pred: 'home',
+  };
+  m.diet = DIET_MAP[key] || 'predator';
+  m.fleeMode = FLEE_MODE_MAP[key] || 'standard';
+  m.detectedThreats = [];
+  m.threatSource = null;
+
   // ── Wander profile and state (Prompt I-A) ──
   const wp = WANDER_PROFILES[key] || DEFAULT_WANDER_PROFILE;
   m.wanderProfile = { ...wp, homePosition: null };

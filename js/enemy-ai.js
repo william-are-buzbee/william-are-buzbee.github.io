@@ -1,6 +1,7 @@
 // ==================== TURN MANAGEMENT + ENEMY AI ====================
 // Drive-based creature AI. Every creature runs the same drive/behavior loop.
 // Prompt I-A: drives tick, all creatures wander, adjacency combat only.
+// Prompt I-B: safety drive + flee behavior. Threat detection, flee dispatch.
 
 import { state, worlds, covers, monsters } from './state.js';
 import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
@@ -9,7 +10,9 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          getPathways, computeBleedPenalty, SEEP_COEFF, CLOT_RATE, REGEN_FRACTION,
          BLOOD_DEATH_THRESHOLD, BURST_COEFF, BLOOD_CRITICAL_THRESHOLD,
          ARMOR_PER_STRUCTURAL_KG, getAttackDirection, getExposedZones, selectContactedZones,
-         MASS_HUNGER_COEFF, NEURAL_HUNGER_COEFF, SAFETY_DECAY_RATE, REST_BASE_RATE } from './constants.js';
+         MASS_HUNGER_COEFF, NEURAL_HUNGER_COEFF, SAFETY_DECAY_RATE, REST_BASE_RATE,
+         SAFETY_THRESHOLD, CHEMICAL_RANGE_MULT, VIBRATION_RANGE_MULT, VISUAL_RANGE_MULT,
+         SAFETY_PROXIMITY_COEFF, SAFETY_DAMAGE_COEFF } from './constants.js';
 import { T, isWalkable } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -288,19 +291,327 @@ function updateDrives(creature) {
   creature.drives.hunger = Math.min(1.0, creature.drives.hunger +
     (totalMass * MASS_HUNGER_COEFF + totalNeural * NEURAL_HUNGER_COEFF));
 
-  // Safety: decays toward 0 (threats spike it in future prompts)
+  // Safety: decays toward 0 (threats spike it via applySafetyFromThreats)
   creature.drives.safety = Math.max(0, creature.drives.safety - SAFETY_DECAY_RATE);
 
   // Rest: increases slowly (wounds accelerate it in future prompts)
   creature.drives.rest = Math.min(1.0, creature.drives.rest + REST_BASE_RATE);
 }
 
-/** Select behavior based on drive priorities. I-A: always wander. */
+/** Select behavior based on drive priorities. */
 function selectBehavior(creature) {
-  // I-B will add: if safety > SAFETY_THRESHOLD → 'flee'
-  // I-C will add: if hunger > HUNGER_THRESHOLD → 'hunt' or 'forage'
-  // I-D will add: if rest > REST_THRESHOLD → 'rest'
+  if (creature.drives.safety > SAFETY_THRESHOLD) return 'flee';
+  // I-C will add: if (creature.drives.hunger > HUNGER_THRESHOLD) → 'hunt' or 'forage'
+  // I-D will add: if (creature.drives.rest > REST_THRESHOLD) → 'rest'
   return 'wander';
+}
+
+// ==================== THREAT DETECTION (I-B) ====================
+
+/** Get the best transducer value for a sense type across all surviving zones. */
+function getEffectiveSense(creature, senseType) {
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return 0;
+  let best = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    const val = (zone.transducers && zone.transducers[senseType]) || 0;
+    if (val > best) best = val;
+  }
+  return best;
+}
+
+/** Compute detection range from creature's best sense × range multiplier. */
+function getDetectionRange(creature) {
+  const chemRange = getEffectiveSense(creature, 'chemical') * CHEMICAL_RANGE_MULT;
+  const vibRange  = getEffectiveSense(creature, 'vibration') * VIBRATION_RANGE_MULT;
+  const visRange  = getEffectiveSense(creature, 'visual') * VISUAL_RANGE_MULT;
+  return Math.max(chemRange, vibRange, visRange);
+}
+
+/** Assess how threatening a target is to the creature. Returns 0 if not threatening. */
+function assessThreatLevel(creature, target) {
+  const creatureMass = creature.totalMass || 1;
+  const targetBodyMap = getBodyMap(target);
+  let targetMass = creatureMass; // default to same size
+  if (targetBodyMap) {
+    targetMass = 0;
+    for (const zone of targetBodyMap) {
+      if (!zone.destroyed) targetMass += zone.mass || 0;
+    }
+  } else if (target.totalMass) {
+    targetMass = target.totalMass;
+  }
+  const massRatio = targetMass / creatureMass;
+
+  // Herbivores: everything is a threat if it's not tiny
+  if (creature.diet === 'herbivore') {
+    if (massRatio > 0.3) return massRatio;
+    return 0;
+  }
+
+  // Predators: threats are things significantly bigger
+  if (creature.diet === 'predator') {
+    if (massRatio > 1.5) return massRatio;
+    return 0;
+  }
+
+  return 0;
+}
+
+/** Detect threats in range. Runs once per turn per creature. */
+function detectThreats(creature) {
+  const range = getDetectionRange(creature);
+  const threats = [];
+
+  // Check player
+  const player = state.player;
+  if (player && player.hp > 0) {
+    const distToPlayer = dist(creature.x, creature.y, player.x, player.y);
+    if (distToPlayer <= range) {
+      threats.push({
+        source: player,
+        distance: distToPlayer,
+        threatLevel: assessThreatLevel(creature, player),
+      });
+    }
+  }
+
+  // Future: check other creatures (predator detecting predator, etc.)
+  // For I-B, only the player is a threat source.
+
+  creature.detectedThreats = threats;
+  return threats;
+}
+
+/** Spike safety based on detected threats. */
+function applySafetyFromThreats(creature) {
+  if (!creature.detectedThreats || creature.detectedThreats.length === 0) return;
+
+  // Use the most threatening detected entity
+  const worst = creature.detectedThreats.reduce((a, b) =>
+    a.threatLevel > b.threatLevel ? a : b);
+
+  if (worst.threatLevel <= 0) return;
+
+  const range = getDetectionRange(creature);
+  // Closer = scarier. At range boundary, mild spike. At adjacent, maximum spike.
+  const proximity = 1.0 - (worst.distance / range);
+  const spike = proximity * worst.threatLevel * SAFETY_PROXIMITY_COEFF;
+
+  creature.drives.safety = Math.min(1.0, creature.drives.safety + spike);
+  creature.threatSource = worst.source;
+}
+
+/** Spike safety when creature takes damage. Called from combat resolution. */
+function applySafetyFromDamage(creature, damageAmount, attacker) {
+  if (!creature.drives) return;
+  // Compute total max HP from surviving body map zones
+  const bodyMap = getBodyMap(creature);
+  let totalMaxHp = creature.hpMax || 1;
+  if (bodyMap) {
+    totalMaxHp = 0;
+    for (const zone of bodyMap) {
+      totalMaxHp += zone.maxHp || 0;
+    }
+    if (totalMaxHp <= 0) totalMaxHp = creature.hpMax || 1;
+  }
+  const hpFraction = damageAmount / totalMaxHp;
+  const spike = hpFraction * SAFETY_DAMAGE_COEFF;
+
+  creature.drives.safety = Math.min(1.0, creature.drives.safety + spike);
+
+  // Set the threat source to whoever attacked us
+  if (attacker) {
+    creature.threatSource = attacker;
+  }
+}
+
+// ==================== FLEE SYSTEM (I-B) ====================
+
+/** Direction index from (ax,ay) AWAY from (bx,by). */
+function directionAwayFrom(ax, ay, bx, by) {
+  // Direction toward, then reverse it
+  const towardDir = directionToward(ax, ay, bx, by);
+  return (towardDir + 4) % 8;
+}
+
+/** Find nearest water tile within bounded radius. Returns {x, y} or null. */
+function findNearestWaterTile(sx, sy) {
+  const layer = state.player.layer;
+  const maxRadius = 25;
+  for (let r = 1; r <= maxRadius; r++) {
+    // Scan ring at distance r
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        // Only check tiles on the ring edge (Chebyshev distance == r)
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const nx = sx + dx, ny = sy + dy;
+        if (inBounds(layer, nx, ny) && WATER_TILES.has(worlds[layer][ny][nx])) {
+          return { x: nx, y: ny };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** Standard flee: move away from threat source. Returns true if moved. */
+function executeStandardFlee(creature) {
+  const threat = creature.threatSource;
+  if (!threat) {
+    // Lost track of threat, accelerate safety decay and wander
+    creature.drives.safety = Math.max(0, creature.drives.safety - SAFETY_DECAY_RATE * 3);
+    executeWander(creature);
+    return true; // wander counts as "doing something"
+  }
+
+  // Direction away from threat
+  const fleeDir = directionAwayFrom(creature.x, creature.y, threat.x, threat.y);
+
+  // Try primary direction first, then +/- 1 (45° off), then +/- 2 (90° off)
+  const candidates = [
+    fleeDir,
+    (fleeDir + 1) % 8,
+    (fleeDir + 7) % 8,
+    (fleeDir + 2) % 8,
+    (fleeDir + 6) % 8,
+  ];
+
+  for (const dir of candidates) {
+    const dx = DIRECTION_DELTAS[dir].x;
+    const dy = DIRECTION_DELTAS[dir].y;
+    const tx = creature.x + dx;
+    const ty = creature.y + dy;
+
+    if (canMoveTo(creature, tx, ty)) {
+      creature.x = tx;
+      creature.y = ty;
+      if (creature.facing) {
+        creature.facing.dx = dx;
+        creature.facing.dy = dy;
+      }
+      return true;
+    }
+  }
+
+  // Completely blocked — can't flee. Stay put.
+  return false;
+}
+
+/** Flee toward water (large herbivore). Returns true if moved. */
+function executeFleeToWater(creature) {
+  const threat = creature.threatSource;
+
+  // If already near water, move along water edge away from threat
+  if (isNearWater(creature.x, creature.y)) {
+    const awayDir = threat ? directionAwayFrom(creature.x, creature.y, threat.x, threat.y) : (creature.wander ? creature.wander.direction : 0);
+    // Try directions near awayDir that keep us near water
+    const candidates = [awayDir, (awayDir + 1) % 8, (awayDir + 7) % 8, (awayDir + 2) % 8, (awayDir + 6) % 8];
+    for (const dir of candidates) {
+      const dx = DIRECTION_DELTAS[dir].x;
+      const dy = DIRECTION_DELTAS[dir].y;
+      const tx = creature.x + dx;
+      const ty = creature.y + dy;
+      if (canMoveTo(creature, tx, ty) && isNearWater(tx, ty)) {
+        creature.x = tx;
+        creature.y = ty;
+        if (creature.facing) { creature.facing.dx = dx; creature.facing.dy = dy; }
+        return true;
+      }
+    }
+    // Can't move along water edge — try any water-adjacent tile
+    for (const dir of candidates) {
+      const dx = DIRECTION_DELTAS[dir].x;
+      const dy = DIRECTION_DELTAS[dir].y;
+      const tx = creature.x + dx;
+      const ty = creature.y + dy;
+      if (canMoveTo(creature, tx, ty)) {
+        creature.x = tx;
+        creature.y = ty;
+        if (creature.facing) { creature.facing.dx = dx; creature.facing.dy = dy; }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Not near water — find nearest water and head toward it
+  // Use cached result if available and recent
+  if (!creature._cachedWater || creature._cachedWaterAge == null || creature._cachedWaterAge > 5) {
+    creature._cachedWater = findNearestWaterTile(creature.x, creature.y);
+    creature._cachedWaterAge = 0;
+  }
+  creature._cachedWaterAge = (creature._cachedWaterAge || 0) + 1;
+
+  const nearestWater = creature._cachedWater;
+  if (nearestWater) {
+    const waterDir = directionToward(creature.x, creature.y, nearestWater.x, nearestWater.y);
+    const candidates = [waterDir, (waterDir + 1) % 8, (waterDir + 7) % 8];
+    for (const dir of candidates) {
+      const dx = DIRECTION_DELTAS[dir].x;
+      const dy = DIRECTION_DELTAS[dir].y;
+      const tx = creature.x + dx;
+      const ty = creature.y + dy;
+      if (canMoveTo(creature, tx, ty)) {
+        creature.x = tx;
+        creature.y = ty;
+        if (creature.facing) { creature.facing.dx = dx; creature.facing.dy = dy; }
+        return true;
+      }
+    }
+  }
+
+  // No water found or can't reach it — fall back to standard flee
+  return executeStandardFlee(creature);
+}
+
+/** Flee toward home position (ambush predator). Returns true if moved. */
+function executeFleeToHome(creature) {
+  const home = creature.wanderProfile && creature.wanderProfile.homePosition;
+  if (!home) {
+    return executeStandardFlee(creature); // fallback if no home set
+  }
+
+  const distToHome = dist(creature.x, creature.y, home.x, home.y);
+
+  // Already home — stop fleeing, drop safety faster
+  if (distToHome <= 2) {
+    creature.drives.safety = Math.max(0, creature.drives.safety - SAFETY_DECAY_RATE * 5);
+    // Don't move — hold position at home
+    return false;
+  }
+
+  // Head toward home
+  const homeDir = directionToward(creature.x, creature.y, home.x, home.y);
+  const candidates = [homeDir, (homeDir + 1) % 8, (homeDir + 7) % 8];
+  for (const dir of candidates) {
+    const dx = DIRECTION_DELTAS[dir].x;
+    const dy = DIRECTION_DELTAS[dir].y;
+    const tx = creature.x + dx;
+    const ty = creature.y + dy;
+    if (canMoveTo(creature, tx, ty)) {
+      creature.x = tx;
+      creature.y = ty;
+      if (creature.facing) { creature.facing.dx = dx; creature.facing.dy = dy; }
+      return true;
+    }
+  }
+
+  // Can't reach home — standard flee
+  return executeStandardFlee(creature);
+}
+
+/** Flee dispatcher — routes to specialized flee based on creature fleeMode. Returns true if moved. */
+function executeFlee(creature) {
+  if (creature.fleeMode === 'water') {
+    return executeFleeToWater(creature);
+  }
+  if (creature.fleeMode === 'home') {
+    return executeFleeToHome(creature);
+  }
+  // Default: standard flee (away from threat)
+  return executeStandardFlee(creature);
 }
 
 // ==================== WANDER SYSTEM ====================
@@ -459,6 +770,8 @@ function runCreatureAI(creature) {
   // Immobilized creatures can't move but can still attack adjacently
   if (creature.immobilized) {
     updateDrives(creature);
+    detectThreats(creature);
+    applySafetyFromThreats(creature);
     adjacencyCombatCheck(creature);
     return;
   }
@@ -466,20 +779,28 @@ function runCreatureAI(creature) {
   // Update drives
   updateDrives(creature);
 
-  // Select behavior (I-A: always 'wander')
+  // Threat detection (I-B)
+  detectThreats(creature);
+  applySafetyFromThreats(creature);
+
+  // Select behavior
   const behavior = selectBehavior(creature);
   creature.currentBehavior = behavior;
 
   // Execute behavior
-  if (behavior === 'wander') {
-    executeWander(creature);
+  let moved = false;
+  switch (behavior) {
+    case 'flee': moved = executeFlee(creature); break;
+    case 'wander': executeWander(creature); break;
+    // Future: case 'hunt': executeHunt(creature); break;
+    // Future: case 'rest': executeRest(creature); break;
   }
-  // Future: if (behavior === 'flee') executeFlee(creature);
-  // Future: if (behavior === 'hunt') executeHunt(creature);
-  // Future: if (behavior === 'rest') executeRest(creature);
 
-  // Adjacency combat check (separate from behavior)
-  adjacencyCombatCheck(creature);
+  // Adjacency combat: skip if fleeing AND successfully moved away.
+  // A cornered fleeing creature that couldn't move WILL fight back.
+  if (!(behavior === 'flee' && moved)) {
+    adjacencyCombatCheck(creature);
+  }
 }
 
 // ==================== BONUS MOVE (relative speed system) ====================
@@ -893,4 +1214,5 @@ export { endPlayerTurn, enemyAct, monsterMelee, playerInTerritory, monInOwnTerri
          syncSwarmAI, mushroomPackAI, mushroomTouch, wanderInTerritory, moveMonsterToward,
          wanderMonster, moveMonsterTowardPlayer,
          hasCladeTerritory, wouldExceedTerritory,
-         isWaterLocked, isWaterTile, processBleed };
+         isWaterLocked, isWaterTile, processBleed,
+         applySafetyFromDamage };

@@ -1,6 +1,6 @@
 // ==================== COMBAT + STEALTH ====================
 import { render } from './rendering.js';
-import { monsterMelee } from './enemy-ai.js';
+import { monsterMelee, applySafetyFromDamage } from './enemy-ai.js';
 import { state, worlds, monsters } from './state.js';
 import { DMG, GOLD_DROP_MUL, resistMult, getBodyMap, selectHitZone,
          checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
@@ -323,6 +323,11 @@ log(`[DBG] dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z
     if (zoneDeath) {
       mon.hp = 0;  // ensure global HP reflects death
     }
+  }
+
+  // Prompt I-B: spike safety drive from damage taken
+  if (!zoneDeath && mon.hp > 0 && totalDmg > 0) {
+    applySafetyFromDamage(mon, totalDmg, state.player);
   }
 
   // Enemy bleed feedback — gated by player centralization
