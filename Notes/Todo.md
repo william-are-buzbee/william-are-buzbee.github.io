@@ -34,12 +34,12 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Designed a 3d body map system as a core game mechanic that will replace stats like CON, STR, INT, etc. (instead, the body map visualizes and describes weight, muscularity, connective tissue, neural mass, armor, texture, hardness, sensory organs, neural pathways, etc and a 3d animal could be created from this description with a lot of functional detail)
 - [x] Create body maps for the main ancestors of the two clades (small herbivore, large herbivore, ambush predator, meso carnivore, apex carnivore) 
 - [x] Implemented a temporary "Size" and "Strength" system that roughly reflects total mass and total muscle mass % (relative to total mass in kg) to help current build reflect size disparities & how that should affect damage
+- [x] Implement first-pass body plan system (weight system, target area for attacks, limb damage, blood loss, physics based combat)
 
 ## Up Next
-- [ ] Implement the next phase of the 3d body plan, of which there will be many rounds
+- [] Implement second-pass body plan system (first pass creature AI overhaul)
 
 ## Near-Term Plans
-- [ ] Implement necesary AI changes (most animals will eat corpses they run into, herbivores have to actually forage and eat plants, eating takes time, implement sleeping, implement basic intimidation logic, etc)
 - [ ] Implement basic sensory abilities (visual map for chemical sense, tremor/AOE around player for vibration)
 - [ ] Playtest gameplay with the 3d body plan functioning as multiple different animals/niches
 
@@ -48,7 +48,6 @@ Prompt queue and task tracker. Check things off as they're done.
 - [ ] Historical record overhaul (canon events across history, inventions, demigod interventions, factions, major events, wars, etc)
 - [ ] "Modernity" as a concept (religion, trade, communication, animals with complex sapience or similar level of societal complexity)
 - [ ] Build functional underground ecosystem on parity with surface (in terms of complexity and thoroughness, not fully complete though) 
-- [ ] AI overhaul (complex creature behavior based on instincts, body plan and evolutionary principles)
 
 ## Very Long-Term Plans
 - [ ] World editing (base building, tree cutting, ore mining, wall destroying, village creating, etc)
