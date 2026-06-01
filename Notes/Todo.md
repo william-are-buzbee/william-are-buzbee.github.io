@@ -37,7 +37,7 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Implement first-pass body plan system (weight system, target area for attacks, limb damage, blood loss, physics based combat)
 
 ## Up Next
-- [] Implement second-pass body plan system (first pass creature AI overhaul)
+- [] Implement second-pass body plan system (weight system, target area for attacks, limb damage, blood loss, physics based combat)
 
 ## Near-Term Plans
 - [ ] Implement basic sensory abilities (visual map for chemical sense, tremor/AOE around player for vibration)
