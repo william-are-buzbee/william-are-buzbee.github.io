@@ -5,7 +5,6 @@
 import { state, worlds, covers, monsters, features, groundItems } from './state.js';
 import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, SPECIES_TEMPLATES, initBodyMap, getBodyMap, computeBleedPenalty } from './constants.js';
 import { findWeapon, findArmor } from './items.js';
-import { WANDER_PROFILES, DEFAULT_WANDER_PROFILE } from './monsters.js';
 import { render } from './rendering.js';
 import { log } from './log.js';
 import { updatePlayerFOV } from './fov.js';
@@ -297,32 +296,6 @@ function deserializeMonsters(allLayers) {
         if (mon.originalNeural == null && mon.bodyMap) {
           mon.originalNeural = mon.bodyMap.reduce((sum, z) => sum + (z.neural || 0), 0);
         }
-        // Prompt I-A: ensure drive/wander state exists (backward compat for old saves)
-        if (!mon.drives) {
-          mon.drives = {
-            hunger: 0.15 + Math.random() * 0.30,
-            safety: 0.0,
-            rest: Math.random() * 0.15,
-          };
-        }
-        if (!mon.wanderProfile) {
-          const wp = (mon.key && WANDER_PROFILES[mon.key]) || DEFAULT_WANDER_PROFILE;
-          mon.wanderProfile = { ...wp, homePosition: null };
-          // Territorial creatures: set homePosition from homeX/homeY
-          if (wp.homeRadius != null && wp.homeRadius > 0 && mon.homeX != null) {
-            mon.wanderProfile.homePosition = { x: mon.homeX, y: mon.homeY };
-          }
-        }
-        if (!mon.wander) {
-          const wp = mon.wanderProfile || DEFAULT_WANDER_PROFILE;
-          const [minP, maxP] = wp.persistenceRange;
-          mon.wander = {
-            direction: Math.floor(Math.random() * 8),
-            persistence: minP + Math.floor(Math.random() * (maxP - minP + 1)),
-            pauseTimer: 0,
-          };
-        }
-        if (!mon.currentBehavior) mon.currentBehavior = 'wander';
       }
     }
   }

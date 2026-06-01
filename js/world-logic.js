@@ -455,12 +455,6 @@ export function spawnMonstersInWorld(){
         m.hp = m.hpMax;
         m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
 
-        // Drive system: set wander home position for territorial creatures
-        if (m._needsHomePosition && m.wanderProfile) {
-          m.wanderProfile.homePosition = { x: x, y: y };
-          delete m._needsHomePosition;
-        }
-
         if (!monsters[LAYER_SURFACE]) monsters[LAYER_SURFACE] = [];
         monsters[LAYER_SURFACE].push(m);
         incCellCount(cellKey, key);
@@ -575,11 +569,6 @@ export function spawnMonstersInWorld(){
       m.hpMax = Math.round(m.hpMax * ENEMY_HP_MUL);
       m.hp = m.hpMax;
       m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
-      // Drive system: set wander home position for territorial creatures
-      if (m._needsHomePosition && m.wanderProfile) {
-        m.wanderProfile.homePosition = { x: x, y: y };
-        delete m._needsHomePosition;
-      }
       monsters[LAYER_UNDER].push(m);
     }
   }

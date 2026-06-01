@@ -545,77 +545,6 @@ function getCladeData(key) {
   return CLADE_DATA[key] || null;
 }
 
-// ==================== WANDER PROFILES ====================
-// Per-creature-type wander behavior parameters.
-// Drives emergent movement differences: twitchy prey, ponderous grazers,
-// patient ambush predators, steady patrolling predators.
-const WANDER_PROFILES = {
-  // Meso-predator: moderate persistence, few pauses — steady patrol
-  wolf: {
-    persistenceRange: [4, 10],
-    pauseChance: 0.08,
-    pauseDuration: [1, 2],
-    turnChance: 0.12,
-    homeRadius: null,
-    waterAffinity: 0.0,
-  },
-  // Apex predator: high persistence, rare pauses — purposeful, holds heading
-  dire_wolf: {
-    persistenceRange: [6, 14],
-    pauseChance: 0.06,
-    pauseDuration: [1, 3],
-    turnChance: 0.08,
-    homeRadius: null,
-    waterAffinity: 0.0,
-  },
-  // Small herbivore: low persistence, frequent pauses, high turn chance — twitchy
-  hare: {
-    persistenceRange: [2, 5],
-    pauseChance: 0.15,
-    pauseDuration: [2, 5],
-    turnChance: 0.25,
-    homeRadius: null,
-    waterAffinity: 0.0,
-  },
-  // Large herbivore: high persistence, moderate pauses, biased toward water
-  cave_crab: {
-    persistenceRange: [5, 12],
-    pauseChance: 0.12,
-    pauseDuration: [2, 4],
-    turnChance: 0.10,
-    homeRadius: null,
-    waterAffinity: 0.6,
-  },
-  // Ambush predator: moderate persistence, long frequent pauses, home-locked
-  ambush_pred: {
-    persistenceRange: [3, 7],
-    pauseChance: 0.18,
-    pauseDuration: [3, 8],
-    turnChance: 0.15,
-    homeRadius: 10,
-    waterAffinity: 0.0,
-  },
-  // Chemotroph: slow, mostly still, stays near home colony
-  mushroom: {
-    persistenceRange: [2, 5],
-    pauseChance: 0.25,
-    pauseDuration: [3, 10],
-    turnChance: 0.20,
-    homeRadius: 12,
-    waterAffinity: 0.0,
-  },
-};
-
-// Default wander profile for creatures without a specific one
-const DEFAULT_WANDER_PROFILE = {
-  persistenceRange: [3, 8],
-  pauseChance: 0.12,
-  pauseDuration: [1, 3],
-  turnChance: 0.15,
-  homeRadius: null,
-  waterAffinity: 0.0,
-};
-
 function spawnMonster(key){
   let d;
   if (key === 'dread_king') d = DREAD_KING;
@@ -755,31 +684,6 @@ function spawnMonster(key){
   if (m.bodyMap) {
     m.originalNeural = m.bodyMap.reduce((sum, z) => sum + (z.neural || 0), 0);
   }
-
-  // ── Drive system initialization (Prompt I-A) ──
-  m.drives = {
-    hunger: 0.15 + rand() * 0.30,   // random 0.15–0.45
-    safety: 0.0,
-    rest:   rand() * 0.15,           // random 0.0–0.15
-  };
-
-  // ── Wander profile and state (Prompt I-A) ──
-  const wp = WANDER_PROFILES[key] || DEFAULT_WANDER_PROFILE;
-  m.wanderProfile = { ...wp, homePosition: null };
-  // Ambush predator and mushroom: homePosition set at spawn
-  if (wp.homeRadius != null && wp.homeRadius > 0) {
-    // homePosition will be set in world-logic after m.x/m.y are assigned
-    // (spawnMonster doesn't know coordinates yet — caller sets them)
-    m._needsHomePosition = true;
-  }
-  const [minP, maxP] = wp.persistenceRange;
-  m.wander = {
-    direction: randi(8),
-    persistence: minP + randi(maxP - minP + 1),
-    pauseTimer: 0,
-  };
-  m.currentBehavior = 'wander';
-
   return m;
 }
 
@@ -883,5 +787,5 @@ const HABITAT = {
 };
 
 // Re-export everything that other modules need
-export { MON, DREAD_KING, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES, CLADE_DATA, HABITAT, WANDER_PROFILES, DEFAULT_WANDER_PROFILE };
+export { MON, DREAD_KING, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES, CLADE_DATA, HABITAT };
 export { rollPersonality, monHP, monDodge, monAcc, monCritChance, monCritMult, monDamage, spawnMonster, getSpawnRules, getCladeData };
