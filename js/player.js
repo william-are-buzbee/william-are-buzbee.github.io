@@ -9,7 +9,7 @@ import { getTimePhase } from './time-cycle.js';
 import { state } from './state.js';
 import { rand, randomRound } from './rng.js';
 import { findWeapon, findArmor } from './items.js';
-import { MON_SPEED } from './monsters.js';
+import { MON_SPEED, WANDER_PROFILES, DEFAULT_WANDER_PROFILE } from './monsters.js';
 
 // player object lives in state.js — functions here take player as parameter `p`
 
@@ -48,6 +48,24 @@ function freshPlayer(speciesKey, colorPalette){
     pathways: CREATURE_PATHWAYS[species.creatureKey] || [],
     speed: MON_SPEED[species.creatureKey] || 60,
   };
+
+  // ── Ecology fields (Prompt K-A) ──
+  // Copy diet, fleeMode, wanderProfile from creature template so the AI drive
+  // system (assessThreatLevel, isViablePrey, detectThreats, detectPrey) can
+  // evaluate the player the same way it evaluates any NPC creature.
+  const creatureKey = species.creatureKey;
+  const PLAYER_DIET_MAP = {
+    hare: 'herbivore', cave_crab: 'herbivore',
+    wolf: 'predator',  dire_wolf: 'predator',
+    ambush_pred: 'predator', mushroom: 'herbivore',
+  };
+  const PLAYER_FLEE_MAP = {
+    cave_crab: 'water',
+    ambush_pred: 'home',
+  };
+  p.diet = PLAYER_DIET_MAP[creatureKey] || 'predator';
+  p.fleeMode = PLAYER_FLEE_MAP[creatureKey] || 'standard';
+  p.wanderProfile = { ...(WANDER_PROFILES[creatureKey] || DEFAULT_WANDER_PROFILE) };
   // Starter inventory
   p.inventory.push({kind:'food', key:'apple', weight:1});
   p.inventory.push({kind:'food', key:'apple', weight:1});

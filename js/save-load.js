@@ -187,6 +187,22 @@ function deserializePlayer(raw) {
   }
   // Backwards compat: immobilized flag
   if (p.immobilized == null) p.immobilized = false;
+  // Backwards compat: ecology fields added in Prompt K-A
+  // Old saves won't have diet/fleeMode/wanderProfile on the player.
+  // Derive from species key using the same mappings as freshPlayer.
+  if (p.diet == null) {
+    const sp = p.species || 'prowler';
+    const SPECIES_CREATURE_MAP = {
+      prowler: 'wolf', ravager: 'dire_wolf', grazer: 'hare',
+      shaleback: 'cave_crab', lurker: 'ambush_pred',
+    };
+    const ck = SPECIES_CREATURE_MAP[sp] || 'wolf';
+    const DIET_MAP = { hare: 'herbivore', cave_crab: 'herbivore' };
+    const FLEE_MAP = { cave_crab: 'water', ambush_pred: 'home' };
+    p.diet = DIET_MAP[ck] || 'predator';
+    p.fleeMode = FLEE_MAP[ck] || 'standard';
+    p.wanderProfile = { ...(WANDER_PROFILES[ck] || DEFAULT_WANDER_PROFILE) };
+  }
   // Reconstruct Sets
   p.npcsMet   = new Set(raw._npcsMet   || []);
   p.booksRead = new Set(raw._booksRead || []);
