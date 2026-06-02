@@ -1,6 +1,6 @@
 // ==================== WORLD LOGIC — placement, spawning, init ====================
 import { state, worlds, covers, features, monsters, activateLayer } from './state.js';
-import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, ENEMY_HP_MUL, ENEMY_ATK_MUL, LAYER_META, getAtmosphere, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H } from './constants.js';
+import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, LAYER_META, getAtmosphere, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H } from './constants.js';
 import { T, isWalkable, isCover } from './terrain.js';
 import { rand, randi, choice } from './rng.js';
 // DISABLED — town removed (was used for initScholarInventory)
@@ -223,9 +223,7 @@ export function placeStructures(){
   //   dk.homeX = dk.x; dk.homeY = dk.y;
   //   worlds[LAYER_UNDER][dk.y][dk.x] = T.ROCK;
   //   dk.isBoss = true;
-  //   dk.hpMax = Math.round(dk.hpMax * ENEMY_HP_MUL);
   //   dk.hp = dk.hpMax;
-  //   dk.weaponAtk = Math.round(dk.weaponAtk * ENEMY_ATK_MUL);
   //   monsters[LAYER_UNDER].push(dk);
   // }
 
@@ -282,9 +280,7 @@ export function placeStructures(){
             const m = spawnMonster(pick);
             m.x = nx; m.y = ny;
             m.homeX = nx; m.homeY = ny;
-            m.hpMax = Math.round(m.hpMax * ENEMY_HP_MUL);
             m.hp = m.hpMax;
-            m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
             monsters[LAYER_SURFACE].push(m);
             }
           } else if (nt === T.BEACH && rand() < 0.15 * SPAWN_DENSITY_MULT){
@@ -293,9 +289,7 @@ export function placeStructures(){
             const m = spawnMonster('cave_crab');
             m.x = nx; m.y = ny;
             m.homeX = nx; m.homeY = ny;
-            m.hpMax = Math.round(m.hpMax * ENEMY_HP_MUL);
             m.hp = m.hpMax;
-            m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
             monsters[LAYER_SURFACE].push(m);
             }
           }
@@ -451,9 +445,7 @@ export function spawnMonstersInWorld(){
 
         m.x = x; m.y = y;
         m.homeX = x; m.homeY = y;
-        m.hpMax = Math.round(m.hpMax * ENEMY_HP_MUL);
         m.hp = m.hpMax;
-        m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
 
         // Drive system: set wander home position for territorial creatures
         if (m._needsHomePosition && m.wanderProfile) {
@@ -534,9 +526,7 @@ export function spawnMonstersInWorld(){
   //     const m = spawnMonster(picked);
   //     m.x = x; m.y = y;
   //     m.homeX = x; m.homeY = y;
-  //     m.hpMax = Math.round(m.hpMax * ENEMY_HP_MUL);
   //     m.hp = m.hpMax;
-  //     m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
   //     monsters[LAYER_SURFACE].push(m);
   //     if (picked === 'wolf' || picked === 'dire_wolf') spawnedWolves.push(m);
   //   }
@@ -572,9 +562,7 @@ export function spawnMonstersInWorld(){
       const m = spawnMonster(choice(eligible));
       m.x = x; m.y = y;
       m.homeX = x; m.homeY = y;
-      m.hpMax = Math.round(m.hpMax * ENEMY_HP_MUL);
       m.hp = m.hpMax;
-      m.weaponAtk = Math.round(m.weaponAtk * ENEMY_ATK_MUL);
       // Drive system: set wander home position for territorial creatures
       if (m._needsHomePosition && m.wanderProfile) {
         m.wanderProfile.homePosition = { x: x, y: y };
