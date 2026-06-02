@@ -1,5 +1,5 @@
 // ==================== PLAYER ====================
-import { DMG, LAYER_SURFACE, PRICE_CAT, LAYER_META,
+import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META,
          HP_PER_SIZE, HP_PER_LEVEL_FACTOR, STAT_MAX,
          MAX_DODGE_CHANCE,
          BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF,
@@ -9,6 +9,7 @@ import { getTimePhase } from './time-cycle.js';
 import { state } from './state.js';
 import { rand, randomRound } from './rng.js';
 import { findWeapon, findArmor } from './items.js';
+import { MON_SPEED } from './monsters.js';
 
 // player object lives in state.js — functions here take player as parameter `p`
 
@@ -28,7 +29,7 @@ function freshPlayer(speciesKey, colorPalette){
     // Legacy stats — set to 1, will be overwritten from body map after initBodyMap
     siz: 1, strength: 1, chem: 1, vib: 1, vis: 1, central: 1, distributed: 1,
     level:1, xp:0, xpNext:15,
-    gold: 40,
+    gold: STARTING_GOLD,
     weapon: findWeapon('dagger'),
     armor: findArmor('rags'),
     inventory:[],
@@ -45,6 +46,7 @@ function freshPlayer(speciesKey, colorPalette){
     hitFlash:0,
     bodyMapKey: species.creatureKey,
     pathways: CREATURE_PATHWAYS[species.creatureKey] || [],
+    speed: MON_SPEED[species.creatureKey] || 60,
   };
   // Starter inventory
   p.inventory.push({kind:'food', key:'apple', weight:1});
@@ -222,7 +224,7 @@ function sellValueMul(p, category){
 }
 
 // Food FED multiplier — Old Physicians book grants +50%
-function foodFedMul(p){ return ((p.perks && p.perks.food_bonus) ? 1.5 : 1.0); }
+function foodFedMul(p){ return ((p.perks && p.perks.food_bonus) ? 1.5 : 1.0) * 1.25; }
 
 // Stealth effectiveness — smaller creatures hide better
 // floor((STAT_MAX + 1 - Size) * STEALTH_SIZE_COEFF)
