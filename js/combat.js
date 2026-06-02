@@ -418,6 +418,7 @@ function killMonster(mon){
     quantity: 1,
     source:   mon.key,
     nutrition: mon.hpMax,
+    mass:     mon.totalMass || 1,  // I-C: total mass for predator eating
   });
 
   const xp = xpFromKill(player, mon.xp);
