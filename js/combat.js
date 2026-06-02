@@ -2,7 +2,7 @@
 import { render } from './rendering.js';
 import { monsterMelee, applySafetyFromDamage } from './enemy-ai.js';
 import { state, worlds, monsters } from './state.js';
-import { DMG, GOLD_DROP_MUL, resistMult, getBodyMap, selectHitZone,
+import { DMG, resistMult, getBodyMap, selectHitZone,
          checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
          getPathways, computeBleedPenalty, BLOOD_FRACTION, BURST_COEFF,
          BLOOD_DEATH_THRESHOLD, ARMOR_PER_STRUCTURAL_KG,
@@ -422,7 +422,7 @@ function killMonster(mon){
   });
 
   const xp = xpFromKill(player, mon.xp);
-  const gold = Math.round(randRange(mon.goldRange[0], mon.goldRange[1]) * GOLD_DROP_MUL);
+  const gold = Math.round(randRange(mon.goldRange[0], mon.goldRange[1]));
   state.player.xp += xp;
   state.player.gold += gold;
   log(`${mon.name} falls. [+${xp} XP, +${gold}g]`, 'dead');

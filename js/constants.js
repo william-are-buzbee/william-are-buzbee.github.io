@@ -616,15 +616,6 @@ export const GRAZE_HUNGER_REDUCTION  = 0.03;  // hunger reduction per turn of gr
 export const HERBIVORE_SAFETY_BONUS  = 0.25;  // herbivores treat safety as 0.25 more urgent than raw value
 export const FORAGE_SEARCH_RADIUS    = 12;    // how far herbivores look for food tiles
 
-// ==================== BALANCE CONSTANTS ====================
-// Single balance curve (formerly "easy" difficulty).
-export const STARTING_POINTS = 22;  // Math.round(16 * 1.4) — scaled from 5-stat to 7-stat system
-export const STARTING_GOLD   = 60;
-export const ENEMY_HP_MUL    = 0.75;
-export const ENEMY_ATK_MUL   = 0.70;
-export const GOLD_DROP_MUL   = 1.30;
-export const FOOD_DROP_MUL   = 1.30;
-
 // ==================== GAMEPLAY FORMULA CONSTANTS ====================
 // Stat scale: 1-100 range (scaled from legacy 1-10).
 export const STAT_MIN = 1;

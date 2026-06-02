@@ -1,5 +1,5 @@
 // ==================== PLAYER ====================
-import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META,
+import { DMG, LAYER_SURFACE, PRICE_CAT, LAYER_META,
          HP_PER_SIZE, HP_PER_LEVEL_FACTOR, STAT_MAX,
          MAX_DODGE_CHANCE,
          BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF,
@@ -28,7 +28,7 @@ function freshPlayer(speciesKey, colorPalette){
     // Legacy stats — set to 1, will be overwritten from body map after initBodyMap
     siz: 1, strength: 1, chem: 1, vib: 1, vis: 1, central: 1, distributed: 1,
     level:1, xp:0, xpNext:15,
-    gold: STARTING_GOLD,
+    gold: 40,
     weapon: findWeapon('dagger'),
     armor: findArmor('rags'),
     inventory:[],
@@ -222,7 +222,7 @@ function sellValueMul(p, category){
 }
 
 // Food FED multiplier — Old Physicians book grants +50%
-function foodFedMul(p){ return ((p.perks && p.perks.food_bonus) ? 1.5 : 1.0) * 1.25; }
+function foodFedMul(p){ return ((p.perks && p.perks.food_bonus) ? 1.5 : 1.0); }
 
 // Stealth effectiveness — smaller creatures hide better
 // floor((STAT_MAX + 1 - Size) * STEALTH_SIZE_COEFF)
