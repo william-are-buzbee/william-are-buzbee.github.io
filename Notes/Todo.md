@@ -44,12 +44,9 @@ Prompt queue and task tracker. Check things off as they're done.
 
 ## Up Next
 - [ ] Perception system (transducers based sensing, no more abstract "perception" stat)
-- [ ] Cognitive system (centralized cognition functioning)
 
 ## Near-Term Plans
-- [ ] Implement necesary AI changes (most animals will eat corpses they run into, herbivores have to actually forage and eat plants, eating takes time, implement sleeping, implement basic intimidation logic, etc)
-- [ ] Implement basic sensory abilities (visual map for chemical sense, tremor/AOE around player for vibration)
-- [ ] Playtest gameplay with the 3d body plan functioning as multiple different animals/niches
+- [ ] Cognitive system (centralized cognition functioning)
 
 ## Long-Term Plans
 - [ ] Implement underground generation of new floors and cave systems 
