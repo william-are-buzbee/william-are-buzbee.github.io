@@ -1,6 +1,6 @@
 // ==================== CASTLE MODAL ====================
 import { state, worlds, monsters } from './state.js';
-import { ENEMY_HP_MUL, ENEMY_ATK_MUL, LAYER_SURFACE } from './constants.js';
+import { LAYER_SURFACE } from './constants.js';
 import { T, isWalkable, terrainName } from './terrain.js';
 import { choice } from './rng.js';
 import { findWeapon, findArmor } from './items.js';
@@ -9,6 +9,10 @@ import { spawnMonster } from './monsters.js';
 import { inBounds, monsterAt } from './world-state.js';
 import { log } from './log.js';
 import { openModal, closeModal } from './modal.js';
+
+// Guardian knight scaling — previously in constants.js
+const ENEMY_HP_MUL  = 1.5;
+const ENEMY_ATK_MUL = 1.5;
 
 // useStairs is imported lazily to avoid a circular dependency with interactions.js
 let _useStairs = null;
