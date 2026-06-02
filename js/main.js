@@ -475,3 +475,4 @@ updateTitleButtons();
 //   fh(0.95)     → starving — extended chase, fights through damage
 window.dbg = debugEcology;
 window.fh  = debugForceHunger;
+window.state = state;    
