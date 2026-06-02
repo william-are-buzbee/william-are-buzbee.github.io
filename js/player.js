@@ -1,5 +1,5 @@
 // ==================== PLAYER ====================
-import { DMG, STARTING_GOLD, LAYER_SURFACE, PRICE_CAT, LAYER_META,
+import { DMG, LAYER_SURFACE, PRICE_CAT, LAYER_META,
          HP_PER_SIZE, HP_PER_LEVEL_FACTOR, STAT_MAX,
          MAX_DODGE_CHANCE,
          BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF,
@@ -29,7 +29,7 @@ function freshPlayer(speciesKey, colorPalette){
     // Legacy stats — set to 1, will be overwritten from body map after initBodyMap
     siz: 1, strength: 1, chem: 1, vib: 1, vis: 1, central: 1, distributed: 1,
     level:1, xp:0, xpNext:15,
-    gold: STARTING_GOLD,
+    gold: 0,
     weapon: findWeapon('dagger'),
     armor: findArmor('rags'),
     inventory:[],
