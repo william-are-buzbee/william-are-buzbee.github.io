@@ -3,17 +3,20 @@
 // Prompt I-A: drives tick, all creatures wander, adjacency combat only.
 // Prompt I-B: safety drive + flee behavior. Threat detection, flee dispatch.
 
-import { state, worlds, covers, monsters } from './state.js';
+import { state, worlds, covers, monsters, groundItems } from './state.js';
 import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, STAT_MAX, TURN_AGILITY_COEFF,
          facingSteps, checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
-         getPathways, computeBleedPenalty, SEEP_COEFF, CLOT_RATE, REGEN_FRACTION,
+         getPathways, computeBleedPenalty, computeStrikeDamage, SEEP_COEFF, CLOT_RATE, REGEN_FRACTION,
          BLOOD_DEATH_THRESHOLD, BURST_COEFF, BLOOD_CRITICAL_THRESHOLD,
          ARMOR_PER_STRUCTURAL_KG, getAttackDirection, getExposedZones, selectContactedZones,
          MASS_HUNGER_COEFF, NEURAL_HUNGER_COEFF, SAFETY_DECAY_RATE, REST_BASE_RATE,
-         SAFETY_THRESHOLD, CHEMICAL_RANGE_MULT, VIBRATION_RANGE_MULT, VISUAL_RANGE_MULT,
-         SAFETY_PROXIMITY_COEFF, SAFETY_DAMAGE_COEFF } from './constants.js';
-import { T, isWalkable } from './terrain.js';
+         SAFETY_THRESHOLD, HUNGER_THRESHOLD, CHEMICAL_RANGE_MULT, VIBRATION_RANGE_MULT, VISUAL_RANGE_MULT,
+         SAFETY_PROXIMITY_COEFF, SAFETY_DAMAGE_COEFF,
+         CHASE_LEASH_BASE, CHASE_LEASH_HUNGER_MULT, MEAL_HUNGER_REDUCTION,
+         BITE_MASS_FRACTION, GRAZE_HUNGER_REDUCTION, HERBIVORE_SAFETY_BONUS,
+         FORAGE_SEARCH_RADIUS } from './constants.js';
+import { T, isWalkable, isFoodTile } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
 import { monAcc, monDodge, monDamage, monCritChance, monCritMult, WANDER_PROFILES, DEFAULT_WANDER_PROFILE } from './monsters.js';
@@ -21,6 +24,7 @@ import { inBounds, monsterAt, chebyshev, isTownCell, getCover } from './world-st
 import { log } from './log.js';
 import { render } from './rendering.js';
 import { endStealth, stealthDetectChance, rollHit } from './combat.js';
+import { placeItem, generateItemId } from './ground-items.js';
 import { fedDrainFor } from './player-actions.js';
 import { advanceTick, getTimePhase } from './time-cycle.js';
 import { saveGame } from './save-load.js';
@@ -298,12 +302,44 @@ function updateDrives(creature) {
   creature.drives.rest = Math.min(1.0, creature.drives.rest + REST_BASE_RATE);
 }
 
+/** Get the dominant active drive. Highest urgency above threshold wins. */
+function getDominantDrive(creature) {
+  const drives = creature.drives;
+  const active = [];
+
+  if (drives.safety > SAFETY_THRESHOLD) {
+    let safetyUrgency = drives.safety;
+    // Herbivores weigh safety more heavily — survival over food
+    if (creature.diet === 'herbivore') {
+      safetyUrgency += HERBIVORE_SAFETY_BONUS;
+    }
+    active.push({ drive: 'safety', urgency: safetyUrgency });
+  }
+  if (drives.hunger > HUNGER_THRESHOLD) {
+    active.push({ drive: 'hunger', urgency: drives.hunger });
+  }
+  // I-D: if (drives.rest > REST_THRESHOLD) active.push(...)
+
+  if (active.length === 0) return { drive: 'none', urgency: 0 };
+
+  // Highest urgency wins; ties favor safety
+  active.sort((a, b) => {
+    if (b.urgency !== a.urgency) return b.urgency - a.urgency;
+    return a.drive === 'safety' ? -1 : 1;
+  });
+  return active[0];
+}
+
 /** Select behavior based on drive priorities. */
 function selectBehavior(creature) {
-  if (creature.drives.safety > SAFETY_THRESHOLD) return 'flee';
-  // I-C will add: if (creature.drives.hunger > HUNGER_THRESHOLD) → 'hunt' or 'forage'
-  // I-D will add: if (creature.drives.rest > REST_THRESHOLD) → 'rest'
-  return 'wander';
+  const dominant = getDominantDrive(creature);
+
+  switch (dominant.drive) {
+    case 'safety': return 'flee';
+    case 'hunger': return creature.diet === 'predator' ? 'hunt' : 'forage';
+    // I-D will add: case 'rest': return 'rest';
+    default: return 'wander';
+  }
 }
 
 // ==================== THREAT DETECTION (I-B) ====================
@@ -344,19 +380,34 @@ function assessThreatLevel(creature, target) {
   }
   const massRatio = targetMass / creatureMass;
 
-  // Herbivores: everything is a threat if it's not tiny
+  // Herbivores: fear predators and large unknowns
   if (creature.diet === 'herbivore') {
-    if (massRatio > 0.3) return massRatio;
+    const targetDiet = target.diet || (target.isPlayer ? getPlayerDiet() : null);
+    // Any predator is threatening — a 200 kg herbivore still notices a 22 kg predator.
+    // Threat level scales with mass ratio but has a floor so small predators aren't ignored.
+    if (targetDiet === 'predator') return Math.max(0.4, massRatio);
+    // Large unknowns are threatening
+    if (massRatio > 1.5) return massRatio * 0.5;
     return 0;
   }
 
-  // Predators: threats are things significantly bigger
+  // Predators: fear significantly larger predators
   if (creature.diet === 'predator') {
-    if (massRatio > 1.5) return massRatio;
+    const targetDiet = target.diet || (target.isPlayer ? getPlayerDiet() : null);
+    if (targetDiet === 'predator' && massRatio > 1.5) return massRatio;
     return 0;
   }
 
   return 0;
+}
+
+/** Helper: get the player's effective diet based on species. */
+function getPlayerDiet() {
+  const player = state.player;
+  if (!player || !player.species) return null;
+  // Herbivore species: grazer (hare), shaleback (cave_crab)
+  const PLAYER_DIET_MAP = { grazer: 'herbivore', shaleback: 'herbivore' };
+  return PLAYER_DIET_MAP[player.species] || 'predator';
 }
 
 /** Detect threats in range. Runs once per turn per creature. */
@@ -369,16 +420,35 @@ function detectThreats(creature) {
   if (player && player.hp > 0) {
     const distToPlayer = dist(creature.x, creature.y, player.x, player.y);
     if (distToPlayer <= range) {
-      threats.push({
-        source: player,
-        distance: distToPlayer,
-        threatLevel: assessThreatLevel(creature, player),
-      });
+      const threatLevel = assessThreatLevel(creature, player);
+      if (threatLevel > 0) {
+        threats.push({
+          source: player,
+          distance: distToPlayer,
+          threatLevel: threatLevel,
+        });
+      }
     }
   }
 
-  // Future: check other creatures (predator detecting predator, etc.)
-  // For I-B, only the player is a threat source.
+  // Check other creatures (predators as threats to herbivores and smaller predators)
+  const mons = monstersHere();
+  for (const other of mons) {
+    if (other === creature) continue;
+    if (other.hp <= 0) continue;
+
+    const d = dist(creature.x, creature.y, other.x, other.y);
+    if (d > range) continue;
+
+    const threatLevel = assessThreatLevel(creature, other);
+    if (threatLevel > 0) {
+      threats.push({
+        source: other,
+        distance: d,
+        threatLevel: threatLevel,
+      });
+    }
+  }
 
   creature.detectedThreats = threats;
   return threats;
@@ -417,7 +487,15 @@ function applySafetyFromDamage(creature, damageAmount, attacker) {
     if (totalMaxHp <= 0) totalMaxHp = creature.hpMax || 1;
   }
   const hpFraction = damageAmount / totalMaxHp;
-  const spike = hpFraction * SAFETY_DAMAGE_COEFF;
+  let spike = hpFraction * SAFETY_DAMAGE_COEFF;
+
+  // Hungry predators dampen safety spikes — they commit to the hunt.
+  // At hunger 0.9, spike is reduced to ~30% (1 - 0.9 * 0.78 ≈ 0.30).
+  // At hunger 0.6, spike is reduced to ~53%. Below threshold, no dampening.
+  if (creature.diet === 'predator' && creature.drives.hunger > HUNGER_THRESHOLD) {
+    const hungerDamp = 1.0 - (creature.drives.hunger * 0.78);
+    spike *= Math.max(0.15, hungerDamp);  // floor at 15% — massive hits still register
+  }
 
   creature.drives.safety = Math.min(1.0, creature.drives.safety + spike);
 
@@ -614,6 +692,488 @@ function executeFlee(creature) {
   return executeStandardFlee(creature);
 }
 
+// ==================== PREY DETECTION (I-C) ====================
+
+/** Get a creature's effective mass from surviving body zones. */
+function getCreatureMass(entity) {
+  const bodyMap = getBodyMap(entity);
+  if (bodyMap) {
+    let m = 0;
+    for (const zone of bodyMap) {
+      if (!zone.destroyed) m += zone.mass || 0;
+    }
+    return m;
+  }
+  return entity.totalMass || 1;
+}
+
+/** Get a creature's species key for same-species check. */
+function getSpeciesKey(entity) {
+  if (entity.isPlayer) {
+    // Player's species maps to a creature key
+    const sp = entity.species;
+    if (sp) {
+      const SPECIES_CREATURE_MAP = {
+        prowler: 'wolf', ravager: 'dire_wolf', grazer: 'hare',
+        shaleback: 'cave_crab', lurker: 'ambush_pred',
+      };
+      return SPECIES_CREATURE_MAP[sp] || sp;
+    }
+    return '__player__';
+  }
+  return entity.key || '__unknown__';
+}
+
+/** Check if a target is viable prey for a predator. */
+function isViablePrey(predator, target) {
+  const predMass = getCreatureMass(predator);
+  const targetMass = getCreatureMass(target);
+  const massRatio = targetMass / predMass;
+
+  // Too big to hunt — don't try to eat something 1.5x+ your mass
+  if (massRatio > 1.5) return false;
+
+  // Too small to bother — below 5% (or 2% if starving)
+  const minRatio = predator.drives.hunger > 0.85 ? 0.02 : 0.05;
+  if (massRatio < minRatio) return false;
+
+  // Don't hunt your own species
+  if (getSpeciesKey(target) === getSpeciesKey(predator)) return false;
+
+  return true;
+}
+
+/** Detect prey within detection range. Predators only. */
+function detectPrey(creature) {
+  if (creature.diet !== 'predator') return;
+
+  const range = getDetectionRange(creature);
+  creature.detectedPrey = [];
+
+  // Scan NPC creatures
+  const mons = monstersHere();
+  for (const other of mons) {
+    if (other === creature) continue;
+    if (other.hp <= 0) continue;
+
+    const d = dist(creature.x, creature.y, other.x, other.y);
+    if (d > range) continue;
+
+    if (isViablePrey(creature, other)) {
+      creature.detectedPrey.push({ target: other, distance: d });
+    }
+  }
+
+  // Scan player
+  const player = state.player;
+  if (player && player.hp > 0) {
+    const d = dist(creature.x, creature.y, player.x, player.y);
+    if (d <= range && isViablePrey(creature, player)) {
+      creature.detectedPrey.push({ target: player, distance: d });
+    }
+  }
+
+  // Sort by distance (nearest first)
+  creature.detectedPrey.sort((a, b) => a.distance - b.distance);
+}
+
+/** Detect corpses within detection range. Predators only. */
+function detectCorpses(creature) {
+  if (creature.diet !== 'predator') return;
+
+  const range = getDetectionRange(creature);
+  creature.detectedCorpses = [];
+
+  const layer = state.player.layer;
+  const items = groundItems[layer];
+  if (!items) return;
+
+  for (const posKey of Object.keys(items)) {
+    const arr = items[posKey];
+    if (!arr) continue;
+    for (const item of arr) {
+      if (item.kind !== 'corpse' && item.type !== 'corpse') continue;
+
+      const [ix, iy] = posKey.split(',').map(Number);
+      const d = dist(creature.x, creature.y, ix, iy);
+      if (d > range) continue;
+
+      creature.detectedCorpses.push({
+        target: item,
+        distance: d,
+        x: ix, y: iy,
+      });
+    }
+  }
+
+  creature.detectedCorpses.sort((a, b) => a.distance - b.distance);
+}
+
+// ==================== HUNT SYSTEM (I-C) ====================
+
+/** Move in a direction with fallback to adjacent directions. */
+function moveInDirection(creature, dir) {
+  const candidates = [
+    dir,
+    (dir + 1) % 8,
+    (dir + 7) % 8,
+    (dir + 2) % 8,
+    (dir + 6) % 8,
+  ];
+  for (const d of candidates) {
+    const dx = DIRECTION_DELTAS[d].x;
+    const dy = DIRECTION_DELTAS[d].y;
+    const tx = creature.x + dx;
+    const ty = creature.y + dy;
+    if (canMoveTo(creature, tx, ty)) {
+      creature.x = tx;
+      creature.y = ty;
+      if (creature.facing) {
+        creature.facing.dx = dx;
+        creature.facing.dy = dy;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Check if chase leash allows continued pursuit. */
+function withinChaseLeash(creature, preyEntry) {
+  const baseLeash = CHASE_LEASH_BASE;
+  const hungerBonus = creature.drives.hunger * CHASE_LEASH_HUNGER_MULT;
+  const maxChase = baseLeash + hungerBonus;
+  return preyEntry.distance <= maxChase;
+}
+
+/** Select which prey to chase. Prefers existing target for consistency. */
+function selectChaseTarget(creature) {
+  // If we have an existing hunt target that's still detected, keep chasing it
+  if (creature.huntTarget) {
+    const existing = creature.detectedPrey.find(p => p.target === creature.huntTarget);
+    if (existing) return existing;
+    // Lost track of target — it fled out of range or died
+    creature.huntTarget = null;
+  }
+  // Pick nearest prey
+  return creature.detectedPrey[0] || null;
+}
+
+/** Chase detected prey. */
+function chasePrey(creature) {
+  const target = selectChaseTarget(creature);
+  if (!target) return false;
+
+  // Check chase leash
+  if (!withinChaseLeash(creature, target)) {
+    creature.huntTarget = null;
+    return false; // give up, return to wander
+  }
+
+  creature.huntTarget = target.target; // remember what we're chasing
+
+  // Move toward prey
+  const dir = directionToward(creature.x, creature.y, target.target.x, target.target.y);
+  return moveInDirection(creature, dir);
+}
+
+/** Get corpse at a specific position. */
+function getCorpseAt(layer, x, y) {
+  const items = groundItems[layer];
+  if (!items) return null;
+  const key = `${x},${y}`;
+  const arr = items[key];
+  if (!arr) return null;
+  for (const item of arr) {
+    if (item.kind === 'corpse' || item.type === 'corpse') return item;
+  }
+  return null;
+}
+
+/** Remove a ground item from its tile. */
+function removeGroundItem(layer, x, y, item) {
+  const items = groundItems[layer];
+  if (!items) return;
+  const key = `${x},${y}`;
+  const arr = items[key];
+  if (!arr) return;
+  const idx = arr.indexOf(item);
+  if (idx !== -1) arr.splice(idx, 1);
+  if (arr.length === 0) delete items[key];
+}
+
+/** Eat a corpse — reduces hunger and depletes corpse mass. */
+function eatCorpse(creature, corpse, cx, cy) {
+  const creatureMass = getCreatureMass(creature);
+  const corpseMass = corpse.mass || corpse.nutrition || 1;
+
+  // Hunger reduction proportional to corpse mass relative to predator mass
+  const mealValue = (corpseMass / creatureMass) * MEAL_HUNGER_REDUCTION;
+  creature.drives.hunger = Math.max(0, creature.drives.hunger - mealValue);
+
+  // Deplete corpse
+  const biteMass = creatureMass * BITE_MASS_FRACTION;
+  corpse.mass = (corpse.mass || corpseMass) - biteMass;
+
+  if (corpse.mass <= 0) {
+    removeGroundItem(state.player.layer, cx, cy, corpse);
+  }
+
+  creature.huntTarget = null; // no longer hunting
+}
+
+/** Get adjacent prey (within 1 tile). Returns the smallest viable prey or null. */
+function getAdjacentPrey(creature) {
+  let best = null;
+  let bestMass = Infinity;
+
+  // Check NPC creatures
+  const mons = monstersHere();
+  for (const other of mons) {
+    if (other === creature) continue;
+    if (other.hp <= 0) continue;
+    if (chebyshev(creature.x, creature.y, other.x, other.y) > 1) continue;
+    if (!isViablePrey(creature, other)) continue;
+    const m = getCreatureMass(other);
+    if (m < bestMass) { bestMass = m; best = other; }
+  }
+
+  // Check player
+  const player = state.player;
+  if (player && player.hp > 0) {
+    if (chebyshev(creature.x, creature.y, player.x, player.y) <= 1) {
+      if (isViablePrey(creature, player)) {
+        const m = getCreatureMass(player);
+        if (m < bestMass) { best = player; }
+      }
+    }
+  }
+
+  return best;
+}
+
+/** Perform a hunt attack on a target (player or NPC). */
+function performHuntAttack(creature, target) {
+  if (target.isPlayer) {
+    // Attack the player via existing monsterMelee
+    monsterMelee(creature);
+  } else {
+    // NPC-on-NPC attack: use simplified combat
+    performNPCAttack(creature, target);
+  }
+}
+
+/** Simplified NPC-on-NPC combat. */
+function performNPCAttack(attacker, defender) {
+  const atkBodyMap = getBodyMap(attacker);
+  if (!atkBodyMap) return;
+  const attacks = getAvailableAttacks(atkBodyMap);
+  if (attacks.length === 0) return;
+
+  const usedAttack = attacks[randi(attacks.length)];
+  const atkZone = atkBodyMap.find(z => z.key === usedAttack.sourceZone);
+
+  // Compute damage from physics
+  const dmg = computeStrikeDamage(attacker, atkZone);
+
+  // Simple hit check based on stats
+  const acc = monAcc(attacker);
+  const dodge = monDodge(defender);
+  if (!rollHit(acc, dodge)) return; // miss
+
+  // Select hit zone on defender
+  const defBodyMap = getBodyMap(defender);
+  if (!defBodyMap) {
+    // Fallback: direct HP damage
+    defender.hp = Math.max(0, defender.hp - dmg);
+    if (defender.hp <= 0) {
+      log(`The ${attacker.name} kills the ${defender.name}.`, 'muted');
+      placeItem(state.player.layer, defender.x, defender.y, {
+        id:       generateItemId(),
+        kind:     'corpse',
+        type:     'corpse',
+        name:     `${defender.name} Corpse`,
+        desc:     `${defender.name} Corpse — could be butchered or examined.`,
+        sprite:   'CORPSE',
+        weight:   2,
+        quantity: 1,
+        source:   defender.key,
+        nutrition: defender.hpMax,
+        mass:     defender.totalMass || 1,
+      });
+    }
+    return;
+  }
+
+  const hitZone = selectHitZone(defBodyMap);
+  if (!hitZone) return;
+
+  // Apply zone armor
+  const zoneArmor = (hitZone.structural || 0) * ARMOR_PER_STRUCTURAL_KG;
+  const finalDmg = Math.max(1, dmg - zoneArmor);
+
+  hitZone.hp = Math.max(0, (hitZone.hp || 0) - finalDmg);
+
+  // Reset clotting on hit
+  if (hitZone.clotting > 0) hitZone.clotting = 0;
+
+  // Spike defender's safety
+  applySafetyFromDamage(defender, finalDmg, attacker);
+
+  // Zone destruction
+  if (hitZone.hp <= 0 && !hitZone.destroyed) {
+    hitZone.hp = 0;
+    hitZone.destroyed = true;
+
+    // Blood dump from destroyed zone
+    if (defender.blood != null && defender.bloodMax > 0) {
+      const dump = hitZone.bloodShare || 0;
+      defender.blood -= dump;
+
+      const pathways = getPathways(defender);
+      let severedBandwidth = 0;
+      for (const pw of pathways) {
+        if (pw.from === hitZone.key || pw.to === hitZone.key) {
+          severedBandwidth += pw.bandwidth;
+        }
+      }
+      const burst = severedBandwidth * BURST_COEFF * defender.bloodMax;
+      defender.blood -= burst;
+      defender.blood = Math.max(0, defender.blood);
+      defender.bleedPenalty = computeBleedPenalty(defender);
+    }
+
+    // Death checks
+    if (hitZone.vital) {
+      defender.hp = 0;
+      defender.deathCause = 'vital';
+    } else if (checkNeuralDeath(defBodyMap)) {
+      defender.hp = 0;
+      defender.deathCause = 'neural';
+    } else if (defender.blood != null && defender.blood <= defender.bloodMax * BLOOD_DEATH_THRESHOLD) {
+      defender.hp = 0;
+      defender.deathCause = 'blood';
+    }
+
+    if (defender.hp <= 0) {
+      log(`The ${attacker.name} kills the ${defender.name}.`, 'muted');
+      // Drop a corpse for the predator (or others) to eat
+      placeItem(state.player.layer, defender.x, defender.y, {
+        id:       generateItemId(),
+        kind:     'corpse',
+        type:     'corpse',
+        name:     `${defender.name} Corpse`,
+        desc:     `${defender.name} Corpse — could be butchered or examined.`,
+        sprite:   'CORPSE',
+        weight:   2,
+        quantity: 1,
+        source:   defender.key,
+        nutrition: defender.hpMax,
+        mass:     defender.totalMass || 1,
+      });
+    }
+
+    // Locomotion check
+    if (hitZone.locomotion && !hasLocomotion(defBodyMap)) {
+      defender.immobilized = true;
+    }
+  }
+}
+
+/** Execute hunt behavior. */
+function executeHunt(creature) {
+  const layer = state.player.layer;
+
+  // Priority 1: Eat a corpse if standing on one
+  const corpseHere = getCorpseAt(layer, creature.x, creature.y);
+  if (corpseHere) {
+    eatCorpse(creature, corpseHere, creature.x, creature.y);
+    return true; // stayed in place to eat, counts as action taken
+  }
+
+  // Priority 2: Attack adjacent prey
+  const adjacentPrey = getAdjacentPrey(creature);
+  if (adjacentPrey) {
+    performHuntAttack(creature, adjacentPrey);
+    return true;
+  }
+
+  // Priority 3: Move toward nearest corpse (free food)
+  if (creature.detectedCorpses.length > 0) {
+    const nearest = creature.detectedCorpses[0];
+    const dir = directionToward(creature.x, creature.y, nearest.x, nearest.y);
+    return moveInDirection(creature, dir);
+  }
+
+  // Priority 4: Chase detected prey
+  if (creature.detectedPrey.length > 0) {
+    return chasePrey(creature);
+  }
+
+  // Priority 5: No food detected — hungry wander
+  executeWander(creature);
+  return false;
+}
+
+// ==================== FORAGE SYSTEM (I-C) ====================
+
+/** Find the nearest food tile within search radius. Returns {x, y} or null. */
+function findNearestFoodTile(cx, cy) {
+  const layer = state.player.layer;
+  const grid = worlds[layer];
+  if (!grid) return null;
+
+  for (let r = 0; r <= FORAGE_SEARCH_RADIUS; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const nx = cx + dx, ny = cy + dy;
+        if (!inBounds(layer, nx, ny)) continue;
+        const ground = grid[ny][nx];
+        const cover = getCover(layer, nx, ny);
+        if (isFoodTile(ground, cover)) {
+          return { x: nx, y: ny };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+/** Check if tile at (x,y) is a food tile. */
+function tileIsFood(x, y) {
+  const layer = state.player.layer;
+  if (!inBounds(layer, x, y)) return false;
+  const ground = worlds[layer][y][x];
+  const cover = getCover(layer, x, y);
+  return isFoodTile(ground, cover);
+}
+
+/** Execute graze — herbivore standing on food tile, reducing hunger. */
+function executeGraze(creature) {
+  creature.drives.hunger = Math.max(0, creature.drives.hunger - GRAZE_HUNGER_REDUCTION);
+}
+
+/** Execute forage behavior (herbivores). */
+function executeForage(creature) {
+  // If standing on a food tile, graze
+  if (tileIsFood(creature.x, creature.y)) {
+    executeGraze(creature);
+    return true;
+  }
+
+  // Otherwise, move toward nearest food tile
+  const nearestFood = findNearestFoodTile(creature.x, creature.y);
+  if (nearestFood) {
+    const dir = directionToward(creature.x, creature.y, nearestFood.x, nearestFood.y);
+    return moveInDirection(creature, dir);
+  }
+
+  // No food detected — wander (looking for food)
+  executeWander(creature);
+  return false;
+}
+
 // ==================== WANDER SYSTEM ====================
 
 /** Pick a new wander direction with spatial biases. */
@@ -783,6 +1343,10 @@ function runCreatureAI(creature) {
   detectThreats(creature);
   applySafetyFromThreats(creature);
 
+  // Prey and corpse detection (I-C)
+  detectPrey(creature);
+  detectCorpses(creature);
+
   // Select behavior
   const behavior = selectBehavior(creature);
   creature.currentBehavior = behavior;
@@ -790,26 +1354,34 @@ function runCreatureAI(creature) {
   // Execute behavior
   let moved = false;
   switch (behavior) {
-    case 'flee': moved = executeFlee(creature); break;
+    case 'flee':   moved = executeFlee(creature); break;
+    case 'hunt':   moved = executeHunt(creature); break;
+    case 'forage': moved = executeForage(creature); break;
     case 'wander': executeWander(creature); break;
-    // Future: case 'hunt': executeHunt(creature); break;
     // Future: case 'rest': executeRest(creature); break;
   }
 
-  // Adjacency combat: skip if fleeing AND successfully moved away.
-  // A cornered fleeing creature that couldn't move WILL fight back.
-  if (!(behavior === 'flee' && moved)) {
+  // Adjacency combat: skip if fleeing AND successfully moved away,
+  // or if hunting (hunt handles its own combat).
+  if (!(behavior === 'flee' && moved) && behavior !== 'hunt') {
     adjacencyCombatCheck(creature);
   }
 }
 
 // ==================== BONUS MOVE (relative speed system) ====================
 // Called after all normal enemy actions for enemies with PTW ratio > player's.
-// Movement only — no attacks. Uses wander movement logic.
+// Movement only — no attacks. Uses current behavior's movement logic.
 function performBonusMove(mon){
   if (mon.immobilized) return;
-  // Just take another wander step
-  executeWander(mon);
+  // Bonus move respects current behavior for movement direction
+  if (mon.currentBehavior === 'hunt' && mon.huntTarget) {
+    const dir = directionToward(mon.x, mon.y, mon.huntTarget.x, mon.huntTarget.y);
+    if (!moveInDirection(mon, dir)) executeWander(mon);
+  } else if (mon.currentBehavior === 'flee') {
+    executeFlee(mon);
+  } else {
+    executeWander(mon);
+  }
 }
 
 // ==================== END PLAYER TURN ====================
@@ -1209,10 +1781,54 @@ function moveMonsterTowardPlayer(mon){ moveMonsterToward(mon, state.player.x, st
 // enemyAct is replaced by runCreatureAI — kept as alias for any external callers
 function enemyAct(mon){ runCreatureAI(mon); }
 
+// ==================== DEBUG / TESTING HELPERS ====================
+// Call from console: import('./enemy-ai.js').then(m => m.debugEcology())
+// Or assign to window in main.js: window.debugEcology = debugEcology
+
+/** Dump drive state and behavior for all creatures on the active layer. */
+function debugEcology() {
+  const mons = monstersHere();
+  const summary = [];
+  for (const m of mons) {
+    if (m.hp <= 0) continue;
+    summary.push({
+      name: m.name,
+      key: m.key,
+      diet: m.diet,
+      pos: `${m.x},${m.y}`,
+      behavior: m.currentBehavior,
+      hunger: m.drives.hunger.toFixed(3),
+      safety: m.drives.safety.toFixed(3),
+      prey: m.detectedPrey ? m.detectedPrey.length : 0,
+      corpses: m.detectedCorpses ? m.detectedCorpses.length : 0,
+      huntTarget: m.huntTarget ? (m.huntTarget.name || m.huntTarget.key || 'player') : null,
+      detRange: Math.round(getDetectionRange(m)),
+    });
+  }
+  console.table(summary);
+  return summary;
+}
+
+/** Force all predators on the active layer to high hunger (for testing hunts). */
+function debugForceHunger(value = 0.85) {
+  const mons = monstersHere();
+  let count = 0;
+  for (const m of mons) {
+    if (m.hp <= 0) continue;
+    if (m.diet === 'predator') {
+      m.drives.hunger = value;
+      count++;
+    }
+  }
+  console.log(`Set hunger to ${value} on ${count} predators.`);
+  return count;
+}
+
 export { endPlayerTurn, enemyAct, monsterMelee, playerInTerritory, monInOwnTerritory,
          canSeePlayer, canSeePlayerTile, monsterViewRadius,
          syncSwarmAI, mushroomPackAI, mushroomTouch, wanderInTerritory, moveMonsterToward,
          wanderMonster, moveMonsterTowardPlayer,
          hasCladeTerritory, wouldExceedTerritory,
          isWaterLocked, isWaterTile, processBleed,
-         applySafetyFromDamage };
+         applySafetyFromDamage,
+         debugEcology, debugForceHunger };
