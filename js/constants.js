@@ -607,6 +607,10 @@ export const REST_RECOVERY_CRITICAL = 0.003; // rest decreases per turn while re
 // --- Rest Interactions (I-D) ---
 export const REST_EATING_BONUS = 0.05;       // eating reduces rest slightly (nutrition aids recovery)
 
+// --- Zone Healing (J) ---
+export const HEAL_BASE_RATE      = 0.15;     // base HP restored per zone per turn at 100% blood
+export const HEAL_REST_MULTIPLIER = 3.0;     // resting creatures heal 3× faster
+
 // --- Hunt/Forage (I-C) ---
 export const CHASE_LEASH_BASE        = 8;     // minimum chase distance (tiles) even at low hunger
 export const CHASE_LEASH_HUNGER_MULT = 15;    // additional chase tiles at hunger 1.0

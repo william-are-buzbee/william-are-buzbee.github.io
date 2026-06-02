@@ -18,7 +18,8 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          FORAGE_SEARCH_RADIUS,
          REST_BLOOD_IMPAIRED, REST_BLOOD_WEAKENED, REST_BLOOD_CRITICAL, REST_WOUND_COEFF,
          REST_RECOVERY_NORMAL, REST_RECOVERY_WEAKENED, REST_RECOVERY_CRITICAL,
-         REST_EATING_BONUS, REST_THRESHOLD } from './constants.js';
+         REST_EATING_BONUS, REST_THRESHOLD,
+         HEAL_BASE_RATE, HEAL_REST_MULTIPLIER } from './constants.js';
 import { T, isWalkable, isFoodTile } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -123,6 +124,48 @@ function processBleed(creature, isPlayer) {
   }
 
   return false;
+}
+
+// ==================== ZONE HEALING — PER-TURN PROCESSING (Prompt J) ====================
+// Wounded zones slowly recover HP each turn, gated by blood availability.
+// Resting creatures heal 3× faster. Destroyed zones (0 HP) do not heal.
+
+function getHealingRate(creature) {
+  if (creature.blood == null || creature.bloodMax == null || creature.bloodMax <= 0) return 0;
+  const bloodFraction = creature.blood / creature.bloodMax;
+
+  // No healing below 50% blood
+  if (bloodFraction <= 0.50) return 0;
+
+  // Healing scales linearly from 50% to 100% blood
+  const bloodScalar = (bloodFraction - 0.50) / 0.50;  // 0.0 at 50%, 1.0 at 100%
+  let rate = HEAL_BASE_RATE * bloodScalar;
+
+  // Resting creatures heal faster
+  if (creature.currentBehavior === 'rest') {
+    rate *= HEAL_REST_MULTIPLIER;
+  }
+
+  return rate;
+}
+
+function applyHealing(creature) {
+  const rate = getHealingRate(creature);
+  if (rate <= 0) return;
+
+  const bodyMap = creature.bodyMap;
+  if (!bodyMap) return;
+
+  for (const zone of bodyMap) {
+    // Skip destroyed zones — no healing at 0 HP
+    if (zone.hp <= 0) continue;
+
+    // Skip fully healed zones
+    if (zone.hp >= zone.maxHp) continue;
+
+    // Apply healing
+    zone.hp = Math.min(zone.maxHp, zone.hp + rate);
+  }
 }
 
 let turnCount = 0;
@@ -1540,6 +1583,11 @@ function endPlayerTurn(action){
     return;
   }
 
+  // Zone healing (Prompt J) — player heals wounded zones after bleed
+  // Set currentBehavior so getHealingRate can check for rest bonus
+  state.player.currentBehavior = action === 'rest' ? 'rest' : action;
+  applyHealing(state.player);
+
   // Enemies act — only on current layer, town cells are safe
   if (!isTownCell(state.player.layer)){
     const mons = monstersHere();
@@ -1551,6 +1599,9 @@ function endPlayerTurn(action){
         m.hp = 0;  // blood loss death
         continue;
       }
+
+      // Zone healing (Prompt J) — monsters heal wounded zones after bleed
+      applyHealing(m);
 
       // ---- Relative speed system (PTW-based) ----
       const monPTW  = m.strength / m.siz;
