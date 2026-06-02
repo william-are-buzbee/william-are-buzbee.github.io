@@ -15,7 +15,10 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          SAFETY_PROXIMITY_COEFF, SAFETY_DAMAGE_COEFF,
          CHASE_LEASH_BASE, CHASE_LEASH_HUNGER_MULT, MEAL_HUNGER_REDUCTION,
          BITE_MASS_FRACTION, GRAZE_HUNGER_REDUCTION, HERBIVORE_SAFETY_BONUS,
-         FORAGE_SEARCH_RADIUS } from './constants.js';
+         FORAGE_SEARCH_RADIUS,
+         REST_BLOOD_IMPAIRED, REST_BLOOD_WEAKENED, REST_BLOOD_CRITICAL, REST_WOUND_COEFF,
+         REST_RECOVERY_NORMAL, REST_RECOVERY_WEAKENED, REST_RECOVERY_CRITICAL,
+         REST_EATING_BONUS, REST_THRESHOLD } from './constants.js';
 import { T, isWalkable, isFoodTile } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -298,8 +301,43 @@ function updateDrives(creature) {
   // Safety: decays toward 0 (threats spike it via applySafetyFromThreats)
   creature.drives.safety = Math.max(0, creature.drives.safety - SAFETY_DECAY_RATE);
 
-  // Rest: increases slowly (wounds accelerate it in future prompts)
-  creature.drives.rest = Math.min(1.0, creature.drives.rest + REST_BASE_RATE);
+  // Rest: base rate + wound acceleration + blood acceleration (I-D)
+  const bloodAccel = getBloodRestAcceleration(creature);
+  const woundAccel = getWoundRestAcceleration(creature);
+  const restRate = REST_BASE_RATE + bloodAccel + woundAccel;
+  creature.drives.rest = Math.min(1.0, creature.drives.rest + restRate);
+}
+
+/** Rest acceleration from blood loss (I-D). Mirrors bleed penalty thresholds. */
+function getBloodRestAcceleration(creature) {
+  if (creature.blood == null || creature.bloodMax == null || creature.bloodMax <= 0) return 0;
+  const bloodFraction = creature.blood / creature.bloodMax;
+
+  if (bloodFraction > 0.75) return 0;
+  if (bloodFraction > 0.50) return REST_BLOOD_IMPAIRED;
+  if (bloodFraction > 0.25) return REST_BLOOD_WEAKENED;
+  return REST_BLOOD_CRITICAL;
+}
+
+/** Rest acceleration from zone damage (I-D). Proportional to fraction of zones wounded. */
+function getWoundRestAcceleration(creature) {
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return 0;
+
+  let damagedZones = 0;
+  let totalZones = 0;
+
+  for (const zone of bodyMap) {
+    totalZones++;
+    if (zone.hp != null && zone.maxHp != null && zone.hp < zone.maxHp) {
+      damagedZones++;
+    } else if (zone.destroyed) {
+      damagedZones++;
+    }
+  }
+
+  if (totalZones === 0) return 0;
+  return (damagedZones / totalZones) * REST_WOUND_COEFF;
 }
 
 /** Get the dominant active drive. Highest urgency above threshold wins. */
@@ -318,7 +356,9 @@ function getDominantDrive(creature) {
   if (drives.hunger > HUNGER_THRESHOLD) {
     active.push({ drive: 'hunger', urgency: drives.hunger });
   }
-  // I-D: if (drives.rest > REST_THRESHOLD) active.push(...)
+  if (drives.rest > REST_THRESHOLD) {
+    active.push({ drive: 'rest', urgency: drives.rest });
+  }
 
   if (active.length === 0) return { drive: 'none', urgency: 0 };
 
@@ -337,7 +377,7 @@ function selectBehavior(creature) {
   switch (dominant.drive) {
     case 'safety': return 'flee';
     case 'hunger': return creature.diet === 'predator' ? 'hunt' : 'forage';
-    // I-D will add: case 'rest': return 'rest';
+    case 'rest':   return 'rest';
     default: return 'wander';
   }
 }
@@ -911,6 +951,9 @@ function eatCorpse(creature, corpse, cx, cy) {
   const mealValue = (corpseMass / creatureMass) * MEAL_HUNGER_REDUCTION;
   creature.drives.hunger = Math.max(0, creature.drives.hunger - mealValue);
 
+  // Eating aids recovery — reduce rest slightly (I-D)
+  creature.drives.rest = Math.max(0, creature.drives.rest - REST_EATING_BONUS);
+
   // Deplete corpse
   const biteMass = creatureMass * BITE_MASS_FRACTION;
   corpse.mass = (corpse.mass || corpseMass) - biteMass;
@@ -1174,6 +1217,30 @@ function executeForage(creature) {
   return false;
 }
 
+// ==================== REST SYSTEM (I-D) ====================
+
+/** How fast the rest drive decreases while actively resting. Blood level determines recovery speed. */
+function restRecoveryRate(creature) {
+  if (creature.blood == null || creature.bloodMax == null || creature.bloodMax <= 0) {
+    return REST_RECOVERY_NORMAL;
+  }
+  const bloodFraction = creature.blood / creature.bloodMax;
+  if (bloodFraction <= 0.25) return REST_RECOVERY_CRITICAL;
+  if (bloodFraction <= 0.50) return REST_RECOVERY_WEAKENED;
+  return REST_RECOVERY_NORMAL;
+}
+
+/** Execute rest behavior — creature stops moving, rest drive decreases. */
+function executeRest(creature) {
+  // Apply rest recovery (rest drive decreases while resting)
+  const recovery = restRecoveryRate(creature);
+  creature.drives.rest = Math.max(0, creature.drives.rest - recovery);
+
+  // Don't move. The creature stays in place. Facing doesn't change.
+  // The existing bleed system handles blood regeneration and clotting per turn.
+  return false; // did not move
+}
+
 // ==================== WANDER SYSTEM ====================
 
 /** Pick a new wander direction with spatial biases. */
@@ -1357,8 +1424,8 @@ function runCreatureAI(creature) {
     case 'flee':   moved = executeFlee(creature); break;
     case 'hunt':   moved = executeHunt(creature); break;
     case 'forage': moved = executeForage(creature); break;
+    case 'rest':   moved = executeRest(creature); break;
     case 'wander': executeWander(creature); break;
-    // Future: case 'rest': executeRest(creature); break;
   }
 
   // Adjacency combat: skip if fleeing AND successfully moved away,
@@ -1373,6 +1440,7 @@ function runCreatureAI(creature) {
 // Movement only — no attacks. Uses current behavior's movement logic.
 function performBonusMove(mon){
   if (mon.immobilized) return;
+  if (mon.currentBehavior === 'rest') return; // resting creatures don't move
   // Bonus move respects current behavior for movement direction
   if (mon.currentBehavior === 'hunt' && mon.huntTarget) {
     const dir = directionToward(mon.x, mon.y, mon.huntTarget.x, mon.huntTarget.y);
@@ -1799,6 +1867,7 @@ function debugEcology() {
       behavior: m.currentBehavior,
       hunger: m.drives.hunger.toFixed(3),
       safety: m.drives.safety.toFixed(3),
+      rest: m.drives.rest.toFixed(3),
       prey: m.detectedPrey ? m.detectedPrey.length : 0,
       corpses: m.detectedCorpses ? m.detectedCorpses.length : 0,
       huntTarget: m.huntTarget ? (m.huntTarget.name || m.huntTarget.key || 'player') : null,

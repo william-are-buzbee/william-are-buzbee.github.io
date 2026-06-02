@@ -593,6 +593,20 @@ export const VISUAL_RANGE_MULT    = 1.5;      // visual 5 → 7.5 tile detection
 export const SAFETY_PROXIMITY_COEFF = 0.15;   // how much proximity-based detection spikes safety per turn
 export const SAFETY_DAMAGE_COEFF    = 3.0;    // how much taking damage spikes safety (multiplied by HP fraction)
 
+// --- Rest Acceleration (I-D) ---
+export const REST_BLOOD_IMPAIRED   = 0.01;   // rest accel per turn at 50-75% blood
+export const REST_BLOOD_WEAKENED   = 0.04;   // rest accel per turn at 25-50% blood
+export const REST_BLOOD_CRITICAL   = 0.10;   // rest accel per turn at 10-25% blood
+export const REST_WOUND_COEFF      = 0.02;   // rest accel per turn × fraction of zones damaged
+
+// --- Rest Recovery (I-D) ---
+export const REST_RECOVERY_NORMAL   = 0.015; // rest decreases per turn while resting at >50% blood
+export const REST_RECOVERY_WEAKENED = 0.008; // rest decreases per turn while resting at 25-50% blood
+export const REST_RECOVERY_CRITICAL = 0.003; // rest decreases per turn while resting at 10-25% blood
+
+// --- Rest Interactions (I-D) ---
+export const REST_EATING_BONUS = 0.05;       // eating reduces rest slightly (nutrition aids recovery)
+
 // --- Hunt/Forage (I-C) ---
 export const CHASE_LEASH_BASE        = 8;     // minimum chase distance (tiles) even at low hunger
 export const CHASE_LEASH_HUNGER_MULT = 15;    // additional chase tiles at hunger 1.0
