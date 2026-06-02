@@ -673,6 +673,10 @@ function spawnMonster(key){
     // Chemotroph swarm phase tracking
     swarmPhase: 'passive',    // passive | coalescing | mobbing
     coalesceTick: 0,          // counter for slow drift during coalescing
+    // Prompt K-B: water movement — only cave_crab (large herbivore) can enter water
+    canEnterWater: (key === 'cave_crab'),
+    // Prompt K-B: flee retaliation — tracks whether creature took damage this turn
+    tookDamageThisTurn: false,
   };
   // Apply personality stat modifiers
   if (personality === 'ancient' && key === 'treant'){

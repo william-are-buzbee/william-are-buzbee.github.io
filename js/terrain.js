@@ -272,3 +272,12 @@ export function isFoodTile(groundType, coverType){
   if (coverType && FOOD_COVER.has(coverType)) return true;
   return FOOD_GROUND.has(groundType);
 }
+
+// ==================== WATER TILE CLASSIFICATION (K-B) ====================
+// True if the ground type is a water tile. Used by player movement validation
+// to gate water entry on the canEnterWater flag.
+const WATER_GROUND = new Set([T.WATER, T.DEEP_WATER, T.UWATER]);
+
+export function isWaterGround(groundType){
+  return WATER_GROUND.has(groundType);
+}

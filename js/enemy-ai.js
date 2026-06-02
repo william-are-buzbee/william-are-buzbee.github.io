@@ -20,7 +20,7 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          REST_RECOVERY_NORMAL, REST_RECOVERY_WEAKENED, REST_RECOVERY_CRITICAL,
          REST_EATING_BONUS, REST_THRESHOLD,
          HEAL_BASE_RATE, HEAL_REST_MULTIPLIER } from './constants.js';
-import { T, isWalkable, isFoodTile } from './terrain.js';
+import { T, isWalkable, isFoodTile, terrainInfo } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
 import { monAcc, monDodge, monDamage, monCritChance, monCritMult, WANDER_PROFILES, DEFAULT_WANDER_PROFILE } from './monsters.js';
@@ -303,7 +303,17 @@ function canMoveTo(mon, tx, ty) {
   if (!inBounds(layer, tx, ty)) return false;
   const ground = worlds[layer][ty][tx];
   const cover = getCover(layer, tx, ty);
-  if (!isWalkable(ground, cover)) return false;
+  // Prompt K-B: water tiles are passable for creatures with canEnterWater
+  if (WATER_TILES.has(ground)) {
+    if (mon.canEnterWater !== true) return false;
+    // Water creature still needs cover to be walkable (if any)
+    if (cover) {
+      const ci = terrainInfo(cover);
+      if (!ci.walk) return false;
+    }
+  } else {
+    if (!isWalkable(ground, cover)) return false;
+  }
   // Water-locked creatures can't leave water
   if (isWaterLocked(mon) && !WATER_TILES.has(ground)) return false;
   // Can't step on another monster
@@ -559,6 +569,9 @@ function applySafetyFromThreats(creature) {
 /** Spike safety when creature takes damage. Called from combat resolution. */
 function applySafetyFromDamage(creature, damageAmount, attacker) {
   if (!creature.drives) return;
+
+  // Prompt K-B: mark creature as having taken damage this turn for flee retaliation
+  creature.tookDamageThisTurn = true;
   // Compute total max HP from surviving body map zones
   const bodyMap = getBodyMap(creature);
   let totalMaxHp = creature.hpMax || 1;
@@ -630,13 +643,16 @@ function executeStandardFlee(creature) {
   // Direction away from threat
   const fleeDir = directionAwayFrom(creature.x, creature.y, threat.x, threat.y);
 
-  // Try primary direction first, then +/- 1 (45° off), then +/- 2 (90° off)
+  // Try primary direction first, then +/- 1 (45° off), then +/- 2 (90° off),
+  // then +/- 3 (135° off) — steep angle fallback to slip around obstacles
   const candidates = [
     fleeDir,
     (fleeDir + 1) % 8,
     (fleeDir + 7) % 8,
     (fleeDir + 2) % 8,
     (fleeDir + 6) % 8,
+    (fleeDir + 3) % 8,
+    (fleeDir + 5) % 8,
   ];
 
   for (const dir of candidates) {
@@ -668,7 +684,7 @@ function executeFleeToWater(creature) {
   if (isNearWater(creature.x, creature.y)) {
     const awayDir = threat ? directionAwayFrom(creature.x, creature.y, threat.x, threat.y) : (creature.wander ? creature.wander.direction : 0);
     // Try directions near awayDir that keep us near water
-    const candidates = [awayDir, (awayDir + 1) % 8, (awayDir + 7) % 8, (awayDir + 2) % 8, (awayDir + 6) % 8];
+    const candidates = [awayDir, (awayDir + 1) % 8, (awayDir + 7) % 8, (awayDir + 2) % 8, (awayDir + 6) % 8, (awayDir + 3) % 8, (awayDir + 5) % 8];
     for (const dir of candidates) {
       const dx = DIRECTION_DELTAS[dir].x;
       const dy = DIRECTION_DELTAS[dir].y;
@@ -708,7 +724,7 @@ function executeFleeToWater(creature) {
   const nearestWater = creature._cachedWater;
   if (nearestWater) {
     const waterDir = directionToward(creature.x, creature.y, nearestWater.x, nearestWater.y);
-    const candidates = [waterDir, (waterDir + 1) % 8, (waterDir + 7) % 8];
+    const candidates = [waterDir, (waterDir + 1) % 8, (waterDir + 7) % 8, (waterDir + 2) % 8, (waterDir + 6) % 8, (waterDir + 3) % 8, (waterDir + 5) % 8];
     for (const dir of candidates) {
       const dx = DIRECTION_DELTAS[dir].x;
       const dy = DIRECTION_DELTAS[dir].y;
@@ -745,7 +761,7 @@ function executeFleeToHome(creature) {
 
   // Head toward home
   const homeDir = directionToward(creature.x, creature.y, home.x, home.y);
-  const candidates = [homeDir, (homeDir + 1) % 8, (homeDir + 7) % 8];
+  const candidates = [homeDir, (homeDir + 1) % 8, (homeDir + 7) % 8, (homeDir + 2) % 8, (homeDir + 6) % 8, (homeDir + 3) % 8, (homeDir + 5) % 8];
   for (const dir of candidates) {
     const dx = DIRECTION_DELTAS[dir].x;
     const dy = DIRECTION_DELTAS[dir].y;
@@ -1425,7 +1441,10 @@ function adjacencyCombatCheck(creature) {
   // cave_crab (large herbivore) has shove/kick which are defensive only.
   // hare (small herbivore) has no attacks at all.
   // mushroom uses enzyme touch, not standard melee.
-  if (creature.key === 'cave_crab' || creature.key === 'hare' || creature.key === 'mushroom') return;
+  // Prompt K-B: herbivores that took damage this turn DO retaliate.
+  if (creature.key === 'cave_crab' || creature.key === 'hare' || creature.key === 'mushroom') {
+    if (!creature.tookDamageThisTurn) return;
+  }
 
   // Creature with attacks is adjacent to player — attack
   monsterMelee(creature);
@@ -1471,11 +1490,16 @@ function runCreatureAI(creature) {
     case 'wander': executeWander(creature); break;
   }
 
-  // Adjacency combat: skip if fleeing AND successfully moved away,
+  // Adjacency combat: skip if fleeing AND successfully moved away AND was NOT hit this turn,
   // or if hunting (hunt handles its own combat).
-  if (!(behavior === 'flee' && moved) && behavior !== 'hunt') {
+  // Prompt K-B: fleeing creatures that took damage this turn retaliate.
+  const fleeingCleanly = (behavior === 'flee' && moved && !creature.tookDamageThisTurn);
+  if (!fleeingCleanly && behavior !== 'hunt') {
     adjacencyCombatCheck(creature);
   }
+
+  // Prompt K-B: reset per-turn damage flag AFTER combat check
+  creature.tookDamageThisTurn = false;
 }
 
 // ==================== BONUS MOVE (relative speed system) ====================

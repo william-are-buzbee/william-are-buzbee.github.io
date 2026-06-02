@@ -66,6 +66,9 @@ function freshPlayer(speciesKey, colorPalette){
   p.diet = PLAYER_DIET_MAP[creatureKey] || 'predator';
   p.fleeMode = PLAYER_FLEE_MAP[creatureKey] || 'standard';
   p.wanderProfile = { ...(WANDER_PROFILES[creatureKey] || DEFAULT_WANDER_PROFILE) };
+  // Prompt K-B: water movement — only cave_crab (shaleback) can enter water tiles
+  const PLAYER_WATER_MAP = { cave_crab: true };
+  p.canEnterWater = PLAYER_WATER_MAP[creatureKey] || false;
   // Starter inventory
   p.inventory.push({kind:'food', key:'apple', weight:1});
   p.inventory.push({kind:'food', key:'apple', weight:1});
