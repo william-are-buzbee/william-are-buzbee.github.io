@@ -12,7 +12,7 @@ import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion,
 import { terrainName } from './terrain.js';
 import { inBounds, getCover, monsterAt as worldMonsterAt } from './world-state.js';
 import { getItems } from './ground-items.js';
-import { setOnPlayerDeathCallback } from './enemy-ai.js';
+import { setOnPlayerDeathCallback, debugEcology, debugForceHunger } from './enemy-ai.js';
 import { setOnVictoryCallback, toggleStealth } from './combat.js';
 import { useAction, showHelp, examineTile, readBook } from './interactions.js';
 import { log } from './log.js';
@@ -467,3 +467,11 @@ drawTitleBackdrop();
 
 // ==================== STARTUP ====================
 updateTitleButtons();
+
+// ==================== DEBUG / ECOLOGY TESTING ====================
+// Console helpers — call from browser devtools:
+//   dbg()        → table of all creature drives, behavior, prey counts
+//   fh(0.85)     → force all predators to hunger 0.85 (triggers hunting)
+//   fh(0.95)     → starving — extended chase, fights through damage
+window.dbg = debugEcology;
+window.fh  = debugForceHunger;

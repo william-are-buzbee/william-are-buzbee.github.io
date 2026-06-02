@@ -252,6 +252,19 @@ function serializeMonsters(allLayers) {
       delete out.threatSource;
       // detectedThreats is recomputed each turn — don't persist
       delete out.detectedThreats;
+      // Prompt I-C: huntTarget is an entity reference — save as ID
+      if (mon.huntTarget && mon.huntTarget.isPlayer) {
+        out._huntTargetRef = 'player';
+      } else if (mon.huntTarget && mon.huntTarget.key) {
+        // Save enough info to attempt reconnection (may not survive if target dies)
+        out._huntTargetRef = null; // NPC targets are transient — don't persist
+      } else {
+        out._huntTargetRef = null;
+      }
+      delete out.huntTarget;
+      // detectedPrey and detectedCorpses are recomputed each turn — don't persist
+      delete out.detectedPrey;
+      delete out.detectedCorpses;
       serialized.push(out);
     }
     result[li] = serialized;
@@ -351,6 +364,15 @@ function deserializeMonsters(allLayers) {
           const FLEE_MAP = { cave_crab: 'water', ambush_pred: 'home' };
           mon.fleeMode = FLEE_MAP[mon.key] || 'standard';
         }
+        // Prompt I-C: restore hunt tracking state
+        mon.detectedPrey = [];      // recomputed each turn
+        mon.detectedCorpses = [];   // recomputed each turn
+        if (mon._huntTargetRef === 'player') {
+          mon.huntTarget = state.player;
+        } else {
+          mon.huntTarget = null;
+        }
+        delete mon._huntTargetRef;
       }
     }
   }

@@ -778,6 +778,11 @@ function spawnMonster(key){
   m.detectedThreats = [];
   m.threatSource = null;
 
+  // ── Hunt/forage state (Prompt I-C) ──
+  m.detectedPrey = [];
+  m.detectedCorpses = [];
+  m.huntTarget = null;
+
   // ── Wander profile and state (Prompt I-A) ──
   const wp = WANDER_PROFILES[key] || DEFAULT_WANDER_PROFILE;
   m.wanderProfile = { ...wp, homePosition: null };

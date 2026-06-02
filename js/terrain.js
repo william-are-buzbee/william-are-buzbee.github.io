@@ -259,3 +259,16 @@ export function tileHasVisionPenalty(ground, coverType){
   if (!coverType) return false;
   return !!terrainInfo(coverType).visionPenalty;
 }
+
+// ==================== FOOD TILE CLASSIFICATION (I-C) ====================
+// A "food tile" is any tile with organic vegetation an herbivore could graze.
+// Ground types with inherent vegetation, or any tile with organic cover.
+
+const FOOD_GROUND = new Set([T.GRASS, T.MUD, T.FUNGAL_GRASS]);
+const FOOD_COVER  = new Set([T.FOREST, T.MUSHFOREST, T.WHEAT]);
+
+/** True if this ground+cover combination counts as a food tile for herbivores. */
+export function isFoodTile(groundType, coverType){
+  if (coverType && FOOD_COVER.has(coverType)) return true;
+  return FOOD_GROUND.has(groundType);
+}
