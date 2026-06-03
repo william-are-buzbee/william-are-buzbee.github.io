@@ -616,6 +616,19 @@ const DEFAULT_WANDER_PROFILE = {
   waterAffinity: 0.0,
 };
 
+// ==================== VISION CONE WIDTHS (Prompt L-A) ====================
+// Per-creature vision cone width for the L-B perception system.
+// Separate from VISION_PROFILES.coneAngle (used by FOV / AI detection).
+// Stored on each creature instance as visionConeWidth.
+const VISION_CONE_WIDTHS = {
+  wolf:        120,   // forward-focused predator
+  dire_wolf:   100,   // narrow, focused apex hunter
+  hare:        270,   // near-panoramic prey vision
+  cave_crab:   200,   // wide-field large herbivore
+  ambush_pred: 240,   // multi-directional sensor coverage
+  mushroom:    360,   // omnidirectional (blindsight)
+};
+
 function spawnMonster(key){
   let d;
   if (key === 'dread_king') d = DREAD_KING;
@@ -677,6 +690,16 @@ function spawnMonster(key){
     canEnterWater: (key === 'cave_crab'),
     // Prompt K-B: flee retaliation — tracks whether creature took damage this turn
     tookDamageThisTurn: false,
+    // ── Signal emission state (Prompt L-A) ──
+    movedThisTurn: false,
+    inCombatThisTurn: false,
+    inWater: false,
+    visionConeWidth: VISION_CONE_WIDTHS[key] || 120,
+    signals: {
+      chemical: 0,
+      vibration: { ground: 0, air: 0, water: 0 },
+      visual: 0,
+    },
   };
   // Apply personality stat modifiers
   if (personality === 'ancient' && key === 'treant'){

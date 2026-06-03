@@ -64,12 +64,14 @@ function attemptMove(dx, dy){
 
   const mon = monsterAt(nx, ny, state.player.layer);
   if (mon){
+    state.player.inCombatThisTurn = true;  // Prompt L-A
     const didHit = playerAttack(mon); endPlayerTurn(didHit ? 'attack' : 'miss'); return;
   }
   const ground = worlds[state.player.layer][ny][nx];
   const cover = getCover(state.player.layer, nx, ny);
   if (!isWalkable(ground, cover)){ log(`Blocked by ${terrainName(ground, cover)}.`, 'muted'); return; }
   state.player.x = nx; state.player.y = ny;
+  state.player.movedThisTurn = true;  // Prompt L-A
   const f = getFeature(state.player.layer, nx, ny);
   if (f){
     if (f.type === 'sign') log('A signpost — press R to read.', 'muted');

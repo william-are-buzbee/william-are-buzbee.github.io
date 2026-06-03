@@ -33,6 +33,7 @@ import { fedDrainFor } from './player-actions.js';
 import { advanceTick, getTimePhase } from './time-cycle.js';
 import { saveGame } from './save-load.js';
 import { updatePlayerFOV, hasLOS } from './fov.js';
+import { computeSignals } from './signals.js';
 
 // Forward references — set by main.js
 let _onPlayerDeathCallback = null;
@@ -41,6 +42,13 @@ let _useActionCallback = null;
 export function setUseActionCallback(fn){ _useActionCallback = fn; }
 
 function monstersHere(){ return monsters[state.player.layer] || []; }
+
+// ==================== WATER STATE HELPER (Prompt L-A) ====================
+// Update creature.inWater based on current tile. Called after movement.
+function _updateInWater(creature) {
+  const layer = creature.layer != null ? creature.layer : state.player.layer;
+  creature.inWater = isWaterTile(layer, creature.x, creature.y);
+}
 
 // ==================== BLOOD SYSTEM — PER-TURN PROCESSING ====================
 // Runs once per turn for each creature (player or monster).
@@ -572,6 +580,8 @@ function applySafetyFromDamage(creature, damageAmount, attacker) {
 
   // Prompt K-B: mark creature as having taken damage this turn for flee retaliation
   creature.tookDamageThisTurn = true;
+  // Prompt L-A: creature is in combat (was attacked)
+  creature.inCombatThisTurn = true;
   // Compute total max HP from surviving body map zones
   const bodyMap = getBodyMap(creature);
   let totalMaxHp = creature.hpMax || 1;
@@ -664,6 +674,7 @@ function executeStandardFlee(creature) {
     if (canMoveTo(creature, tx, ty)) {
       creature.x = tx;
       creature.y = ty;
+      creature.movedThisTurn = true;  // Prompt L-A
       if (creature.facing) {
         creature.facing.dx = dx;
         creature.facing.dy = dy;
@@ -693,6 +704,7 @@ function executeFleeToWater(creature) {
       if (canMoveTo(creature, tx, ty) && isNearWater(tx, ty)) {
         creature.x = tx;
         creature.y = ty;
+        creature.movedThisTurn = true;  // Prompt L-A
         if (creature.facing) { creature.facing.dx = dx; creature.facing.dy = dy; }
         return true;
       }
@@ -706,6 +718,7 @@ function executeFleeToWater(creature) {
       if (canMoveTo(creature, tx, ty)) {
         creature.x = tx;
         creature.y = ty;
+        creature.movedThisTurn = true;  // Prompt L-A
         if (creature.facing) { creature.facing.dx = dx; creature.facing.dy = dy; }
         return true;
       }
@@ -733,6 +746,7 @@ function executeFleeToWater(creature) {
       if (canMoveTo(creature, tx, ty)) {
         creature.x = tx;
         creature.y = ty;
+        creature.movedThisTurn = true;  // Prompt L-A
         if (creature.facing) { creature.facing.dx = dx; creature.facing.dy = dy; }
         return true;
       }
@@ -770,6 +784,7 @@ function executeFleeToHome(creature) {
     if (canMoveTo(creature, tx, ty)) {
       creature.x = tx;
       creature.y = ty;
+      creature.movedThisTurn = true;  // Prompt L-A
       if (creature.facing) { creature.facing.dx = dx; creature.facing.dy = dy; }
       return true;
     }
@@ -927,6 +942,7 @@ function moveInDirection(creature, dir) {
     if (canMoveTo(creature, tx, ty)) {
       creature.x = tx;
       creature.y = ty;
+      creature.movedThisTurn = true;  // Prompt L-A: signal emission flag
       if (creature.facing) {
         creature.facing.dx = dx;
         creature.facing.dy = dy;
@@ -1071,6 +1087,10 @@ function performNPCAttack(attacker, defender) {
   if (!atkBodyMap) return;
   const attacks = getAvailableAttacks(atkBodyMap);
   if (attacks.length === 0) return;
+
+  // Prompt L-A: mark both combatants
+  attacker.inCombatThisTurn = true;
+  defender.inCombatThisTurn = true;
 
   const usedAttack = attacks[randi(attacks.length)];
   const atkZone = atkBodyMap.find(z => z.key === usedAttack.sourceZone);
@@ -1405,6 +1425,7 @@ function executeWander(creature) {
   if (canMoveTo(creature, targetX, targetY)) {
     creature.x = targetX;
     creature.y = targetY;
+    creature.movedThisTurn = true;  // Prompt L-A
     // Update facing on move
     if (creature.facing) {
       creature.facing.dx = d.x;
@@ -1456,12 +1477,19 @@ function adjacencyCombatCheck(creature) {
 function runCreatureAI(creature) {
   if (creature.hp <= 0) return;
 
+  // ── Reset per-turn state flags (Prompt L-A) ──
+  creature.movedThisTurn = false;
+  creature.inCombatThisTurn = false;
+
   // Immobilized creatures can't move but can still attack adjacently
   if (creature.immobilized) {
     updateDrives(creature);
     detectThreats(creature);
     applySafetyFromThreats(creature);
     adjacencyCombatCheck(creature);
+    // Update water state and compute signals even when immobilized
+    _updateInWater(creature);
+    computeSignals(creature);
     return;
   }
 
@@ -1500,6 +1528,11 @@ function runCreatureAI(creature) {
 
   // Prompt K-B: reset per-turn damage flag AFTER combat check
   creature.tookDamageThisTurn = false;
+
+  // ── Signal emission (Prompt L-A) ──
+  // Update water state from current tile, then compute all signals.
+  _updateInWater(creature);
+  computeSignals(creature);
 }
 
 // ==================== BONUS MOVE (relative speed system) ====================
@@ -1523,6 +1556,15 @@ function performBonusMove(mon){
 
 function endPlayerTurn(action){
   const player = state.player;
+
+  // ── Ensure player signal fields exist (Prompt L-A) ──
+  if (player.signals == null) {
+    player.signals = { chemical: 0, vibration: { ground: 0, air: 0, water: 0 }, visual: 0 };
+  }
+  if (player.movedThisTurn == null) player.movedThisTurn = false;
+  if (player.inCombatThisTurn == null) player.inCombatThisTurn = false;
+  if (player.inWater == null) player.inWater = false;
+
   turnCount++;
   advanceTick();  // advance day/night cycle
   // Drain FED based on action (scaled; 1 FED per accumulated 100)
@@ -1612,6 +1654,17 @@ function endPlayerTurn(action){
   state.player.currentBehavior = action === 'rest' ? 'rest' : action;
   applyHealing(state.player);
 
+  // ── Player signal emission (Prompt L-A) ──
+  // Update water state and compute player signals before NPC turns,
+  // so NPCs see current player emission values.
+  _updateInWater(state.player);
+  computeSignals(state.player);
+
+  // Reset player per-turn flags AFTER signals are computed (Prompt L-A).
+  // They'll be set again during the player's next action.
+  state.player.movedThisTurn = false;
+  state.player.inCombatThisTurn = false;
+
   // Enemies act — only on current layer, town cells are safe
   if (!isTownCell(state.player.layer)){
     const mons = monstersHere();
@@ -1696,6 +1749,10 @@ function monsterMelee(mon){
     mon.facing.dx = Math.sign(player.x - mon.x);
     mon.facing.dy = Math.sign(player.y - mon.y);
   }
+
+  // Prompt L-A: mark both combatants
+  mon.inCombatThisTurn = true;
+  player.inCombatThisTurn = true;
 
   const acc = monAcc(mon);
   const dodge = playerDodge(player);
