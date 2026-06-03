@@ -154,6 +154,19 @@ function serializePlayer(p) {
   delete out.bodyMap;  // don't persist full body map (static data reloaded from template)
   // Blood system — save current blood level (bloodMax/bleedPenalty/bloodShare are derived on load)
   // Keep blood on out — it's a simple float, JSON-safe
+
+  // Strip transient per-turn fields (recomputed every turn, may contain entity refs)
+  delete out.signals;
+  delete out._senses;
+  delete out._cachedSenses;
+  delete out.movedThisTurn;
+  delete out.inCombatThisTurn;
+  delete out.inWater;
+  delete out.detectedThreats;
+  delete out.detectedPrey;
+  delete out.detectedCorpses;
+  delete out.huntTarget;
+  delete out.threatSource;
   return out;
 }
 
@@ -225,6 +238,18 @@ function deserializePlayer(raw) {
   if (p.originalNeural == null && p.bodyMap) {
     p.originalNeural = p.bodyMap.reduce((sum, z) => sum + (z.neural || 0), 0);
   }
+  // Initialize transient per-turn fields (recomputed every turn after load)
+  p.signals = { chemical: 0, vibration: { ground: 0, air: 0, water: 0 }, visual: 0 };
+  p.movedThisTurn = false;
+  p.inCombatThisTurn = false;
+  p.inWater = false;
+  p.detectedThreats = [];
+  p.detectedPrey = [];
+  p.detectedCorpses = [];
+  p.huntTarget = null;
+  p.threatSource = null;
+  p._senses = null;
+  p._cachedSenses = null;
   return p;
 }
 
@@ -281,6 +306,13 @@ function serializeMonsters(allLayers) {
       // detectedPrey and detectedCorpses are recomputed each turn — don't persist
       delete out.detectedPrey;
       delete out.detectedCorpses;
+      // Transient per-turn fields — recomputed every turn, never need persistence
+      delete out.signals;
+      delete out._senses;
+      delete out._cachedSenses;
+      delete out.movedThisTurn;
+      delete out.inCombatThisTurn;
+      delete out.inWater;
       serialized.push(out);
     }
     result[li] = serialized;
@@ -389,6 +421,13 @@ function deserializeMonsters(allLayers) {
           mon.huntTarget = null;
         }
         delete mon._huntTargetRef;
+        // Initialize transient per-turn fields (recomputed every turn after load)
+        mon.signals = { chemical: 0, vibration: { ground: 0, air: 0, water: 0 }, visual: 0 };
+        mon.movedThisTurn = false;
+        mon.inCombatThisTurn = false;
+        mon.inWater = false;
+        mon._senses = null;
+        mon._cachedSenses = null;
       }
     }
   }
