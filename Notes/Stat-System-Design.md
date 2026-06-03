@@ -13,7 +13,7 @@ The original system had seven stats (Size, Strength, Chemical, Vibration, Visual
 - "Size" is total body mass in kg.
 - "Strength" is muscle mass distributed across zones.
 - "Chemical" is chemoreceptor transducer quality plus neural processing allocated to interpreting it.
-- "Vibration" is mechanoreceptor transducer quality plus neural processing allocated to interpreting it.
+- "Vibration" is mechanoreceptor transducer quality (per medium — ground, air, water) plus neural processing allocated to interpreting it.
 - "Visual" is eye quality plus neural processing allocated to interpreting it.
 - "Central" is the centralization score — the peak concentration of neural mass in any single zone.
 - "Distributed" is the distribution score — 1.0 minus the centralization score.
@@ -103,20 +103,24 @@ Clade B: secondary sense for most. Chemoreceptors distributed across limb tips, 
 
 ### Vibration (Mechanoreception)
 
-Reading ground tremors, footsteps, pressure changes through substrate contact.
+Reading ground vibration from footfalls and substrate contact, airborne sound from breathing, movement, and combat, and waterborne displacement from movement through water. Each medium is tracked independently because the physical coupling differs — a limb touching the ground senses substrate vibration but not airborne pressure, while an ear-flap structure senses airborne pressure but not ground tremors.
 
 ```
-effectiveVibration = sum(zone.transducers.vibration for all surviving zones), capped
-discrimination = min(transducerQuality, vibrationProcessing * PROCESSING_SCALE)
+effectiveVibrationGround = sum(zone.transducers.vibration.ground for all surviving zones), capped
+effectiveVibrationAir = sum(zone.transducers.vibration.air for all surviving zones), capped
+effectiveVibrationWater = sum(zone.transducers.vibration.water for all surviving zones), capped
+discriminationGround = min(transducerQuality.ground, vibrationProcessing * PROCESSING_SCALE)
+discriminationAir = min(transducerQuality.air, vibrationProcessing * PROCESSING_SCALE)
+discriminationWater = min(transducerQuality.water, vibrationProcessing * PROCESSING_SCALE)
 ```
 
-Vibration uses sum-with-cap rather than max because spatial coverage matters — more mechanoreceptor arrays across the body = wider detection area. A creature with vibration sensors on every limb detects from all directions. A creature with sensors only on its front limbs has a detection gap behind it.
+Each medium uses sum-with-cap rather than max because spatial coverage matters — more mechanoreceptor arrays across the body = wider detection area. A creature with ground vibration sensors on every limb detects from all directions. A creature with sensors only on its front limbs has a detection gap behind it. Discrimination is computed per-medium: when evaluating ground vibration discrimination, only ground transducer quality is compared against processing investment; same for air and water.
 
-Gameplay layer: movement detection. Any moving creature generates vibration. Vibration sense detects movement through the ground, potentially through walls. Higher effective Vibration = wider range, better identification (from "something moved" to recognizing specific creatures by footstep signature).
+Gameplay layer: movement detection. Any moving creature generates vibration in media it contacts — footsteps generate ground vibration, breathing and vocalization generate airborne vibration, swimming generates waterborne displacement. Ground vibration propagates through substrate, potentially through walls. Air vibration propagates line-of-effect through open space. Water vibration propagates through connected water bodies. Higher effective Vibration per medium = wider range in that medium, better identification (from "something moved" to recognizing specific creatures by movement signature).
 
-Clade A: vestigial or absent. Most Clade A descendants have little to no vibration sensing.
+Clade A: weak but present — low-quality air vibration from ear-flap structures (air quality 1-3 depending on species and ear-flap size), minimal ground vibration from limb contact with substrate (ground quality 1 on locomotion limbs). The large herbivore's paddle-limbs provide moderate water-vibration sensitivity (water quality 3). These are quality 1-3 values versus Clade B's 4-5 — present but not competitive. Clade A creatures don't drive behavior from vibration; it's background input that supplements their dominant chemical sense.
 
-Clade B: primary sense. Dense mechanoreceptor arrays on limb surfaces, heavy neural investment in vibration processing distributed across limb ganglia. Each limb processes its own vibration input locally — detection is fast, local, and independent.
+Clade B: primary sense. Dense mechanoreceptor arrays on limb surfaces provide high-quality ground-coupled vibration sensing (ground quality 3-5), with heavy neural investment in vibration processing distributed across limb ganglia. Each limb processes its own vibration input locally — detection is fast, local, and independent. The dense mechanoreceptor arrays also provide secondary air-vibration sensitivity (air quality 1-2 on most limbs), picking up airborne pressure waves from nearby movement and combat sounds. Ground sensing drives behavior; air sensing supplements it.
 
 ### Visual (Eyesight)
 
@@ -256,7 +260,7 @@ Each attack derives damage from the zone housing it. Muscle provides force, zone
 accuracy = BASE_ACCURACY + (effectiveSense * SENSE_ACCURACY_COEFF)
 ```
 
-Where effectiveSense is whichever sense the creature is using to detect the target (Chemical for scent-tracking Clade A, Vibration for ground-sensing Clade B, Visual for sight-based attacks). The attacker uses the sense that led to detection. This is a placeholder until full sense-specific accuracy is implemented.
+Where effectiveSense is whichever sense the creature is using to detect the target (Chemical for scent-tracking Clade A, the relevant Vibration medium for ground-sensing or air-sensing Clade B, Visual for sight-based attacks). The attacker uses the sense that led to detection. For vibration-dominant creatures, the medium that triggered detection determines which effectiveVibration value is used. This is a placeholder until full sense-specific accuracy is implemented.
 
 ### Stealth
 
@@ -283,27 +287,27 @@ These are not assigned stats — they're the effective sense values derived from
 **Clade A Meso-Predator (22 kg):**
 - Chemical: 6 (head transducers, 0.25 kg processing) — primary sense
 - Visual: 3 (head transducers, 0.10 kg processing) — secondary
-- Vibration: 0 — absent
+- Vibration: ground 1, air 2 — weak (air from ear-flaps, ground from limb contact)
 - Centralization: 0.66 — Tier 3
 - Cognitive: full episodic memory, integration, threat assessment, targeted attacks
 
 **Clade A Apex Predator (~90 kg):**
 - Chemical: 7 — primary, extended range
 - Visual: 4 — better developed than meso-predator
-- Vibration: 0-1 — vestigial
+- Vibration: ground 1, air 3 — weak (larger ear-flaps provide slightly better air pickup than meso-predator, same minimal ground coupling)
 - Centralization: ~0.60 — Tier 3
 - Cognitive: same as meso-predator with more experience accumulation (longer-lived)
 
 **Clade A Large Herbivore (~200 kg):**
 - Chemical: 5 — dominant sense, adapted for evaluating flora quality and detecting submerged vegetation
 - Visual: 5 — better distance vision than predators (open terrain)
-- Vibration: 0 — absent
+- Vibration: ground 1, air 2, water 3 — weak on land (ear-flaps and walking limbs), moderate in water (paddle-limb mechanoreception)
 - Centralization: ~0.50 — Tier 3
 - Cognitive: episodic memory, spatial mapping, threat avoidance. Less threat assessment than predators.
 
 **Clade B Small Herbivore (~5 kg):**
 - Chemical: 2 — minor
-- Vibration: 5 — primary, distributed across all limbs
+- Vibration: ground 5, air 1 — primary (ground), distributed across all limbs; secondary air pickup on grazing limbs and head
 - Visual: 4 — good motion detection
 - Centralization: ~0.15 — Tier 1
 - Cognitive: reflexive only. No memory of specific encounters. Deep territory-trained pattern libraries.
@@ -311,31 +315,30 @@ These are not assigned stats — they're the effective sense values derived from
 **Clade B Colonial Chemotroph node (~5 kg):**
 - Chemical: 1 — minimal
 - Vibration: 6 — primary, communication + detection
-- Visual: 2 — minimal
 - Centralization: ~0.12 — Tier 1
 - Cognitive: reflexive only. Colony-level behavior emerges from inter-node chemical signaling, not individual intelligence.
 
 **Clade B Ambush Predator (~24 kg):**
 - Chemical: 2 — minor, limb-tip chemoreceptors
-- Vibration: 5 — primary, dense arrays on sensor limbs and all other limbs
+- Vibration: ground 5, air 2 — primary (ground), dense arrays on sensor limbs and all other limbs; secondary air pickup from sensor limbs and head
 - Visual: 5 — good motion detection, including rear-facing eyes
 - Centralization: 0.15 — Tier 1 with modest Tier 2 integration in head
 - Cognitive: reflexive pattern matching with deep territory familiarity. Modest visual+vibration cross-referencing in head. No episodic memory.
 
 **Player (starting Clade A body, ~24 kg):**
 - Chemical: 5 — Clade A default
-- Vibration: 0 — absent (Clade A body has no mechanoreceptors)
+- Vibration: ground 1, air 2 — weak (Clade A body has minimal mechanoreceptors — air vibration from ear-flaps, ground vibration from limb contact)
 - Visual: 4 — moderate
 - Centralization: ~0.55 — Tier 3
 - Cognitive: full episodic memory, integration, targeted attacks, examine depth
 
 **Player (late game, heavily mutated, ~30 kg):**
 - Chemical: 6 — enhanced from Clade A consumption
-- Vibration: 4 — grown through Clade B consumption (mechanoreceptors developed in limb zones)
+- Vibration: ground 4, air 2 — ground vibration grown through Clade B consumption (mechanoreceptors developed in limb zones), air vibration retained from Clade A ear-flap structures
 - Visual: 5 — enhanced
 - Centralization: ~0.30 — dropped from 0.55 as neural mass redistributed to limbs. Tier 2 — reduced episodic memory, reduced examine depth, but gained reflexive defense and knockout resistance.
 
-This profile is biologically impossible for any native organism. Both Chemical 6 (Clade A signature) and Vibration 4 (Clade B signature) on the same body, with a centralization score that's neither Clade A-high nor Clade B-low but somewhere in between.
+This profile is biologically impossible for any native organism. Both Chemical 6 (Clade A signature) and ground Vibration 4 (Clade B signature) on the same body, with a centralization score that's neither Clade A-high nor Clade B-low but somewhere in between.
 
 ---
 
