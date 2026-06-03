@@ -607,10 +607,13 @@ export const SAFETY_THRESHOLD    = 0.5;       // above this → flee (I-B)
 export const HUNGER_THRESHOLD    = 0.6;       // above this → hunt/forage (I-C)
 export const REST_THRESHOLD      = 0.7;       // above this → rest (I-D)
 
-// --- Threat Detection (I-B) ---
-export const CHEMICAL_RANGE_MULT  = 2.5;      // chemical 6 → 15 tile detection
-export const VIBRATION_RANGE_MULT = 2.0;      // vibration 5 → 10 tile detection
-export const VISUAL_RANGE_MULT    = 1.5;      // visual 5 → 7.5 tile detection
+// --- Perception Range (L-B) — replaces I-B flat range multipliers ---
+export const CHEM_RANGE_COEFF        = 1.9;   // chemical range = cbrt(emission) × sensitivity × coeff
+export const VIB_GROUND_RANGE_COEFF  = 0.75;  // ground vibration range coefficient
+export const VIB_AIR_RANGE_COEFF     = 1.0;   // air vibration range coefficient
+export const VIS_RANGE_COEFF         = 1.9;   // visual range = cbrt(detectability × light) × sensitivity × coeff
+export const VIB_SUM_CAP             = 15;    // soft cap for summed vibration sensors: sum × cap / (sum + cap)
+export const MAX_DETECTION_DISTANCE  = 40;    // absolute ceiling — nothing detected beyond this
 
 // --- Safety Spikes (I-B) ---
 export const SAFETY_PROXIMITY_COEFF = 0.15;   // how much proximity-based detection spikes safety per turn

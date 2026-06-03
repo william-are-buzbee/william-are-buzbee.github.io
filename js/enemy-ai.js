@@ -11,7 +11,9 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          BLOOD_DEATH_THRESHOLD, BURST_COEFF, BLOOD_CRITICAL_THRESHOLD,
          ARMOR_PER_STRUCTURAL_KG, getAttackDirection, getExposedZones, selectContactedZones,
          MASS_HUNGER_COEFF, NEURAL_HUNGER_COEFF, SAFETY_DECAY_RATE, REST_BASE_RATE,
-         SAFETY_THRESHOLD, HUNGER_THRESHOLD, CHEMICAL_RANGE_MULT, VIBRATION_RANGE_MULT, VISUAL_RANGE_MULT,
+         SAFETY_THRESHOLD, HUNGER_THRESHOLD,
+         CHEM_RANGE_COEFF, VIB_GROUND_RANGE_COEFF, VIB_AIR_RANGE_COEFF, VIS_RANGE_COEFF,
+         VIB_SUM_CAP, MAX_DETECTION_DISTANCE,
          SAFETY_PROXIMITY_COEFF, SAFETY_DAMAGE_COEFF,
          CHASE_LEASH_BASE, CHASE_LEASH_HUNGER_MULT, MEAL_HUNGER_REDUCTION,
          BITE_MASS_FRACTION, GRAZE_HUNGER_REDUCTION, HERBIVORE_SAFETY_BONUS,
@@ -20,7 +22,7 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          REST_RECOVERY_NORMAL, REST_RECOVERY_WEAKENED, REST_RECOVERY_CRITICAL,
          REST_EATING_BONUS, REST_THRESHOLD,
          HEAL_BASE_RATE, HEAL_REST_MULTIPLIER } from './constants.js';
-import { T, isWalkable, isFoodTile, terrainInfo } from './terrain.js';
+import { T, isWalkable, isFoodTile, terrainInfo, tileBlocksVision } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
 import { monAcc, monDodge, monDamage, monCritChance, monCritMult, WANDER_PROFILES, DEFAULT_WANDER_PROFILE } from './monsters.js';
@@ -30,7 +32,7 @@ import { render } from './rendering.js';
 import { endStealth, stealthDetectChance, rollHit } from './combat.js';
 import { placeItem, generateItemId } from './ground-items.js';
 import { fedDrainFor } from './player-actions.js';
-import { advanceTick, getTimePhase } from './time-cycle.js';
+import { advanceTick, getTimePhase, currentTimePhase } from './time-cycle.js';
 import { saveGame } from './save-load.js';
 import { updatePlayerFOV, hasLOS } from './fov.js';
 import { computeSignals } from './signals.js';
@@ -443,27 +445,203 @@ function selectBehavior(creature) {
   }
 }
 
-// ==================== THREAT DETECTION (I-B) ====================
+// ==================== SENSE-SPECIFIC PERCEPTION (L-B) ====================
+// Replaces the flat-range detection from I-B with real perception.
+// Each creature detects others through chemical, vibration (ground/air),
+// and visual senses using signal emissions from L-A.
 
-/** Get the best transducer value for a sense type across all surviving zones. */
-function getEffectiveSense(creature, senseType) {
+// --- Light Level ---
+// Maps the day/night cycle phase to a 0.0–1.0 light multiplier.
+function getLightLevel() {
+  const { phase, progress } = currentTimePhase();
+  switch (phase) {
+    case 'day':   return 1.0;
+    case 'dusk':  return 1.0 + (0.1 - 1.0) * progress;   // 1.0 → 0.1
+    case 'night': return 0.1;
+    case 'dawn':  return 0.1 + (1.0 - 0.1) * progress;   // 0.1 → 1.0
+    default:      return 1.0;
+  }
+}
+
+// --- Effective Sense Caching ---
+// Computed once per creature per turn before detection runs.
+// Chemical and visual use max (best sensor). Vibration uses sum with soft cap.
+
+function getEffectiveChemical(creature) {
   const bodyMap = getBodyMap(creature);
   if (!bodyMap) return 0;
   let best = 0;
   for (const zone of bodyMap) {
     if (zone.destroyed) continue;
-    const val = (zone.transducers && zone.transducers[senseType]) || 0;
+    const val = (zone.transducers && zone.transducers.chemical) || 0;
     if (val > best) best = val;
   }
   return best;
 }
 
-/** Compute detection range from creature's best sense × range multiplier. */
+function getEffectiveVibrationGround(creature) {
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return 0;
+  let sum = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    const val = (zone.transducers && zone.transducers.vibration && zone.transducers.vibration.ground) || 0;
+    sum += val;
+  }
+  // Soft cap: sum × VIB_SUM_CAP / (sum + VIB_SUM_CAP)
+  return sum > 0 ? sum * VIB_SUM_CAP / (sum + VIB_SUM_CAP) : 0;
+}
+
+function getEffectiveVibrationAir(creature) {
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return 0;
+  let sum = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    const val = (zone.transducers && zone.transducers.vibration && zone.transducers.vibration.air) || 0;
+    sum += val;
+  }
+  return sum > 0 ? sum * VIB_SUM_CAP / (sum + VIB_SUM_CAP) : 0;
+}
+
+function getEffectiveVisual(creature) {
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return 0;
+  let best = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    const val = (zone.transducers && zone.transducers.visual) || 0;
+    if (val > best) best = val;
+  }
+  return best;
+}
+
+/** Cache all effective sense values on creature._senses. Call once per turn. */
+function cacheEffectiveSenses(creature) {
+  creature._senses = {
+    chemical:  getEffectiveChemical(creature),
+    vibGround: getEffectiveVibrationGround(creature),
+    vibAir:    getEffectiveVibrationAir(creature),
+    visual:    getEffectiveVisual(creature),
+  };
+}
+
+// --- Per-Sense Range Functions ---
+// range = cbrt(emission) × sensitivity × SENSE_COEFF
+
+function getChemicalRange(detector, target) {
+  const emission = target.signals ? target.signals.chemical : 0;
+  const sensitivity = detector._senses ? detector._senses.chemical : 0;
+  if (emission <= 0 || sensitivity <= 0) return 0;
+  return Math.cbrt(emission) * sensitivity * CHEM_RANGE_COEFF;
+}
+
+function getVibrationGroundRange(detector, target) {
+  const emission = target.signals ? target.signals.vibration.ground : 0;
+  const sensitivity = detector._senses ? detector._senses.vibGround : 0;
+  if (emission <= 0 || sensitivity <= 0) return 0;
+  return Math.cbrt(emission) * sensitivity * VIB_GROUND_RANGE_COEFF;
+}
+
+function getVibrationAirRange(detector, target) {
+  const emission = target.signals ? target.signals.vibration.air : 0;
+  const sensitivity = detector._senses ? detector._senses.vibAir : 0;
+  if (emission <= 0 || sensitivity <= 0) return 0;
+  return Math.cbrt(emission) * sensitivity * VIB_AIR_RANGE_COEFF;
+}
+
+function getVisualRange(detector, target) {
+  const detectability = target.signals ? target.signals.visual : 0;
+  const sensitivity = detector._senses ? detector._senses.visual : 0;
+  const light = getLightLevel();
+  if (detectability <= 0 || sensitivity <= 0 || light <= 0) return 0;
+  return Math.cbrt(detectability * light) * sensitivity * VIS_RANGE_COEFF;
+}
+
+// --- Vision Cone Check ---
+// Converts creature facing {dx, dy} to angle, checks if target is within cone.
+
+function facingToAngle(facing) {
+  if (!facing) return 0;
+  return Math.atan2(facing.dy, facing.dx) * (180 / Math.PI);
+}
+
+function isInVisionCone(detector, target) {
+  const coneWidth = detector.visionConeWidth || 120;
+  // 360° or wider = omnidirectional, always in cone
+  if (coneWidth >= 360) return true;
+  // No facing data = omnidirectional
+  if (!detector.facing) return true;
+
+  const halfCone = coneWidth / 2;
+
+  const dx = target.x - detector.x;
+  const dy = target.y - detector.y;
+  const angleToTarget = Math.atan2(dy, dx) * (180 / Math.PI);
+
+  const facingAngleDeg = facingToAngle(detector.facing);
+
+  let diff = Math.abs(angleToTarget - facingAngleDeg);
+  if (diff > 180) diff = 360 - diff;
+
+  return diff <= halfCone;
+}
+
+// --- Line of Sight ---
+// Uses hasLOS from fov.js. Forests do NOT block NPC LOS in this pass
+// (no per parameter → tree transparency is skipped, only walls block).
+
+function hasLineOfSight(detector, target) {
+  const layer = detector.layer != null ? detector.layer : state.player.layer;
+  return hasLOS(layer, detector.x, detector.y, target.x, target.y);
+}
+
+// --- Master Detection Function ---
+
+function canDetect(detector, target) {
+  const d = dist(detector.x, detector.y, target.x, target.y);
+
+  // Early exit — nothing detects beyond absolute ceiling
+  if (d > MAX_DETECTION_DISTANCE) return { detected: false, senses: [], distance: d };
+
+  const senses = [];
+
+  // Chemical — omnidirectional
+  const chemRange = getChemicalRange(detector, target);
+  if (d <= chemRange) senses.push('chemical');
+
+  // Vibration ground — omnidirectional (zero if target is stationary, handled by emission)
+  const vibGroundRange = getVibrationGroundRange(detector, target);
+  if (d <= vibGroundRange) senses.push('vibration_ground');
+
+  // Vibration air — omnidirectional
+  const vibAirRange = getVibrationAirRange(detector, target);
+  if (d <= vibAirRange) senses.push('vibration_air');
+
+  // Visual — cone + line of sight + light
+  const visRange = getVisualRange(detector, target);
+  if (d <= visRange && isInVisionCone(detector, target) && hasLineOfSight(detector, target)) {
+    senses.push('visual');
+  }
+
+  return {
+    detected: senses.length > 0,
+    senses:   senses,
+    distance: d,
+  };
+}
+
+// --- Legacy helper for external callers / debug ---
+// Returns the max detection range across all senses for a hypothetical average target.
 function getDetectionRange(creature) {
-  const chemRange = getEffectiveSense(creature, 'chemical') * CHEMICAL_RANGE_MULT;
-  const vibRange  = getEffectiveSense(creature, 'vibration') * VIBRATION_RANGE_MULT;
-  const visRange  = getEffectiveSense(creature, 'visual') * VISUAL_RANGE_MULT;
-  return Math.max(chemRange, vibRange, visRange);
+  if (!creature._senses) cacheEffectiveSenses(creature);
+  // Rough estimate using typical emission values — for debug display only
+  const s = creature._senses;
+  const chemR  = s.chemical > 0 ? Math.cbrt(2.0) * s.chemical * CHEM_RANGE_COEFF : 0;
+  const vibGR  = s.vibGround > 0 ? Math.cbrt(1.0) * s.vibGround * VIB_GROUND_RANGE_COEFF : 0;
+  const vibAR  = s.vibAir > 0 ? Math.cbrt(0.5) * s.vibAir * VIB_AIR_RANGE_COEFF : 0;
+  const visR   = s.visual > 0 ? Math.cbrt(3.0) * s.visual * VIS_RANGE_COEFF : 0;
+  return Math.max(chemR, vibGR, vibAR, visR);
 }
 
 /** Assess how threatening a target is to the creature. Returns 0 if not threatening. */
@@ -511,43 +689,44 @@ function getPlayerDiet() {
   return PLAYER_DIET_MAP[player.species] || 'predator';
 }
 
-/** Detect threats in range. Runs once per turn per creature. */
+/** Detect threats in range using sense-specific detection (L-B). */
 function detectThreats(creature) {
-  const range = getDetectionRange(creature);
   const threats = [];
 
   // Check player
   const player = state.player;
   if (player && player.hp > 0) {
-    const distToPlayer = dist(creature.x, creature.y, player.x, player.y);
-    if (distToPlayer <= range) {
+    const result = canDetect(creature, player);
+    if (result.detected) {
       const threatLevel = assessThreatLevel(creature, player);
       if (threatLevel > 0) {
         threats.push({
           source: player,
-          distance: distToPlayer,
+          distance: result.distance,
           threatLevel: threatLevel,
+          senses: result.senses,
         });
       }
     }
   }
 
-  // Check other creatures (predators as threats to herbivores and smaller predators)
+  // Check other creatures
   const mons = monstersHere();
   for (const other of mons) {
     if (other === creature) continue;
     if (other.hp <= 0) continue;
 
-    const d = dist(creature.x, creature.y, other.x, other.y);
-    if (d > range) continue;
-
-    const threatLevel = assessThreatLevel(creature, other);
-    if (threatLevel > 0) {
-      threats.push({
-        source: other,
-        distance: d,
-        threatLevel: threatLevel,
-      });
+    const result = canDetect(creature, other);
+    if (result.detected) {
+      const threatLevel = assessThreatLevel(creature, other);
+      if (threatLevel > 0) {
+        threats.push({
+          source: other,
+          distance: result.distance,
+          threatLevel: threatLevel,
+          senses: result.senses,
+        });
+      }
     }
   }
 
@@ -555,7 +734,7 @@ function detectThreats(creature) {
   return threats;
 }
 
-/** Spike safety based on detected threats. */
+/** Spike safety based on detected threats. Uses per-sense max range for proximity (L-B). */
 function applySafetyFromThreats(creature) {
   if (!creature.detectedThreats || creature.detectedThreats.length === 0) return;
 
@@ -565,10 +744,23 @@ function applySafetyFromThreats(creature) {
 
   if (worst.threatLevel <= 0) return;
 
-  const range = getDetectionRange(creature);
+  // Max range across senses that detected this threat
+  let maxRange = 0;
+  for (const sense of worst.senses) {
+    let r = 0;
+    switch (sense) {
+      case 'chemical':         r = getChemicalRange(creature, worst.source); break;
+      case 'vibration_ground': r = getVibrationGroundRange(creature, worst.source); break;
+      case 'vibration_air':    r = getVibrationAirRange(creature, worst.source); break;
+      case 'visual':           r = getVisualRange(creature, worst.source); break;
+    }
+    if (r > maxRange) maxRange = r;
+  }
+  if (maxRange <= 0) return;
+
   // Closer = scarier. At range boundary, mild spike. At adjacent, maximum spike.
-  const proximity = 1.0 - (worst.distance / range);
-  const spike = proximity * worst.threatLevel * SAFETY_PROXIMITY_COEFF;
+  const proximity = 1.0 - (worst.distance / maxRange);
+  const spike = Math.max(0, proximity) * worst.threatLevel * SAFETY_PROXIMITY_COEFF;
 
   creature.drives.safety = Math.min(1.0, creature.drives.safety + spike);
   creature.threatSource = worst.source;
@@ -857,11 +1049,10 @@ function isViablePrey(predator, target) {
   return true;
 }
 
-/** Detect prey within detection range. Predators only. */
+/** Detect prey using sense-specific detection (L-B). Predators only. */
 function detectPrey(creature) {
   if (creature.diet !== 'predator') return;
 
-  const range = getDetectionRange(creature);
   creature.detectedPrey = [];
 
   // Scan NPC creatures
@@ -869,21 +1060,28 @@ function detectPrey(creature) {
   for (const other of mons) {
     if (other === creature) continue;
     if (other.hp <= 0) continue;
+    if (!isViablePrey(creature, other)) continue;
 
-    const d = dist(creature.x, creature.y, other.x, other.y);
-    if (d > range) continue;
-
-    if (isViablePrey(creature, other)) {
-      creature.detectedPrey.push({ target: other, distance: d });
+    const result = canDetect(creature, other);
+    if (result.detected) {
+      creature.detectedPrey.push({
+        target: other,
+        distance: result.distance,
+        senses: result.senses,
+      });
     }
   }
 
   // Scan player
   const player = state.player;
-  if (player && player.hp > 0) {
-    const d = dist(creature.x, creature.y, player.x, player.y);
-    if (d <= range && isViablePrey(creature, player)) {
-      creature.detectedPrey.push({ target: player, distance: d });
+  if (player && player.hp > 0 && isViablePrey(creature, player)) {
+    const result = canDetect(creature, player);
+    if (result.detected) {
+      creature.detectedPrey.push({
+        target: player,
+        distance: result.distance,
+        senses: result.senses,
+      });
     }
   }
 
@@ -891,12 +1089,38 @@ function detectPrey(creature) {
   creature.detectedPrey.sort((a, b) => a.distance - b.distance);
 }
 
-/** Detect corpses within detection range. Predators only. */
+/** Detect corpses within chemical detection range. Predators only.
+ *  Corpses are detected primarily by smell — uses chemical sense range
+ *  with an estimated emission based on corpse mass. */
 function detectCorpses(creature) {
   if (creature.diet !== 'predator') return;
 
-  const range = getDetectionRange(creature);
   creature.detectedCorpses = [];
+
+  // Corpse chemical emission estimate: mass × base coeff (stationary, no activity)
+  // Use chemical range formula: cbrt(emission) × sensitivity × coeff
+  const sensitivity = creature._senses ? creature._senses.chemical : 0;
+  if (sensitivity <= 0) {
+    // Fall back to a minimal detection range of 2 tiles (adjacent + 1)
+    // for creatures with no chemical sense — they can still stumble on corpses
+    const fallbackRange = 2;
+    const layer = state.player.layer;
+    const items = groundItems[layer];
+    if (!items) return;
+    for (const posKey of Object.keys(items)) {
+      const arr = items[posKey];
+      if (!arr) continue;
+      for (const item of arr) {
+        if (item.kind !== 'corpse' && item.type !== 'corpse') continue;
+        const [ix, iy] = posKey.split(',').map(Number);
+        const d = dist(creature.x, creature.y, ix, iy);
+        if (d > fallbackRange) continue;
+        creature.detectedCorpses.push({ target: item, distance: d, x: ix, y: iy });
+      }
+    }
+    creature.detectedCorpses.sort((a, b) => a.distance - b.distance);
+    return;
+  }
 
   const layer = state.player.layer;
   const items = groundItems[layer];
@@ -910,13 +1134,16 @@ function detectCorpses(creature) {
 
       const [ix, iy] = posKey.split(',').map(Number);
       const d = dist(creature.x, creature.y, ix, iy);
-      if (d > range) continue;
+      if (d > MAX_DETECTION_DISTANCE) continue;
 
-      creature.detectedCorpses.push({
-        target: item,
-        distance: d,
-        x: ix, y: iy,
-      });
+      // Estimate corpse chemical emission from its mass
+      const corpseMass = item.mass || item.nutrition || 1;
+      const corpseEmission = corpseMass * 0.1;  // CHEM_MASS_COEFF equivalent
+      const range = Math.cbrt(corpseEmission) * sensitivity * CHEM_RANGE_COEFF;
+
+      if (d <= range) {
+        creature.detectedCorpses.push({ target: item, distance: d, x: ix, y: iy });
+      }
     }
   }
 
@@ -1484,6 +1711,7 @@ function runCreatureAI(creature) {
   // Immobilized creatures can't move but can still attack adjacently
   if (creature.immobilized) {
     updateDrives(creature);
+    cacheEffectiveSenses(creature);   // L-B — sense caching
     detectThreats(creature);
     applySafetyFromThreats(creature);
     adjacencyCombatCheck(creature);
@@ -1496,7 +1724,10 @@ function runCreatureAI(creature) {
   // Update drives
   updateDrives(creature);
 
-  // Threat detection (I-B)
+  // Cache effective sense values (L-B) — once per turn, before detection
+  cacheEffectiveSenses(creature);
+
+  // Threat detection (L-B — sense-specific)
   detectThreats(creature);
   applySafetyFromThreats(creature);
 
@@ -1659,6 +1890,10 @@ function endPlayerTurn(action){
   // so NPCs see current player emission values.
   _updateInWater(state.player);
   computeSignals(state.player);
+
+  // ── Cache player effective senses (L-B) ──
+  // Available if any NPC needs to check whether the player can detect it.
+  cacheEffectiveSenses(state.player);
 
   // Reset player per-turn flags AFTER signals are computed (Prompt L-A).
   // They'll be set again during the player's next action.
@@ -1991,6 +2226,8 @@ function debugEcology() {
   const summary = [];
   for (const m of mons) {
     if (m.hp <= 0) continue;
+    if (!m._senses) cacheEffectiveSenses(m);
+    const s = m._senses;
     summary.push({
       name: m.name,
       key: m.key,
@@ -2003,6 +2240,7 @@ function debugEcology() {
       prey: m.detectedPrey ? m.detectedPrey.length : 0,
       corpses: m.detectedCorpses ? m.detectedCorpses.length : 0,
       huntTarget: m.huntTarget ? (m.huntTarget.name || m.huntTarget.key || 'player') : null,
+      senses: `C${s.chemical.toFixed(1)} VG${s.vibGround.toFixed(1)} VA${s.vibAir.toFixed(1)} V${s.visual.toFixed(1)}`,
       detRange: Math.round(getDetectionRange(m)),
     });
   }
