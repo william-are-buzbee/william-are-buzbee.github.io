@@ -599,13 +599,7 @@ function hasLineOfSight(detector, target) {
 // --- Master Detection Function ---
 
 function canDetect(detector, target) {
-         if (target.isPlayer && senses.length > 0) {
-  console.log(`${detector.name} detects player at ${d.toFixed(1)} via [${senses}]  ` +
-    `ranges: C${getChemicalRange(detector,target).toFixed(1)} ` +
-    `VG${getVibrationGroundRange(detector,target).toFixed(1)} ` +
-    `VA${getVibrationAirRange(detector,target).toFixed(1)} ` +
-    `V${getVisualRange(detector,target).toFixed(1)}`);
-}
+
   const d = dist(detector.x, detector.y, target.x, target.y);
 
   // Early exit — nothing detects beyond absolute ceiling
@@ -630,6 +624,14 @@ function canDetect(detector, target) {
   if (d <= visRange && isInVisionCone(detector, target) && hasLineOfSight(detector, target)) {
     senses.push('visual');
   }
+
+if (target.isPlayer && senses.length > 0) {
+  console.log(`${detector.name} detects player at ${d.toFixed(1)} via [${senses}]  ` +
+    `ranges: C${getChemicalRange(detector,target).toFixed(1)} ` +
+    `VG${getVibrationGroundRange(detector,target).toFixed(1)} ` +
+    `VA${getVibrationAirRange(detector,target).toFixed(1)} ` +
+    `V${getVisualRange(detector,target).toFixed(1)}`);
+}
 
   return {
     detected: senses.length > 0,
