@@ -33,20 +33,26 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Create two alien "clades" that all alien life is related too (clade A resembles more mammalian, clade B resembles more cephalopod, but both are terrestrial)
 - [x] Designed a 3d body map system as a core game mechanic that will replace stats like CON, STR, INT, etc. (instead, the body map visualizes and describes weight, muscularity, connective tissue, neural mass, armor, texture, hardness, sensory organs, neural pathways, etc and a 3d animal could be created from this description with a lot of functional detail)
 - [x] Create body maps for the main ancestors of the two clades (small herbivore, large herbivore, ambush predator, meso carnivore, apex carnivore) 
-- [x] Implemented a temporary "Size" and "Strength" system that roughly reflects total mass and total muscle mass % (relative to total mass in kg) to help current build reflect size disparities & how that should affect damage
-- [x] Bleeding system (open vs closed circulatory system, bleed out, blood loss weakening, etc)
-- [x] Footprint system (attacks have a size, shape and area- relates to hitting multiple zones, like an elephant stepping on a rabbit, which should obviously hit multiple body parts)
+- [x] First-pass "Size" and "Strength" system that roughly reflects total mass & relative muscle mass)
+- [x] First-pass Bleeding system (open vs closed circulatory system, bleed out, blood loss weakening, etc)
+- [x] First-pass Footprint system (attacks have a size, shape and area- relates to hitting multiple zones, like an elephant stepping on a rabbit, which should obviously hit multiple body parts)
 - [x] Physics based damage (weight, musculature and musclemass determine damage)
 - [x] Death conditions (lethal zones, brain death, blood loss)
 - [x] Species selection at chargen & parity (lets you pick and play as any species, no plot armor given to player)
 - [x] UI overlays (for multi limb health pools, bleed counter, removal of "max hp" which is vestigial)
-- [x] AI drive system (wandering, fleeing, hunting/foraging, sleeping, recovering bloodloss, etc)
+- [x] First-pass AI drive system (wandering, fleeing, hunting/foraging, sleeping, recovering bloodloss, etc)
+- [x] First-pass perception/transducer system (transducers based sensing, no more abstract "perception" stat)
+- [X] First-pass cognitive/ganglia/nervous system (episodic memory, pattern library, sensory integration, cognitive "workspace", planning, reflexive behavior, compression of signals, etc) 
 
 ## Up Next
-- [ ] Perception system (transducers based sensing, no more abstract "perception" stat)
+- [ ] First-pass player perception/transducer visibility (make the player's visual field at parity with an equivalent animal, no free lunch or plot armor for player perception)
 
-## Near-Term Plans
-- [ ] Cognitive system (centralized cognition functioning)
+## Near-Term Plans (no particular order at the moment)
+- [ ] Second-pass over bleed/metabolism/healing mechanic 
+- [ ] Second-pass over footprint system
+- [ ] Second-pass over AI drive system
+- [ ] Second-pass over perception/transducer system
+- [ ] Second-pass over cognition/ganglia system
 
 ## Long-Term Plans
 - [ ] Implement underground generation of new floors and cave systems 
