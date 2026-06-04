@@ -13,6 +13,73 @@ import { updatePlayerFOV } from './fov.js';
 const SAVE_KEY = 'overworld_zero_save';
 const SAVE_VERSION = 4;
 
+// ==================== TRANSIENT FIELD MANAGEMENT ====================
+// Add any new per-turn recomputed fields here to prevent save bloat.
+// These are stripped before serialization and re-initialized on load.
+// Entity references (huntTarget, threatSource) and detection results
+// (detectedThreats, detectedPrey, detectedCorpses) are included because
+// they contain object references that cause circular-reference errors or
+// unbounded growth in JSON.stringify output.
+
+const TRANSIENT_FIELDS = [
+    // Signal emission (L-A)
+    'signals',
+
+    // Cached senses (L-B)
+    '_senses',
+    '_cachedSenses',
+
+    // Per-turn state flags
+    'movedThisTurn',
+    'inCombatThisTurn',
+    'inWater',
+    'tookDamageThisTurn',
+
+    // Detection results (contain entity references that can't serialize)
+    'detectedThreats',
+    'detectedPrey',
+    'detectedCorpses',
+
+    // Entity references (circular references break JSON.stringify)
+    'huntTarget',
+    'threatSource',
+
+    // Cognitive tier (recomputed from body map each turn)
+    'integrationCapacity',
+    'tier',
+
+    // Current behavior label (recomputed each turn)
+    'currentBehavior',
+];
+
+/** Create a shallow copy with all transient per-turn fields removed. */
+function stripTransientFields(obj) {
+    const clean = { ...obj };
+    for (const field of TRANSIENT_FIELDS) {
+        delete clean[field];
+    }
+    return clean;
+}
+
+/** Initialize all transient fields to safe defaults on a loaded entity. */
+function initTransientFields(entity) {
+    entity.signals = { chemical: 0, vibration: { ground: 0, air: 0, water: 0 }, visual: 0 };
+    entity._senses = null;
+    entity._cachedSenses = null;
+    entity.movedThisTurn = false;
+    entity.inCombatThisTurn = false;
+    entity.inWater = false;
+    entity.tookDamageThisTurn = false;
+    entity.detectedThreats = [];
+    entity.detectedPrey = [];
+    entity.detectedCorpses = [];
+    entity.huntTarget = null;
+    entity.threatSource = null;
+    entity.integrationCapacity = 0;
+    entity.tier = 1;
+    entity.currentBehavior = 'wander';
+}
+
 // ==================== HELPERS ====================
 
 // Dynamically import cellKeyToLayer — it may live in world-state or state.
@@ -156,21 +223,7 @@ function serializePlayer(p) {
   // Keep blood on out — it's a simple float, JSON-safe
 
   // Strip transient per-turn fields (recomputed every turn, may contain entity refs)
-  delete out.signals;
-  delete out._senses;
-  delete out._cachedSenses;
-  delete out.movedThisTurn;
-  delete out.inCombatThisTurn;
-  delete out.inWater;
-  delete out.detectedThreats;
-  delete out.detectedPrey;
-  delete out.detectedCorpses;
-  delete out.huntTarget;
-  delete out.threatSource;
-  // Prompt M-A1: integration capacity and tier are recomputed each turn — do not persist
-  delete out.integrationCapacity;
-  delete out.tier;
-  return out;
+  return stripTransientFields(out);
 }
 
 /** Deserialize a player object, reconnecting registry references. */
@@ -248,19 +301,7 @@ function deserializePlayer(raw) {
     p.circulationType = (spTmpl && spTmpl.circulationType) || 'closed';
   }
   // Initialize transient per-turn fields (recomputed every turn after load)
-  p.integrationCapacity = 0;
-  p.tier = 1;
-  p.signals = { chemical: 0, vibration: { ground: 0, air: 0, water: 0 }, visual: 0 };
-  p.movedThisTurn = false;
-  p.inCombatThisTurn = false;
-  p.inWater = false;
-  p.detectedThreats = [];
-  p.detectedPrey = [];
-  p.detectedCorpses = [];
-  p.huntTarget = null;
-  p.threatSource = null;
-  p._senses = null;
-  p._cachedSenses = null;
+  initTransientFields(p);
   return p;
 }
 
@@ -301,32 +342,17 @@ function serializeMonsters(allLayers) {
       } else {
         out._threatSourceRef = null;
       }
-      delete out.threatSource;
-      // detectedThreats is recomputed each turn — don't persist
-      delete out.detectedThreats;
       // Prompt I-C: huntTarget is an entity reference — save as ID
       if (mon.huntTarget && mon.huntTarget.isPlayer) {
         out._huntTargetRef = 'player';
-      } else if (mon.huntTarget && mon.huntTarget.key) {
-        // Save enough info to attempt reconnection (may not survive if target dies)
-        out._huntTargetRef = null; // NPC targets are transient — don't persist
       } else {
-        out._huntTargetRef = null;
+        out._huntTargetRef = null; // NPC targets are transient — don't persist
       }
-      delete out.huntTarget;
-      // detectedPrey and detectedCorpses are recomputed each turn — don't persist
-      delete out.detectedPrey;
-      delete out.detectedCorpses;
-      // Transient per-turn fields — recomputed every turn, never need persistence
-      delete out.signals;
-      delete out._senses;
-      delete out._cachedSenses;
-      delete out.movedThisTurn;
-      delete out.inCombatThisTurn;
-      delete out.inWater;
-      // Prompt M-A1: integration capacity and tier are recomputed each turn
-      delete out.integrationCapacity;
-      delete out.tier;
+      // Strip all transient per-turn fields (recomputed every turn, may contain
+      // entity references that cause circular-ref errors in JSON.stringify)
+      for (const field of TRANSIENT_FIELDS) {
+        delete out[field];
+      }
       serialized.push(out);
     }
     result[li] = serialized;
@@ -406,15 +432,12 @@ function deserializeMonsters(allLayers) {
             pauseTimer: 0,
           };
         }
-        if (!mon.currentBehavior) mon.currentBehavior = 'wander';
+        // Initialize all transient per-turn fields to safe defaults
+        initTransientFields(mon);
 
-        // Prompt I-B: restore threat tracking state
-        mon.detectedThreats = [];  // recomputed each turn
-        // Restore threatSource from saved reference
+        // Prompt I-B: restore threatSource from saved reference (overrides default null)
         if (mon._threatSourceRef === 'player') {
           mon.threatSource = state.player;  // reconnect to player entity
-        } else {
-          mon.threatSource = null;
         }
         delete mon._threatSourceRef;
         // Ensure diet and fleeMode exist (backward compat for old saves)
@@ -426,22 +449,11 @@ function deserializeMonsters(allLayers) {
           const FLEE_MAP = { cave_crab: 'water', ambush_pred: 'home' };
           mon.fleeMode = FLEE_MAP[mon.key] || 'standard';
         }
-        // Prompt I-C: restore hunt tracking state
-        mon.detectedPrey = [];      // recomputed each turn
-        mon.detectedCorpses = [];   // recomputed each turn
+        // Prompt I-C: restore huntTarget from saved reference (overrides default null)
         if (mon._huntTargetRef === 'player') {
           mon.huntTarget = state.player;
-        } else {
-          mon.huntTarget = null;
         }
         delete mon._huntTargetRef;
-        // Initialize transient per-turn fields (recomputed every turn after load)
-        mon.signals = { chemical: 0, vibration: { ground: 0, air: 0, water: 0 }, visual: 0 };
-        mon.movedThisTurn = false;
-        mon.inCombatThisTurn = false;
-        mon.inWater = false;
-        mon._senses = null;
-        mon._cachedSenses = null;
         // Prompt M-A1: ensure circulationType exists (backward compat for old saves)
         if (mon.circulationType == null) {
           const CIRC_MAP = {
@@ -450,9 +462,6 @@ function deserializeMonsters(allLayers) {
           };
           mon.circulationType = CIRC_MAP[mon.key] || 'closed';
         }
-        // Prompt M-A1: transient tier fields — recomputed each turn
-        mon.integrationCapacity = 0;
-        mon.tier = 1;
       }
     }
   }
