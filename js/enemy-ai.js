@@ -18,6 +18,7 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          CHASE_LEASH_BASE, CHASE_LEASH_HUNGER_MULT, MEAL_HUNGER_REDUCTION,
          BITE_MASS_FRACTION, GRAZE_HUNGER_REDUCTION, HERBIVORE_SAFETY_BONUS,
          FORAGE_SEARCH_RADIUS,
+         DRIVE_COMPARE_THRESHOLD, PLANNING_THRESHOLD,
          REST_BLOOD_IMPAIRED, REST_BLOOD_WEAKENED, REST_BLOOD_CRITICAL, REST_WOUND_COEFF,
          REST_RECOVERY_NORMAL, REST_RECOVERY_WEAKENED, REST_RECOVERY_CRITICAL,
          REST_EATING_BONUS, REST_THRESHOLD,
@@ -1710,6 +1711,30 @@ function adjacencyCombatCheck(creature) {
 // ==================== UNIFIED AI LOOP ====================
 
 /** Main AI entry point — called once per creature per turn. */
+// ==================== COGNITIVE TIER SYSTEM (Prompt M-A1) ====================
+// Integration capacity = total mass of integration-dedicated neural tissue across
+// all surviving zones. Tier is derived from capacity vs two thresholds.
+// Recomputed each turn so zone destruction updates tier in real time.
+
+function computeIntegrationCapacity(creature) {
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return 0;
+  let total = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;            // destroyed zone contributes nothing
+    const neuralMass = zone.neural || 0;     // kg of neural tissue in this zone
+    const integrationFrac = (zone.neuralAllocation && zone.neuralAllocation.integration) || 0;
+    total += neuralMass * integrationFrac;
+  }
+  return total;
+}
+
+function getTier(integrationCapacity) {
+  if (integrationCapacity >= PLANNING_THRESHOLD) return 3;
+  if (integrationCapacity >= DRIVE_COMPARE_THRESHOLD) return 2;
+  return 1;
+}
+
 function runCreatureAI(creature) {
   if (creature.hp <= 0) return;
 
@@ -1720,6 +1745,8 @@ function runCreatureAI(creature) {
   // Immobilized creatures can't move but can still attack adjacently
   if (creature.immobilized) {
     updateDrives(creature);
+    creature.integrationCapacity = computeIntegrationCapacity(creature);  // M-A1
+    creature.tier = getTier(creature.integrationCapacity);                 // M-A1
     cacheEffectiveSenses(creature);   // L-B — sense caching
     detectThreats(creature);
     applySafetyFromThreats(creature);
@@ -1732,6 +1759,10 @@ function runCreatureAI(creature) {
 
   // Update drives
   updateDrives(creature);
+
+  // ── Cognitive tier (Prompt M-A1) ──
+  creature.integrationCapacity = computeIntegrationCapacity(creature);
+  creature.tier = getTier(creature.integrationCapacity);
 
   // Cache effective sense values (L-B) — once per turn, before detection
   cacheEffectiveSenses(creature);
@@ -1804,6 +1835,10 @@ function endPlayerTurn(action){
   if (player.movedThisTurn == null) player.movedThisTurn = false;
   if (player.inCombatThisTurn == null) player.inCombatThisTurn = false;
   if (player.inWater == null) player.inWater = false;
+
+  // ── Cognitive tier — player (Prompt M-A1) ──
+  player.integrationCapacity = computeIntegrationCapacity(player);
+  player.tier = getTier(player.integrationCapacity);
 
   turnCount++;
   advanceTick();  // advance day/night cycle

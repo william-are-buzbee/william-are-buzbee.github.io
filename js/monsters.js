@@ -783,6 +783,18 @@ function spawnMonster(key){
     m.originalNeural = m.bodyMap.reduce((sum, z) => sum + (z.neural || 0), 0);
   }
 
+  // ── Circulation type (Prompt M-A1) ──
+  // Clade A = closed circulatory system; Clade B = open
+  const CIRCULATION_MAP = {
+    wolf: 'closed', dire_wolf: 'closed', cave_crab: 'closed',
+    hare: 'open',   ambush_pred: 'open', mushroom: 'open',
+  };
+  m.circulationType = CIRCULATION_MAP[key] || 'closed';
+
+  // ── Cognitive tier initialization (Prompt M-A1) ──
+  m.integrationCapacity = 0;
+  m.tier = 1;
+
   // ── Drive system initialization (Prompt I-A) ──
   m.drives = {
     hunger: 0.15 + rand() * 0.30,   // random 0.15–0.45

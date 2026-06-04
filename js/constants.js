@@ -525,6 +525,7 @@ export const SPECIES_TEMPLATES = {
     description: 'Six limbs. Centralized brain, chemical-dominant senses. Bite and two claw attacks. The generalist — good at reading threats, decent in a fight, mobile enough to disengage.',
     bodyType: 'meso',
     colorPalette: 'meso_predator',
+    circulationType: 'closed',
   },
   ravager: {
     displayName: 'Ravager',
@@ -536,6 +537,7 @@ export const SPECIES_TEMPLATES = {
     description: 'Six limbs. Centralized brain, enhanced chemical senses. Bite and two heavy claw attacks. Hits hard, takes hits, dominates smaller creatures. Vulnerable to being flanked.',
     bodyType: 'apex',
     colorPalette: 'meso_predator',
+    circulationType: 'closed',
   },
   grazer: {
     displayName: 'Grazer',
@@ -547,6 +549,7 @@ export const SPECIES_TEMPLATES = {
     description: 'Eight limbs. Distributed ganglia, vibration-dominant senses. No attacks. Fastest creature in the game. Survives by not being caught. The hard mode.',
     bodyType: 'grazer',
     colorPalette: 'meso_predator',
+    circulationType: 'open',
   },
   shaleback: {
     displayName: 'Shale-back',
@@ -558,6 +561,7 @@ export const SPECIES_TEMPLATES = {
     description: 'Six limbs. Centralized brain, chemical and visual senses. Front shove and rear kick attacks. Massive, slow, extremely tanky. Almost impossible to kill head-on.',
     bodyType: 'meso',       // placeholder — no PLAYER_SHALEBACK sprite yet
     colorPalette: 'meso_predator',
+    circulationType: 'closed',
   },
   lurker: {
     displayName: 'Lurker',
@@ -569,6 +573,7 @@ export const SPECIES_TEMPLATES = {
     description: 'Eight limbs. Distributed ganglia, vibration-dominant senses. Seven attacks, mostly puncture. Devastating single-zone damage but fragile. Fights like a stiletto.',
     bodyType: 'meso',       // placeholder — no PLAYER_LURKER sprite yet
     colorPalette: 'meso_predator',
+    circulationType: 'open',
   },
 };
 
@@ -636,6 +641,10 @@ export const REST_EATING_BONUS = 0.05;       // eating reduces rest slightly (nu
 // --- Zone Healing (J) ---
 export const HEAL_BASE_RATE      = 0.15;     // base HP restored per zone per turn at 100% blood
 export const HEAL_REST_MULTIPLIER = 3.0;     // resting creatures heal 3× faster
+
+// --- Cognitive Tiers (M-A1) ---
+export const DRIVE_COMPARE_THRESHOLD = 0.01;   // integration capacity >= this → Tier 2
+export const PLANNING_THRESHOLD      = 0.08;   // integration capacity >= this → Tier 3
 
 // --- Hunt/Forage (I-C) ---
 export const CHASE_LEASH_BASE        = 8;     // minimum chase distance (tiles) even at low hunger

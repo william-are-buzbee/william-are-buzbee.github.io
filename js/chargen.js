@@ -88,6 +88,13 @@ function beginGame(){
     state.selectedSpecies,
     state.selectedColorPalette || SPECIES_TEMPLATES[state.selectedSpecies].colorPalette
   );
+
+  // ── Cognitive tier & circulation (Prompt M-A1) ──
+  const spTemplate = SPECIES_TEMPLATES[state.selectedSpecies];
+  state.player.circulationType = spTemplate.circulationType || 'closed';
+  state.player.integrationCapacity = 0;
+  state.player.tier = 1;
+
   initWorld(Math.floor(Math.random()*999999));
   document.getElementById('species-screen').style.display = 'none';
   state.gameState = 'play';

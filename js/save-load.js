@@ -167,6 +167,9 @@ function serializePlayer(p) {
   delete out.detectedCorpses;
   delete out.huntTarget;
   delete out.threatSource;
+  // Prompt M-A1: integration capacity and tier are recomputed each turn — do not persist
+  delete out.integrationCapacity;
+  delete out.tier;
   return out;
 }
 
@@ -238,7 +241,15 @@ function deserializePlayer(raw) {
   if (p.originalNeural == null && p.bodyMap) {
     p.originalNeural = p.bodyMap.reduce((sum, z) => sum + (z.neural || 0), 0);
   }
+  // Prompt M-A1: ensure circulationType exists (backward compat for old saves)
+  if (p.circulationType == null) {
+    const sp = p.species || 'prowler';
+    const spTmpl = SPECIES_TEMPLATES[sp];
+    p.circulationType = (spTmpl && spTmpl.circulationType) || 'closed';
+  }
   // Initialize transient per-turn fields (recomputed every turn after load)
+  p.integrationCapacity = 0;
+  p.tier = 1;
   p.signals = { chemical: 0, vibration: { ground: 0, air: 0, water: 0 }, visual: 0 };
   p.movedThisTurn = false;
   p.inCombatThisTurn = false;
@@ -313,6 +324,9 @@ function serializeMonsters(allLayers) {
       delete out.movedThisTurn;
       delete out.inCombatThisTurn;
       delete out.inWater;
+      // Prompt M-A1: integration capacity and tier are recomputed each turn
+      delete out.integrationCapacity;
+      delete out.tier;
       serialized.push(out);
     }
     result[li] = serialized;
@@ -428,6 +442,17 @@ function deserializeMonsters(allLayers) {
         mon.inWater = false;
         mon._senses = null;
         mon._cachedSenses = null;
+        // Prompt M-A1: ensure circulationType exists (backward compat for old saves)
+        if (mon.circulationType == null) {
+          const CIRC_MAP = {
+            wolf: 'closed', dire_wolf: 'closed', cave_crab: 'closed',
+            hare: 'open',   ambush_pred: 'open', mushroom: 'open',
+          };
+          mon.circulationType = CIRC_MAP[mon.key] || 'closed';
+        }
+        // Prompt M-A1: transient tier fields — recomputed each turn
+        mon.integrationCapacity = 0;
+        mon.tier = 1;
       }
     }
   }
