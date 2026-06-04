@@ -32,7 +32,7 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Update UI to have no icons and use key presses to bring up info screens
 - [x] Create two alien "clades" that all alien life is related too (clade A resembles more mammalian, clade B resembles more cephalopod, but both are terrestrial)
 - [x] Designed a 3d body map system as a core game mechanic that will replace stats like CON, STR, INT, etc. (instead, the body map visualizes and describes weight, muscularity, connective tissue, neural mass, armor, texture, hardness, sensory organs, neural pathways, etc and a 3d animal could be created from this description with a lot of functional detail)
-- [x] Create body maps for the main ancestors of the two clades (small herbivore, large herbivore, ambush predator, meso carnivore, apex carnivore) 
+- [x] Create body maps for the main ancestors of the two clades (small herbivore, large herbivore, ambush predator, meso carnivore, apex carnivore)
 - [x] First-pass "Size" and "Strength" system that roughly reflects total mass & relative muscle mass)
 - [x] First-pass Bleeding system (open vs closed circulatory system, bleed out, blood loss weakening, etc)
 - [x] First-pass Footprint system (attacks have a size, shape and area- relates to hitting multiple zones, like an elephant stepping on a rabbit, which should obviously hit multiple body parts)
@@ -42,40 +42,49 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] UI overlays (for multi limb health pools, bleed counter, removal of "max hp" which is vestigial)
 - [x] First-pass AI drive system (wandering, fleeing, hunting/foraging, sleeping, recovering bloodloss, etc)
 - [x] First-pass perception/transducer system (transducers based sensing, no more abstract "perception" stat)
-- [X] First-pass cognitive/ganglia/nervous system (episodic memory, pattern library, sensory integration, cognitive "workspace", planning, reflexive behavior, compression of signals, etc) 
+- [x] First-pass cognitive/ganglia/nervous system (episodic memory, pattern library, sensory integration, cognitive "workspace", planning, reflexive behavior, compression of signals, etc)
 
 ## Up Next
 - [ ] First-pass player perception/transducer visibility (make the player's visual field at parity with an equivalent animal, no free lunch or plot armor for player perception)
 
 ## Near-Term Plans (no particular order at the moment)
-- [ ] Second-pass over bleed/metabolism/healing mechanic 
+- [ ] Second-pass over bleed/metabolism/healing mechanic
 - [ ] Second-pass over footprint system
 - [ ] Second-pass over AI drive system
 - [ ] Second-pass over perception/transducer system
 - [ ] Second-pass over cognition/ganglia system
 
 ## Long-Term Plans
-- [ ] Implement underground generation of new floors and cave systems 
+- [ ] Implement underground generation of new floors and cave systems
 - [ ] Historical record overhaul (canon events across history, inventions, demigod interventions, factions, major events, wars, etc)
 - [ ] "Modernity" as a concept (religion, trade, communication, animals with complex sapience or similar level of societal complexity)
-- [ ] Build functional underground ecosystem on parity with surface (in terms of complexity and thoroughness, not fully complete though) 
+- [ ] Build functional underground ecosystem on parity with surface (in terms of complexity and thoroughness, not fully complete though)
 - [ ] AI overhaul (complex creature behavior based on instincts, body plan and evolutionary principles)
 
 ## Very Long-Term Plans
 - [ ] World editing (base building, tree cutting, ore mining, wall destroying, village creating, etc)
-- [ ] Follower system (unclear if pet system, follower system or more of a niche possibility) 
+- [ ] Follower system (unclear if pet system, follower system or more of a niche possibility)
 - [ ] Online interactivity (ability to share worlds and upload them, spectate, view/enter leaderboards, chat with other players/spectators, shared saves, etc)
 
 ## Prompt Reference
 For new chats, include:
 - Only the files that touch the system being changed
+- The Project Handoff document (always)
+- Relevant design documents (Body-Sim-Design, Surface-Creatures, Stat-System-Design, Ecology-Foundations, Mutation-Design, Lore)
 - Key utility signatures (worldDims returns array, getFeature returns by reference, etc.)
 - Known bugs and what causes them
 - What NOT to change
 
-Typical file sets:
+### Known Gotchas
+- **Save bloat:** Any new per-turn transient fields on creatures must be added to the TRANSIENT_FIELDS array in save-load.js or saves will exceed localStorage quota
+- **Vibration transducers are objects:** `zone.transducers.vibration` is `{ ground, air, water }`, not a single number. Any code reading it as a number will break.
+- **Player must inherit template fields:** When new fields are added to creature templates (monsters.js), the species selection path (chargen.js) must copy them to the player or the AI will not evaluate the player correctly
+- **Integration capacity is recomputed each turn:** Don't persist it. Zone destruction changes tier in real time.
+
+### Typical File Sets
 - **Biome/terrain work:** surface-gen.js, constants.js, terrain.js
-- **Enemy AI:** enemy-ai.js, monsters.js, combat.js, terrain.js
+- **Enemy AI / drives / behavior:** enemy-ai.js, monsters.js, combat.js, terrain.js, signals.js
+- **Perception / detection:** enemy-ai.js, signals.js, constants.js, fov.js, time-cycle.js, terrain.js
 - **Movement/combat:** player-actions.js, combat.js, enemy-ai.js, state.js
 - **Transitions:** world-gen.js, interactions.js, state.js, world-state.js
 - **Rendering:** rendering.js, sprites.js, terrain.js, constants.js
@@ -89,3 +98,5 @@ Typical file sets:
 - **UI/layout:** index.html, ui.js, main.js, rendering.js, constants.js
 - **Save/load:** save-load.js, state.js, chargen.js, interactions.js
 - **Input/controls:** main.js, player-actions.js, constants.js
+- **Body map / creatures:** constants.js, monsters.js, combat.js, Body-Sim-Design.md, Surface-Creatures.md
+- **Signals / emission:** signals.js, enemy-ai.js, constants.js, terrain.js
