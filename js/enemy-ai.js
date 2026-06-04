@@ -446,6 +446,67 @@ function selectBehavior(creature) {
   }
 }
 
+// ==================== TIER 1 — REACTIVE BEHAVIOR SELECTION (Prompt M-A2) ====================
+// Replaces selectBehavior for creatures with tier === 1.
+// Loudest immediate stimulus wins. No drive comparison. No long-range seeking.
+
+function selectBehaviorTier1(creature) {
+  const stimuli = [];
+
+  // --- Threat stimulus ---
+  // Direct response to detected threats — proximity-based, not safety-drive-mediated
+  if (creature.detectedThreats && creature.detectedThreats.length > 0) {
+    const worst = creature.detectedThreats.reduce((a, b) =>
+      (a.threatLevel / Math.max(1, a.distance)) > (b.threatLevel / Math.max(1, b.distance)) ? a : b);
+
+    // Intensity = threat level scaled by proximity (closer = louder)
+    const intensity = worst.threatLevel / Math.max(1, worst.distance);
+    if (intensity > 0) {
+      stimuli.push({ behavior: 'flee', intensity: intensity });
+      creature.threatSource = worst.source;
+    }
+  }
+
+  // --- Corpse stimulus (predators only) ---
+  // Standing on free food is very loud
+  if (creature.diet === 'predator') {
+    const corpseHere = getCorpseAt(state.player.layer, creature.x, creature.y);
+    if (corpseHere && creature.drives.hunger > HUNGER_THRESHOLD * 0.5) {
+      stimuli.push({ behavior: 'hunt', intensity: creature.drives.hunger * 2.0 });
+    }
+  }
+
+  // --- Adjacent prey stimulus (predators only) ---
+  // Prey right next to me triggers attack — no planning, just reaction
+  if (creature.diet === 'predator') {
+    const adjacentPrey = getAdjacentPrey(creature);
+    if (adjacentPrey && creature.drives.hunger > HUNGER_THRESHOLD) {
+      stimuli.push({ behavior: 'hunt', intensity: creature.drives.hunger * 1.5 });
+    }
+  }
+
+  // --- Food underfoot stimulus (herbivores only) ---
+  // Grazing is reactive — eat what you're standing on
+  if (creature.diet === 'herbivore') {
+    if (tileIsFood(creature.x, creature.y) && creature.drives.hunger > HUNGER_THRESHOLD) {
+      stimuli.push({ behavior: 'forage', intensity: creature.drives.hunger });
+    }
+  }
+
+  // --- Rest stimulus ---
+  // Only fires when body is in severe distress — Tier 1 doesn't strategically rest
+  if (creature.drives.rest > REST_THRESHOLD + 0.15) {
+    stimuli.push({ behavior: 'rest', intensity: creature.drives.rest });
+  }
+
+  // No strong stimulus — wander
+  if (stimuli.length === 0) return 'wander';
+
+  // Loudest wins
+  stimuli.sort((a, b) => b.intensity - a.intensity);
+  return stimuli[0].behavior;
+}
+
 // ==================== SENSE-SPECIFIC PERCEPTION (L-B) ====================
 // Replaces the flat-range detection from I-B with real perception.
 // Each creature detects others through chemical, vibration (ground/air),
@@ -1457,6 +1518,13 @@ function executeHunt(creature) {
     return true;
   }
 
+  // --- Tier 2+ only below this point (Prompt M-A2) ---
+  if (creature.tier < 2) {
+    // Tier 1: no seeking, no chasing — wander and hope to bump into food
+    executeWander(creature);
+    return false;
+  }
+
   // Priority 3: Move toward nearest corpse (free food)
   if (creature.detectedCorpses.length > 0) {
     const nearest = creature.detectedCorpses[0];
@@ -1519,6 +1587,13 @@ function executeForage(creature) {
   if (tileIsFood(creature.x, creature.y)) {
     executeGraze(creature);
     return true;
+  }
+
+  // --- Tier 2+ only below this point (Prompt M-A2) ---
+  if (creature.tier < 2) {
+    // Tier 1: no seeking — wander and graze whatever you step on
+    executeWander(creature);
+    return false;
   }
 
   // Otherwise, move toward nearest food tile
@@ -1775,8 +1850,13 @@ function runCreatureAI(creature) {
   detectPrey(creature);
   detectCorpses(creature);
 
-  // Select behavior
-  const behavior = selectBehavior(creature);
+  // Select behavior — branches by tier (Prompt M-A2)
+  let behavior;
+  if (creature.tier === 1) {
+    behavior = selectBehaviorTier1(creature);
+  } else {
+    behavior = selectBehavior(creature);  // existing drive comparison (Tier 2/3)
+  }
   creature.currentBehavior = behavior;
 
   // Execute behavior
@@ -2276,6 +2356,7 @@ function debugEcology() {
       name: m.name,
       key: m.key,
       diet: m.diet,
+      tier: m.tier || '?',
       pos: `${m.x},${m.y}`,
       behavior: m.currentBehavior,
       hunger: m.drives.hunger.toFixed(3),
