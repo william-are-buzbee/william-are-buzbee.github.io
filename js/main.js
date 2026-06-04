@@ -13,6 +13,8 @@ import { terrainName } from './terrain.js';
 import { inBounds, getCover, monsterAt as worldMonsterAt } from './world-state.js';
 import { getItems } from './ground-items.js';
 import { setOnPlayerDeathCallback, debugEcology, debugForceHunger } from './enemy-ai.js';
+window.debugEcology = debugEcology;
+window.debugForceHunger = debugForceHunger;
 import { setOnVictoryCallback, toggleStealth } from './combat.js';
 import { useAction, showHelp, examineTile, readBook } from './interactions.js';
 import { log } from './log.js';
@@ -20,6 +22,7 @@ import { openCharGen, renderCharGen, randomizeAttrs, beginGame, onPlayerDeath, o
 import { hasSave, tryResume, deleteSave } from './save-load.js';
 import { isMapOpen, toggleMap, closeMap, markCurrentCell } from './worldmap.js';
 import { isOverlayOpen, activePanel, togglePanel, closeOverlay, setInventoryActions } from './overlay.js';
+
 
 // ==================== WIRE CALLBACKS ====================
 setUpdateUICallback(updateUI);
