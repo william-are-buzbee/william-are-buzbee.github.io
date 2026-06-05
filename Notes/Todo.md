@@ -55,13 +55,15 @@ Prompt queue and task tracker. Check things off as they're done.
 - [ ] Second-pass over cognition/ganglia system
 
 ## Long-Term Plans
-- [ ] Implement underground generation of new floors and cave systems
+- [ ] Underground ecosystem (massive ecology, design docs exist but need more work)
+- [ ] Aquatic ecosystem (also massive ecology, no design docs exist, kindof a head scratcher)
 - [ ] Historical record overhaul (canon events across history, inventions, demigod interventions, factions, major events, wars, etc)
 - [ ] "Modernity" as a concept (religion, trade, communication, animals with complex sapience or similar level of societal complexity)
 - [ ] Build functional underground ecosystem on parity with surface (in terms of complexity and thoroughness, not fully complete though)
 - [ ] AI overhaul (complex creature behavior based on instincts, body plan and evolutionary principles)
 
 ## Very Long-Term Plans
+- [ ] Aquatic Ecosystem
 - [ ] World editing (base building, tree cutting, ore mining, wall destroying, village creating, etc)
 - [ ] Follower system (unclear if pet system, follower system or more of a niche possibility)
 - [ ] Online interactivity (ability to share worlds and upload them, spectate, view/enter leaderboards, chat with other players/spectators, shared saves, etc)
