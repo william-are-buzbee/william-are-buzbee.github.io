@@ -43,16 +43,16 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] First-pass AI drive system (wandering, fleeing, hunting/foraging, sleeping, recovering bloodloss, etc)
 - [x] First-pass perception/transducer system (transducers based sensing, no more abstract "perception" stat)
 - [x] First-pass cognitive/ganglia/nervous system (episodic memory, pattern library, sensory integration, cognitive "workspace", planning, reflexive behavior, compression of signals, etc)
+- [x] First-pass player perception/transducer visibility (make the player's visual field at parity with an equivalent animal, no free lunch or plot armor for player perception)
 
 ## Up Next
-- [ ] First-pass player perception/transducer visibility (make the player's visual field at parity with an equivalent animal, no free lunch or plot armor for player perception)
+- [ ] Second-pass over cognition/ganglia system 
 
 ## Near-Term Plans (no particular order at the moment)
 - [ ] Second-pass over bleed/metabolism/healing mechanic
 - [ ] Second-pass over footprint system
 - [ ] Second-pass over AI drive system
 - [ ] Second-pass over perception/transducer system
-- [ ] Second-pass over cognition/ganglia system
 
 ## Long-Term Plans
 - [ ] Underground ecosystem (massive ecology, design docs exist but need more work)
