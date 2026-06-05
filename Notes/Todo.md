@@ -65,6 +65,7 @@ Prompt queue and task tracker. Check things off as they're done.
 - [ ] World editing (base building, tree cutting, ore mining, wall destroying, village creating, etc)
 - [ ] Follower system (unclear if pet system, follower system or more of a niche possibility)
 - [ ] Online interactivity (ability to share worlds and upload them, spectate, view/enter leaderboards, chat with other players/spectators, shared saves, etc)
+- [ ] 3d rendering of the 2d gameworld (very much plausible given the way development works on this project, will implement 100% eventually)
 
 ## Prompt Reference
 For new chats, include:
