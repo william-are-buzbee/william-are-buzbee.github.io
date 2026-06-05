@@ -2359,7 +2359,7 @@ function computePlayerSensoryProfile(player) {
  * that are within detection range of at least one non-visual channel.
  * Call after updatePlayerFOV() and after all creature signals are computed.
  */
-export function computePlayerPerception() {
+function computePlayerPerception() {
   const player = state.player;
   if (!player || player.hp <= 0) return;
 
