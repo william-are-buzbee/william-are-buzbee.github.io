@@ -368,6 +368,33 @@ function render(){
 
   drawTimeTint(ctx, 0, 0, VIEW_W * TILE, VIEW_H * TILE, layer);
 
+  // ── Prompt N: Render creatures detected through non-visual senses ──
+  // Draws sprites for creatures the player senses (chemical, vibration)
+  // but cannot see visually. The tile remains fogged/dark; only the
+  // creature sprite appears on top.
+  if (state.player.sensedCreatures && state.player.sensedCreatures.length > 0) {
+    for (const creature of state.player.sensedCreatures) {
+      // Convert world position to viewport position
+      const svx = creature.x - ox;
+      const svy = creature.y - oy;
+      // Skip if outside the viewport
+      if (svx < 0 || svx >= VIEW_W || svy < 0 || svy >= VIEW_H) continue;
+      const spx = svx * TILE;
+      const spy = svy * TILE;
+      // Draw the creature sprite identically to how drawEntityAtTile draws monsters
+      let tintColor = null;
+      if (creature.tint) {
+        tintColor = creature.tint.startsWith('#') ? creature.tint : (BIOME[creature.tint] && BIOME[creature.tint].tint);
+      }
+      const spr = tintColor ? tintedMonsterSprite(creature.spr, tintColor) : spriteCache[creature.spr];
+      if (spr) ctx.drawImage(spr, spx, spy, TILE, TILE);
+      // Facing indicator
+      if (creature.facing) {
+        drawFacingIndicator(ctx, spx, spy, TILE, creature.facing);
+      }
+    }
+  }
+
   canvas.classList.toggle('stealth', state.player.stealth);
   ctx.restore();
   const logEl = document.getElementById('log');

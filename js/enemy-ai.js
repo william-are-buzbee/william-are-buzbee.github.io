@@ -535,7 +535,9 @@ function getEffectiveChemical(creature) {
   let best = 0;
   for (const zone of bodyMap) {
     if (zone.destroyed) continue;
-    const val = (zone.transducers && zone.transducers.chemical) || 0;
+    const chem = zone.transducers && zone.transducers.chemical;
+    // Support both new object format { contact, airborne, dissolved } and legacy flat number
+    const val = (chem && typeof chem === 'object') ? (chem.airborne || 0) : (chem || 0);
     if (val > best) best = val;
   }
   return best;
@@ -2085,6 +2087,7 @@ function endPlayerTurn(action){
     if (monsters[layer]) monsters[layer] = monsters[layer].filter(m => m.hp > 0);
   }
   updatePlayerFOV();  // recompute FOV before rendering
+  computePlayerPerception();  // Prompt N: detect creatures through non-visual senses
   render();
   saveGame();  // Auto-save after every player action
 }
@@ -2305,6 +2308,113 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
   }
 }
 
+// ==================== PLAYER NON-VISUAL PERCEPTION (Prompt N, Phase 2) ====================
+// Each turn, compute what the player detects through non-visual senses.
+// Creatures detected through chemical airborne, ground vibration, or air vibration
+// — but NOT currently in the player's visual FOV — are flagged for rendering.
+// Uses the same detection formulas and coefficients as the AI detection system.
+
+/**
+ * Compute the player's effective sensitivity per non-visual channel
+ * from surviving body zones. Same formulas as cacheEffectiveSenses but
+ * returns a structured object for the player detection loop.
+ */
+function computePlayerSensoryProfile(player) {
+  const bodyMap = getBodyMap(player);
+  if (!bodyMap) return { chemAirborne: 0, vibGround: 0, vibAir: 0 };
+
+  // Chemical airborne: max (best nose)
+  let chemAirborne = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    const chem = zone.transducers && zone.transducers.chemical;
+    const val = (chem && typeof chem === 'object') ? (chem.airborne || 0) : (chem || 0);
+    if (val > chemAirborne) chemAirborne = val;
+  }
+
+  // Ground vibration: sum with soft cap (spatial coverage)
+  let vibGroundSum = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    const val = (zone.transducers && zone.transducers.vibration && zone.transducers.vibration.ground) || 0;
+    vibGroundSum += val;
+  }
+  const vibGround = vibGroundSum > 0 ? vibGroundSum * VIB_SUM_CAP / (vibGroundSum + VIB_SUM_CAP) : 0;
+
+  // Air vibration: sum with soft cap
+  let vibAirSum = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    const val = (zone.transducers && zone.transducers.vibration && zone.transducers.vibration.air) || 0;
+    vibAirSum += val;
+  }
+  const vibAir = vibAirSum > 0 ? vibAirSum * VIB_SUM_CAP / (vibAirSum + VIB_SUM_CAP) : 0;
+
+  return { chemAirborne, vibGround, vibAir };
+}
+
+/**
+ * Compute which creatures the player detects through non-visual senses.
+ * Populates player.sensedCreatures with creatures outside visual FOV
+ * that are within detection range of at least one non-visual channel.
+ * Call after updatePlayerFOV() and after all creature signals are computed.
+ */
+export function computePlayerPerception() {
+  const player = state.player;
+  if (!player || player.hp <= 0) return;
+
+  // Clear previous turn's results
+  player.sensedCreatures = [];
+
+  const profile = computePlayerSensoryProfile(player);
+
+  // Early exit if the player has no non-visual senses
+  if (profile.chemAirborne <= 0 && profile.vibGround <= 0 && profile.vibAir <= 0) return;
+
+  const fovSet = state.fovSet;
+  const mons = monstersHere();
+  if (!mons || mons.length === 0) return;
+
+  for (const creature of mons) {
+    if (creature.hp <= 0) continue;
+
+    // Skip creatures already in visual FOV — they render normally
+    if (fovSet && fovSet.has(`${creature.x},${creature.y}`)) continue;
+
+    const d = dist(player.x, player.y, creature.x, creature.y);
+
+    // Absolute ceiling — nothing detected beyond this
+    if (d > MAX_DETECTION_DISTANCE) continue;
+
+    // Ensure creature has signals computed
+    if (!creature.signals) continue;
+
+    let detected = false;
+
+    // Chemical airborne detection — omnidirectional
+    if (profile.chemAirborne > 0 && creature.signals.chemical > 0) {
+      const chemRange = Math.cbrt(creature.signals.chemical) * profile.chemAirborne * CHEM_RANGE_COEFF;
+      if (d <= chemRange) detected = true;
+    }
+
+    // Ground vibration detection — omnidirectional, zero for still creatures
+    if (!detected && profile.vibGround > 0 && creature.signals.vibration.ground > 0) {
+      const vibGroundRange = Math.cbrt(creature.signals.vibration.ground) * profile.vibGround * VIB_GROUND_RANGE_COEFF;
+      if (d <= vibGroundRange) detected = true;
+    }
+
+    // Air vibration detection — omnidirectional
+    if (!detected && profile.vibAir > 0 && creature.signals.vibration.air > 0) {
+      const vibAirRange = Math.cbrt(creature.signals.vibration.air) * profile.vibAir * VIB_AIR_RANGE_COEFF;
+      if (d <= vibAirRange) detected = true;
+    }
+
+    if (detected) {
+      player.sensedCreatures.push(creature);
+    }
+  }
+}
+
 // ==================== LEGACY STUBS ====================
 // These functions are exported for backward compatibility with modules
 // that may import them. They are no-ops in the new drive-based AI.
@@ -2395,4 +2505,5 @@ export { endPlayerTurn, enemyAct, monsterMelee, playerInTerritory, monInOwnTerri
          hasCladeTerritory, wouldExceedTerritory,
          isWaterLocked, isWaterTile, processBleed,
          applySafetyFromDamage,
+         computePlayerPerception,
          debugEcology, debugForceHunger };

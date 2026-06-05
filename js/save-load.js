@@ -50,6 +50,9 @@ const TRANSIENT_FIELDS = [
 
     // Current behavior label (recomputed each turn)
     'currentBehavior',
+
+    // Player non-visual detection results (Phase 2 — Prompt N)
+    'sensedCreatures',
 ];
 
 /** Create a shallow copy with all transient per-turn fields removed. */
@@ -78,6 +81,7 @@ function initTransientFields(entity) {
     entity.integrationCapacity = 0;
     entity.tier = 1;
     entity.currentBehavior = 'wander';
+    entity.sensedCreatures = [];
 }
 
 // ==================== HELPERS ====================

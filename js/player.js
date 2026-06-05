@@ -99,8 +99,14 @@ function freshPlayer(speciesKey, colorPalette){
     let bestChem = 0, bestVib = 0, bestVis = 0;
     for (const z of p.bodyMap) {
       if (z.transducers) {
-        if ((z.transducers.chemical || 0) > bestChem) bestChem = z.transducers.chemical;
-        if ((z.transducers.vibration || 0) > bestVib) bestVib = z.transducers.vibration;
+        // Chemical: support new object format { contact, airborne, dissolved } and legacy flat number
+        const chem = z.transducers.chemical;
+        const chemVal = (chem && typeof chem === 'object') ? (chem.airborne || 0) : (chem || 0);
+        if (chemVal > bestChem) bestChem = chemVal;
+        // Vibration: object { ground, air, water } — take max across sub-channels
+        const vib = z.transducers.vibration;
+        const vibVal = (vib && typeof vib === 'object') ? Math.max(vib.ground || 0, vib.air || 0, vib.water || 0) : (vib || 0);
+        if (vibVal > bestVib) bestVib = vibVal;
         if ((z.transducers.visual || 0) > bestVis) bestVis = z.transducers.visual;
       }
     }
