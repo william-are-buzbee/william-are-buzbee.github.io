@@ -10,7 +10,7 @@ This mixture of two distinct strategies is mirrored in the evolution of large fa
 
 Over millions of years, these two clades radiate into every possible niche. They come to occupy the roles of apex predators, tiny generalists, titanic herbivores and carrion eating scavengers. Their expanse touches every biome and corner of the planet, including aquatic and sub-terrestial ecosystems.
 
-This is when the game begins. You play as an alien creature trying to survive in this vast world. Learn the ecology of the planet and how its inhabitants operate. Navigate a web of ecological interaction. Use your animal weaponry, senses and cognition to survive. Learn how to fight and how to live another day. 
+This is when the game begins. You play as an alien creature trying to survive in this vast world. Learn the ecology of the planet and how its inhabitants operate. Navigate a web of ecological interaction. Use your animal weaponry, senses and cognition to survive. Learn how to fight, and especially, how to live another day. 
 
 ---------
 
