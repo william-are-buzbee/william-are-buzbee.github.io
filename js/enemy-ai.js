@@ -22,7 +22,12 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          REST_BLOOD_IMPAIRED, REST_BLOOD_WEAKENED, REST_BLOOD_CRITICAL, REST_WOUND_COEFF,
          REST_RECOVERY_NORMAL, REST_RECOVERY_WEAKENED, REST_RECOVERY_CRITICAL,
          REST_EATING_BONUS, REST_THRESHOLD,
-         HEAL_BASE_RATE, HEAL_REST_MULTIPLIER } from './constants.js';
+         HEAL_BASE_RATE, HEAL_REST_MULTIPLIER,
+         NOISE_BASE, NOISE_EXPONENT, ATTENUATION_CHEMICAL, ATTENUATION_VIBRATION, ATTENUATION_VISUAL,
+         SNR_MOVEMENT, SNR_MAGNITUDE, SNR_DISCRIMINATION, SNR_IDENTIFICATION, SNR_DETAIL,
+         OVERRIDE_SCALE, STIMULUS_RESISTANCE, CRITICAL_MAGNITUDE, REACTIVE_HUNGER_THRESHOLD,
+         MIN_SEEK, SEEK_SCALE, PERSISTENCE_SCALE,
+         ASSESS_INTEGRATION_THRESHOLD } from './constants.js';
 import { T, isWalkable, isFoodTile, terrainInfo, tileBlocksVision } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -1520,13 +1525,6 @@ function executeHunt(creature) {
     return true;
   }
 
-  // --- Tier 2+ only below this point (Prompt M-A2) ---
-  if (creature.tier < 2) {
-    // Tier 1: no seeking, no chasing — wander and hope to bump into food
-    executeWander(creature);
-    return false;
-  }
-
   // Priority 3: Move toward nearest corpse (free food)
   if (creature.detectedCorpses.length > 0) {
     const nearest = creature.detectedCorpses[0];
@@ -1589,13 +1587,6 @@ function executeForage(creature) {
   if (tileIsFood(creature.x, creature.y)) {
     executeGraze(creature);
     return true;
-  }
-
-  // --- Tier 2+ only below this point (Prompt M-A2) ---
-  if (creature.tier < 2) {
-    // Tier 1: no seeking — wander and graze whatever you step on
-    executeWander(creature);
-    return false;
   }
 
   // Otherwise, move toward nearest food tile
@@ -1812,6 +1803,725 @@ function getTier(integrationCapacity) {
   return 1;
 }
 
+// ==================== PHYSICAL QUERY FUNCTIONS (Prompt O) ====================
+// Universal helpers called by reactive rules. Each reads from body map,
+// detection results, and game state. No per-species profiles.
+
+/** What weapons does this body have? */
+function combatCapability(creature) {
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return { canFight: false, maxDamage: 0, attackCount: 0 };
+  const attacks = getAvailableAttacks(bodyMap);
+  let maxDamage = 0;
+  for (const atk of attacks) {
+    const zone = bodyMap.find(z => z.key === atk.sourceZone);
+    if (zone) {
+      const dmg = computeStrikeDamage(creature, zone);
+      if (dmg > maxDamage) maxDamage = dmg;
+    }
+  }
+  return { canFight: attacks.length > 0, maxDamage, attackCount: attacks.length };
+}
+
+/** Does movement compromise the creature's dominant sense? */
+function movementCompromisesSense(creature) {
+  if (!creature._senses) return false;
+  const s = creature._senses;
+  // Compute effective sensitivity per channel — the one with highest value is dominant
+  const channels = [
+    { type: 'groundVibration', val: s.vibGround },
+    { type: 'chemicalAirborne', val: s.chemical },
+    { type: 'visual', val: s.visual },
+    { type: 'airVibration', val: s.vibAir },
+  ];
+  let dominant = channels[0];
+  for (const ch of channels) {
+    if (ch.val > dominant.val) dominant = ch;
+  }
+  // Ground vibration: own footsteps create noise in the listening channel AND emit detectable signal
+  return dominant.type === 'groundVibration';
+}
+
+/** Find nearest refuge. */
+function findRefuge(creature) {
+  // Water refuge
+  if (creature.canEnterWater) {
+    const water = findNearestWaterTile(creature.x, creature.y);
+    if (water) return { type: 'water', target: water };
+  }
+  // Territory/home refuge
+  const home = creature.wanderProfile && creature.wanderProfile.homePosition;
+  if (home && creature.territoryRadius > 0) {
+    const d = dist(creature.x, creature.y, home.x, home.y);
+    if (d > 2) return { type: 'territory', target: home };
+  }
+  return { type: 'none', target: null };
+}
+
+/** Is this creature hungry enough for reactive food rules? */
+function isReactivelyHungry(creature) {
+  return creature.drives && creature.drives.hunger > REACTIVE_HUNGER_THRESHOLD;
+}
+
+/** Blood state category. */
+function getBloodState(creature) {
+  if (creature.blood == null || creature.bloodMax == null || creature.bloodMax <= 0) return 'healthy';
+  const ratio = creature.blood / creature.bloodMax;
+  if (ratio <= 0.25) return 'critical';
+  if (ratio <= 0.50) return 'impaired';
+  return 'healthy';
+}
+
+// ==================== SNR-BASED INFORMATION QUALITY (Prompt O) ====================
+// What a creature learns about what it detects depends on signal-to-noise ratio
+// per detection channel. Better transducer quality + closer range = more information.
+
+/** Compute SNR for a specific channel detection. */
+function computeChannelSNR(observer, target, channelType) {
+  if (!observer._senses || !target.signals) return 0;
+
+  let emission = 0;
+  let sensitivity = 0;
+  let attenuationExp = ATTENUATION_CHEMICAL;
+
+  switch (channelType) {
+    case 'chemical':
+      emission = target.signals.chemical || 0;
+      sensitivity = observer._senses.chemical || 0;
+      attenuationExp = ATTENUATION_CHEMICAL;
+      break;
+    case 'vibration_ground':
+      emission = (target.signals.vibration && target.signals.vibration.ground) || 0;
+      sensitivity = observer._senses.vibGround || 0;
+      attenuationExp = ATTENUATION_VIBRATION;
+      break;
+    case 'vibration_air':
+      emission = (target.signals.vibration && target.signals.vibration.air) || 0;
+      sensitivity = observer._senses.vibAir || 0;
+      attenuationExp = ATTENUATION_VISUAL; // air vibration attenuates similarly to visual
+      break;
+    case 'visual':
+      emission = target.signals.visual || 0;
+      sensitivity = observer._senses.visual || 0;
+      attenuationExp = ATTENUATION_VISUAL;
+      break;
+    default:
+      return 0;
+  }
+
+  if (emission <= 0 || sensitivity <= 0) return 0;
+
+  const d = Math.max(1, dist(observer.x, observer.y, target.x, target.y));
+  const signalStrength = emission / Math.pow(d, attenuationExp);
+  const noiseFloor = NOISE_BASE / Math.pow(Math.max(1, sensitivity), NOISE_EXPONENT);
+  return signalStrength / noiseFloor;
+}
+
+/** Estimate relative magnitude from signal emission vs own mass. */
+function estimateRelativeMagnitude(signalEmission, observerMass, channelType) {
+  // Use own mass as reference. Emission scales roughly with mass, so
+  // comparing signal amplitude to what "my size" would emit gives relative size.
+  let selfEmission;
+  if (channelType === 'chemical') {
+    selfEmission = observerMass * 0.1; // CHEM_MASS_COEFF approximation
+  } else if (channelType === 'vibration_ground') {
+    selfEmission = observerMass * 0.15; // VIB_GROUND_COEFF approximation
+  } else {
+    selfEmission = Math.pow(observerMass, 0.33); // visual size approximation
+  }
+  if (selfEmission <= 0) return 'unknown';
+  const ratio = signalEmission / selfEmission;
+  if (ratio > 3.0) return 'much_larger';
+  if (ratio > 1.5) return 'larger';
+  if (ratio > 0.6) return 'similar';
+  if (ratio > 0.25) return 'smaller';
+  return 'much_smaller';
+}
+
+/** Build SNR-gated detection info for a detected entity.
+ *  Multiple channels contribute independently. */
+function buildDetectionInfo(observer, target, senses) {
+  const info = {
+    distance: dist(observer.x, observer.y, target.x, target.y),
+    direction: directionToward(observer.x, observer.y, target.x, target.y),
+    detected: true,
+    sizeRelative: null,
+    isMoving: null,
+    dietType: null,
+    species: null,
+    woundChemistry: false,
+    visibleWounds: false,
+    gaitAnomaly: false,
+    threatAssessment: null,
+  };
+
+  const observerMass = getCreatureMass(observer);
+
+  for (const channelType of senses) {
+    const snr = computeChannelSNR(observer, target, channelType);
+
+    // Movement detection (vibration channels)
+    if (snr >= SNR_MOVEMENT && (channelType === 'vibration_ground' || channelType === 'vibration_air')) {
+      info.isMoving = !!target.movedThisTurn;
+    }
+
+    // Magnitude estimation
+    if (snr >= SNR_MAGNITUDE && info.sizeRelative === null) {
+      let emission = 0;
+      if (channelType === 'chemical') emission = target.signals ? target.signals.chemical : 0;
+      else if (channelType === 'vibration_ground') emission = target.signals ? target.signals.vibration.ground : 0;
+      else if (channelType === 'visual') emission = target.signals ? target.signals.visual : 0;
+      else if (channelType === 'vibration_air') emission = target.signals ? target.signals.vibration.air : 0;
+      info.sizeRelative = estimateRelativeMagnitude(emission, observerMass, channelType);
+    }
+
+    // Diet discrimination (chemical channel only)
+    if (snr >= SNR_DISCRIMINATION && channelType === 'chemical') {
+      info.dietType = target.diet || null;
+    }
+
+    // Species identification
+    if (snr >= SNR_IDENTIFICATION) {
+      info.species = target.key || target.species || null;
+    }
+
+    // Fine detail
+    if (snr >= SNR_DETAIL) {
+      if (channelType === 'chemical') {
+        info.woundChemistry = target.blood != null && target.bloodMax != null &&
+                              target.blood < target.bloodMax * 0.7;
+      }
+      if (channelType === 'visual') {
+        const targetBodyMap = getBodyMap(target);
+        if (targetBodyMap) {
+          info.visibleWounds = targetBodyMap.some(z => z.destroyed);
+        }
+      }
+      if (channelType === 'vibration_ground') {
+        const targetBodyMap = getBodyMap(target);
+        if (targetBodyMap) {
+          info.gaitAnomaly = targetBodyMap.some(z => z.locomotion && z.destroyed);
+        }
+      }
+    }
+  }
+
+  // Fight assessment requires integration capacity above threshold
+  if (observer.integrationCapacity >= ASSESS_INTEGRATION_THRESHOLD) {
+    if (info.sizeRelative && info.dietType) {
+      info.threatAssessment = assessFightOutcome(observer, target, info);
+    }
+  }
+
+  return info;
+}
+
+/** Fight assessment — requires integration workspace to hold dual models. */
+function assessFightOutcome(observer, target, info) {
+  const cc = combatCapability(observer);
+  const observerMass = getCreatureMass(observer);
+  const selfPower = observerMass * cc.maxDamage *
+                    ((observer.blood != null && observer.bloodMax > 0) ?
+                     (observer.blood / observer.bloodMax) : 1.0);
+
+  // Estimate target mass from relative size
+  const MASS_MULT = { much_larger: 4.0, larger: 2.0, similar: 1.0, smaller: 0.5, much_smaller: 0.2 };
+  const estimatedTargetMass = observerMass * (MASS_MULT[info.sizeRelative] || 1.0);
+
+  let targetConditionModifier = 1.0;
+  if (info.woundChemistry) targetConditionModifier *= 0.7;
+  if (info.visibleWounds) targetConditionModifier *= 0.7;
+  if (info.gaitAnomaly) targetConditionModifier *= 0.8;
+
+  const estimatedTargetPower = estimatedTargetMass * targetConditionModifier;
+  if (estimatedTargetPower <= 0) return 'weaker';
+  const ratio = selfPower / estimatedTargetPower;
+
+  if (ratio > 2.0) return 'weaker';       // target is weaker
+  if (ratio > 1.2) return 'comparable';
+  if (ratio > 0.5) return 'stronger';
+  return 'overwhelming';                   // target is overwhelming
+}
+
+// ==================== DETECTION INFO PER CREATURE (Prompt O) ====================
+// Build detection info for all detected entities each turn.
+
+function buildAllDetectionInfo(creature) {
+  creature.detectionInfo = [];
+  const player = state.player;
+  const mons = monstersHere();
+
+  // Build info for all entities in detection range
+  const allTargets = [];
+  if (player && player.hp > 0) allTargets.push(player);
+  for (const m of mons) {
+    if (m === creature || m.hp <= 0) continue;
+    allTargets.push(m);
+  }
+
+  for (const target of allTargets) {
+    const result = canDetect(creature, target);
+    if (!result.detected) continue;
+    const info = buildDetectionInfo(creature, target, result.senses);
+    info.entity = target;
+    info.senses = result.senses;
+    creature.detectionInfo.push(info);
+  }
+}
+
+// ==================== UNIVERSAL REACTIVE RULE SET (Prompt O) ====================
+// Evaluated in priority order. First matching rule fires.
+// Every creature runs the same rules — body differences produce behavioral differences.
+
+function evaluateReactiveRules(creature) {
+  const cc = combatCapability(creature);
+  const diet = creature.diet || 'predator';
+  const bState = getBloodState(creature);
+  const refuge = findRefuge(creature);
+  const hungry = isReactivelyHungry(creature);
+  const detections = creature.detectionInfo || [];
+
+  // Find adjacent entities
+  const adjacentDetections = detections.filter(d => d.distance <= 1.5);
+  // Find nearby entities (short range, 3-5 tiles)
+  const nearbyDetections = detections.filter(d => d.distance <= 5);
+
+  // Was there damage from an undetected source (ambush)?
+  let ambushed = false;
+  if (creature.tookDamageThisTurn && creature.threatSource) {
+    const sourceDetected = detections.find(d => d.entity === creature.threatSource);
+    // If source was not detected BEFORE the damage, it's an ambush
+    // Approximate: if creature didn't have the source in prior detections, treat as ambush
+    if (!sourceDetected) ambushed = true;
+  }
+
+  // Torso damage this turn
+  let torsoCritical = false;
+  if (creature.tookDamageThisTurn) {
+    const bodyMap = getBodyMap(creature);
+    if (bodyMap) {
+      const torso = bodyMap.find(z => z.vital && !z.destroyed);
+      if (torso && torso.maxHp > 0 && torso.hp < torso.maxHp * 0.5) {
+        torsoCritical = true;
+      }
+    }
+  }
+
+  // Blood crossed critical this turn?
+  const bloodCrossedCritical = creature.tookDamageThisTurn && bState === 'critical';
+
+  // RULE 1 — CRITICAL EMERGENCY
+  if ((ambushed || bloodCrossedCritical || torsoCritical) && creature.tookDamageThisTurn) {
+    // Adjacent attacker and can fight → retaliate
+    if (cc.canFight && creature.threatSource &&
+        chebyshev(creature.x, creature.y, creature.threatSource.x, creature.threatSource.y) <= 1) {
+      return { behavior: 'retaliate', magnitude: 0.9, target: creature.threatSource };
+    }
+    // Flee toward refuge or away from damage source
+    if (refuge.type !== 'none') {
+      return { behavior: 'flee_refuge', magnitude: 0.9, target: refuge.target, refugeType: refuge.type };
+    }
+    return { behavior: 'flee', magnitude: 0.9 };
+  }
+
+  // RULE 2 — DAMAGE RESPONSE
+  if (creature.tookDamageThisTurn) {
+    if (!cc.canFight) {
+      if (refuge.type !== 'none') {
+        return { behavior: 'flee_refuge', magnitude: 0.7, target: refuge.target, refugeType: refuge.type };
+      }
+      return { behavior: 'flee', magnitude: 0.7 };
+    }
+    if (creature.threatSource &&
+        chebyshev(creature.x, creature.y, creature.threatSource.x, creature.threatSource.y) <= 1) {
+      if (bState === 'critical') {
+        if (refuge.type !== 'none') {
+          return { behavior: 'flee_refuge', magnitude: 0.7, target: refuge.target, refugeType: refuge.type };
+        }
+        return { behavior: 'flee', magnitude: 0.7 };
+      }
+      return { behavior: 'retaliate', magnitude: 0.7, target: creature.threatSource };
+    }
+    // Attacker not adjacent — disengage
+    if (refuge.type !== 'none') {
+      return { behavior: 'flee_refuge', magnitude: 0.7, target: refuge.target, refugeType: refuge.type };
+    }
+    return { behavior: 'flee', magnitude: 0.7 };
+  }
+
+  // RULE 3 — ADJACENT THREAT
+  for (const det of adjacentDetections) {
+    const size = det.sizeRelative || 'unknown';
+    if (size === 'larger' || size === 'much_larger') {
+      const isMovingOrPredator = det.isMoving || det.dietType === 'predator';
+      if (isMovingOrPredator || size === 'much_larger') {
+        if (!cc.canFight) {
+          if (refuge.type !== 'none') {
+            return { behavior: 'flee_refuge', magnitude: 0.6, target: refuge.target, refugeType: refuge.type };
+          }
+          return { behavior: 'flee', magnitude: 0.6 };
+        }
+        // Can fight but has escape route
+        if (refuge.type !== 'none') {
+          return { behavior: 'flee_refuge', magnitude: 0.6, target: refuge.target, refugeType: refuge.type };
+        }
+        // Cornered — fight
+        return { behavior: 'retaliate', magnitude: 0.6, target: det.entity };
+      }
+    }
+    // Similar size — orient toward (face potential threat)
+    if (size === 'similar' && cc.canFight) {
+      return { behavior: 'orient', magnitude: 0.6, target: det.entity };
+    }
+  }
+
+  // RULE 4 — NEARBY STRONG SIGNAL
+  for (const det of nearbyDetections) {
+    if (det.distance <= 1.5) continue; // already handled by Rule 3
+    const size = det.sizeRelative || 'unknown';
+    if (size === 'larger' || size === 'much_larger' || size === 'unknown') {
+      const isStrong = det.isMoving !== false; // moving or unknown movement = strong signal
+      if (!isStrong && size !== 'unknown') continue;
+
+      if (diet === 'herbivore') {
+        if (refuge.type !== 'none') {
+          return { behavior: 'flee_refuge', magnitude: 0.5, target: refuge.target, refugeType: refuge.type };
+        }
+        return { behavior: 'flee', magnitude: 0.5 };
+      }
+      if (diet === 'predator') {
+        if (size === 'much_larger') {
+          return { behavior: 'hold', magnitude: 0.5 };
+        }
+        return { behavior: 'orient', magnitude: 0.5, target: det.entity };
+      }
+    }
+  }
+
+  // RULE 5 — ADJACENT PREY / FOOD
+  if (diet === 'predator' && cc.canFight && hungry) {
+    for (const det of adjacentDetections) {
+      const size = det.sizeRelative || 'unknown';
+      if (size === 'smaller' || size === 'much_smaller') {
+        return { behavior: 'attack_adjacent', magnitude: 0.3, target: det.entity };
+      }
+    }
+    // Also check for corpse at current position
+    const corpseHere = getCorpseAt(state.player.layer, creature.x, creature.y);
+    if (corpseHere) {
+      return { behavior: 'eat_corpse', magnitude: 0.3 };
+    }
+  }
+  if (diet === 'herbivore' && hungry) {
+    if (tileIsFood(creature.x, creature.y)) {
+      return { behavior: 'graze', magnitude: 0.3 };
+    }
+  }
+
+  // RULE 6 — NEARBY FOOD
+  if (diet === 'predator' && cc.canFight && hungry) {
+    // Check detected smaller entities within 4 tiles
+    for (const det of detections) {
+      if (det.distance > 4) continue;
+      const size = det.sizeRelative || 'unknown';
+      if (size === 'smaller' || size === 'much_smaller') {
+        return { behavior: 'approach_food', magnitude: 0.2, target: det.entity };
+      }
+    }
+    // Check for nearby corpses
+    if (creature.detectedCorpses && creature.detectedCorpses.length > 0) {
+      const nearCorpse = creature.detectedCorpses.find(c => c.distance <= 4);
+      if (nearCorpse) {
+        return { behavior: 'approach_corpse', magnitude: 0.2, corpse: nearCorpse };
+      }
+    }
+  }
+  if (diet === 'herbivore' && hungry) {
+    const nearFood = findNearestFoodTile(creature.x, creature.y);
+    if (nearFood && dist(creature.x, creature.y, nearFood.x, nearFood.y) <= 3) {
+      return { behavior: 'approach_food_tile', magnitude: 0.2, target: nearFood };
+    }
+  }
+
+  // RULE 7 — TERRITORY RETURN
+  const home = creature.wanderProfile && creature.wanderProfile.homePosition;
+  if (home && creature.territoryRadius > 0) {
+    if (dist(creature.x, creature.y, home.x, home.y) > creature.territoryRadius) {
+      return { behavior: 'return_home', magnitude: 0.2, target: home };
+    }
+  }
+
+  // RULE 8 — REST
+  if ((bState === 'impaired' || bState === 'critical') &&
+      nearbyDetections.filter(d => {
+        const sz = d.sizeRelative || 'unknown';
+        return sz === 'larger' || sz === 'much_larger' || sz === 'unknown';
+      }).length === 0) {
+    return { behavior: 'rest', magnitude: 0.2 };
+  }
+
+  // RULE 9 — DEFAULT BEHAVIOR
+  if (movementCompromisesSense(creature)) {
+    return { behavior: 'hold', magnitude: 0.1 };
+  }
+  return { behavior: 'wander', magnitude: 0.1 };
+}
+
+// ==================== DELIBERATIVE OVERRIDE (Prompt O) ====================
+// After reactive layer produces a recommendation, the deliberative layer
+// attempts to override it based on integration capacity.
+
+function canOverrideReactive(creature, reactiveMagnitude) {
+  // Critical stimuli bypass deliberation regardless of integration
+  if (reactiveMagnitude >= CRITICAL_MAGNITUDE) return false;
+
+  const overrideCapacity = creature.integrationCapacity * OVERRIDE_SCALE;
+  const threshold = reactiveMagnitude * STIMULUS_RESISTANCE;
+  if (threshold <= 0) return true;
+
+  // Probabilistic override: ratio of capacity to threshold = probability of success.
+  // This models the signal race: higher integration = faster suppression signal,
+  // but even low-integration creatures occasionally manage it for weaker stimuli.
+  const ratio = overrideCapacity / threshold;
+  if (ratio >= 1.0) return true;
+  if (ratio <= 0) return false;
+  return Math.random() < ratio;
+}
+
+/** Run deliberative evaluation when override succeeds. */
+function deliberativeEvaluation(creature) {
+  // Compare drive urgencies (existing drive comparison)
+  const dominant = getDominantDrive(creature);
+  const detections = creature.detectionInfo || [];
+
+  // Compute deliberative seeking range
+  const seekRange = MIN_SEEK + creature.integrationCapacity * SEEK_SCALE;
+
+  switch (dominant.drive) {
+    case 'safety': {
+      // Deliberative safety: evaluate threat using full detection info
+      // If threat has assessment 'weaker', suppress flee
+      for (const det of detections) {
+        if (det.threatAssessment === 'weaker' && det.distance > 2) {
+          // Threat is assessed as weaker — hold ground or ignore
+          return { behavior: 'wander', fromDeliberate: true };
+        }
+      }
+      return { behavior: 'flee', fromDeliberate: true };
+    }
+    case 'hunger': {
+      if (creature.diet === 'predator') {
+        // Deliberative hunting: long-range pursuit with full info
+        // Check for corpses first
+        const corpseHere = getCorpseAt(state.player.layer, creature.x, creature.y);
+        if (corpseHere) return { behavior: 'eat_corpse', fromDeliberate: true };
+
+        // Check for adjacent prey
+        const adjPrey = getAdjacentPrey(creature);
+        if (adjPrey) return { behavior: 'hunt_attack', target: adjPrey, fromDeliberate: true };
+
+        // Seek detected prey within deliberative range
+        if (creature.detectedCorpses && creature.detectedCorpses.length > 0) {
+          const nearest = creature.detectedCorpses[0];
+          if (nearest.distance <= seekRange) {
+            return { behavior: 'approach_corpse', corpse: nearest, fromDeliberate: true };
+          }
+        }
+        if (creature.detectedPrey && creature.detectedPrey.length > 0) {
+          // Use fight assessment if available to avoid costly fights
+          for (const prey of creature.detectedPrey) {
+            if (prey.distance > seekRange) continue;
+            // Find detection info for this prey
+            const pInfo = detections.find(d => d.entity === prey.target);
+            if (pInfo && pInfo.threatAssessment === 'overwhelming') continue; // skip dangerous targets
+            if (pInfo && pInfo.threatAssessment === 'stronger') continue;      // too risky
+            return { behavior: 'hunt_chase', target: prey.target, fromDeliberate: true };
+          }
+        }
+        // No viable prey — wander
+        return { behavior: 'wander', fromDeliberate: true };
+      } else {
+        // Deliberative foraging: seek food at range
+        if (tileIsFood(creature.x, creature.y)) {
+          return { behavior: 'graze', fromDeliberate: true };
+        }
+        const nearestFood = findNearestFoodTile(creature.x, creature.y);
+        if (nearestFood) {
+          const foodDist = dist(creature.x, creature.y, nearestFood.x, nearestFood.y);
+          if (foodDist <= seekRange) {
+            return { behavior: 'approach_food_tile', target: nearestFood, fromDeliberate: true };
+          }
+        }
+        return { behavior: 'wander', fromDeliberate: true };
+      }
+    }
+    case 'rest':
+      return { behavior: 'rest', fromDeliberate: true };
+    default:
+      return { behavior: 'wander', fromDeliberate: true };
+  }
+}
+
+// ==================== ACTION EXECUTOR (Prompt O) ====================
+// Translates reactive/deliberative output into existing behavior functions.
+
+function executeAction(creature, action) {
+  let moved = false;
+  switch (action.behavior) {
+    case 'retaliate': {
+      // Attack the target
+      const target = action.target;
+      if (target && target.isPlayer && chebyshev(creature.x, creature.y, target.x, target.y) <= 1) {
+        monsterMelee(creature);
+        moved = true;
+      } else if (target && !target.isPlayer && chebyshev(creature.x, creature.y, target.x, target.y) <= 1) {
+        performNPCAttack(creature, target);
+        moved = true;
+      }
+      break;
+    }
+    case 'flee_refuge': {
+      if (action.refugeType === 'water') {
+        moved = executeFleeToWater(creature);
+      } else if (action.refugeType === 'territory') {
+        moved = executeFleeToHome(creature);
+      } else {
+        moved = executeStandardFlee(creature);
+      }
+      creature.currentBehavior = 'flee';
+      break;
+    }
+    case 'flee': {
+      moved = executeFlee(creature);
+      creature.currentBehavior = 'flee';
+      break;
+    }
+    case 'orient': {
+      // Face toward the target without moving
+      if (action.target && creature.facing) {
+        creature.facing.dx = Math.sign(action.target.x - creature.x);
+        creature.facing.dy = Math.sign(action.target.y - creature.y);
+      }
+      creature.currentBehavior = 'wander'; // cosmetically wander
+      break;
+    }
+    case 'hold': {
+      // Stay still — do nothing
+      creature.currentBehavior = 'rest';
+      break;
+    }
+    case 'attack_adjacent': {
+      const target = action.target;
+      if (target) {
+        if (target.isPlayer && chebyshev(creature.x, creature.y, target.x, target.y) <= 1) {
+          monsterMelee(creature);
+        } else if (!target.isPlayer && chebyshev(creature.x, creature.y, target.x, target.y) <= 1) {
+          performNPCAttack(creature, target);
+        }
+      }
+      creature.currentBehavior = 'hunt';
+      moved = true;
+      break;
+    }
+    case 'eat_corpse': {
+      const corpse = getCorpseAt(state.player.layer, creature.x, creature.y);
+      if (corpse) eatCorpse(creature, corpse, creature.x, creature.y);
+      creature.currentBehavior = 'hunt';
+      break;
+    }
+    case 'graze': {
+      executeGraze(creature);
+      creature.currentBehavior = 'forage';
+      break;
+    }
+    case 'approach_food': {
+      // Move toward prey entity
+      if (action.target) {
+        const dir = directionToward(creature.x, creature.y, action.target.x, action.target.y);
+        moved = moveInDirection(creature, dir);
+      }
+      creature.currentBehavior = 'hunt';
+      break;
+    }
+    case 'approach_corpse': {
+      if (action.corpse) {
+        const dir = directionToward(creature.x, creature.y, action.corpse.x, action.corpse.y);
+        moved = moveInDirection(creature, dir);
+      }
+      creature.currentBehavior = 'hunt';
+      break;
+    }
+    case 'approach_food_tile': {
+      if (action.target) {
+        const dir = directionToward(creature.x, creature.y, action.target.x, action.target.y);
+        moved = moveInDirection(creature, dir);
+      }
+      creature.currentBehavior = 'forage';
+      break;
+    }
+    case 'return_home': {
+      if (action.target) {
+        const dir = directionToward(creature.x, creature.y, action.target.x, action.target.y);
+        moved = moveInDirection(creature, dir);
+      }
+      creature.currentBehavior = 'wander';
+      break;
+    }
+    case 'rest': {
+      executeRest(creature);
+      creature.currentBehavior = 'rest';
+      break;
+    }
+    case 'hunt_attack': {
+      if (action.target) {
+        performHuntAttack(creature, action.target);
+      }
+      creature.currentBehavior = 'hunt';
+      moved = true;
+      break;
+    }
+    case 'hunt_chase': {
+      if (action.target) {
+        creature.huntTarget = action.target;
+        const dir = directionToward(creature.x, creature.y, action.target.x, action.target.y);
+        moved = moveInDirection(creature, dir);
+      }
+      creature.currentBehavior = 'hunt';
+      break;
+    }
+    case 'wander':
+    default: {
+      executeWander(creature);
+      creature.currentBehavior = 'wander';
+      break;
+    }
+  }
+  return moved;
+}
+
+// ==================== GOAL PERSISTENCE (Prompt O) ====================
+// Deliberative goals expire if target leaves detection for too long.
+
+function updateGoalPersistence(creature) {
+  if (!creature.huntTarget) {
+    creature._goalLostTurns = 0;
+    return;
+  }
+  // Check if hunt target is still detected
+  const detections = creature.detectionInfo || [];
+  const found = detections.find(d => d.entity === creature.huntTarget);
+  if (found) {
+    creature._goalLostTurns = 0;
+  } else {
+    creature._goalLostTurns = (creature._goalLostTurns || 0) + 1;
+    const maxPersistence = Math.max(1, Math.round(creature.integrationCapacity * PERSISTENCE_SCALE));
+    if (creature._goalLostTurns > maxPersistence) {
+      creature.huntTarget = null;
+      creature._goalLostTurns = 0;
+    }
+  }
+}
+
 function runCreatureAI(creature) {
   if (creature.hp <= 0) return;
 
@@ -1822,13 +2532,15 @@ function runCreatureAI(creature) {
   // Immobilized creatures can't move but can still attack adjacently
   if (creature.immobilized) {
     updateDrives(creature);
-    creature.integrationCapacity = computeIntegrationCapacity(creature);  // M-A1
-    creature.tier = getTier(creature.integrationCapacity);                 // M-A1
-    cacheEffectiveSenses(creature);   // L-B — sense caching
+    creature.integrationCapacity = computeIntegrationCapacity(creature);
+    creature.tier = getTier(creature.integrationCapacity);
+    cacheEffectiveSenses(creature);
     detectThreats(creature);
     applySafetyFromThreats(creature);
+    detectPrey(creature);
+    detectCorpses(creature);
+    buildAllDetectionInfo(creature);
     adjacencyCombatCheck(creature);
-    // Update water state and compute signals even when immobilized
     _updateInWater(creature);
     computeSignals(creature);
     return;
@@ -1844,38 +2556,43 @@ function runCreatureAI(creature) {
   // Cache effective sense values (L-B) — once per turn, before detection
   cacheEffectiveSenses(creature);
 
-  // Threat detection (L-B — sense-specific)
+  // Threat detection (L-B — sense-specific) — still used for safety drive spikes
   detectThreats(creature);
   applySafetyFromThreats(creature);
 
-  // Prey and corpse detection (I-C)
+  // Prey and corpse detection (I-C) — still used by deliberative layer
   detectPrey(creature);
   detectCorpses(creature);
 
-  // Select behavior — branches by tier (Prompt M-A2)
-  let behavior;
-  if (creature.tier === 1) {
-    behavior = selectBehaviorTier1(creature);
-  } else {
-    behavior = selectBehavior(creature);  // existing drive comparison (Tier 2/3)
-  }
-  creature.currentBehavior = behavior;
+  // ── Build SNR-based detection info (Prompt O) ──
+  buildAllDetectionInfo(creature);
 
-  // Execute behavior
-  let moved = false;
-  switch (behavior) {
-    case 'flee':   moved = executeFlee(creature); break;
-    case 'hunt':   moved = executeHunt(creature); break;
-    case 'forage': moved = executeForage(creature); break;
-    case 'rest':   moved = executeRest(creature); break;
-    case 'wander': executeWander(creature); break;
+  // ── Goal persistence check ──
+  updateGoalPersistence(creature);
+
+  // ══════════════════════════════════════════════════════════════
+  // ── Reactive-Deliberative Architecture (Prompt O) ──
+  // Step 1: Reactive layer always runs — produces recommendation + magnitude
+  let reactiveAction = evaluateReactiveRules(creature);
+
+  // Step 2: Deliberative override attempt
+  let action = reactiveAction;
+  if (canOverrideReactive(creature, reactiveAction.magnitude)) {
+    const deliberateAction = deliberativeEvaluation(creature);
+    if (deliberateAction) action = deliberateAction;
   }
 
-  // Adjacency combat: skip if fleeing AND successfully moved away AND was NOT hit this turn,
-  // or if hunting (hunt handles its own combat).
-  // Prompt K-B: fleeing creatures that took damage this turn retaliate.
+  // Step 3: Execute the selected action
+  creature.currentBehavior = action.behavior;
+  let moved = executeAction(creature, action);
+  // ══════════════════════════════════════════════════════════════
+
+  // Adjacency combat: skip if fleeing cleanly or if action already attacked
+  const behavior = creature.currentBehavior;
   const fleeingCleanly = (behavior === 'flee' && moved && !creature.tookDamageThisTurn);
-  if (!fleeingCleanly && behavior !== 'hunt') {
+  const alreadyAttacked = (action.behavior === 'retaliate' || action.behavior === 'attack_adjacent' ||
+                           action.behavior === 'hunt_attack');
+  if (!fleeingCleanly && !alreadyAttacked) {
     adjacencyCombatCheck(creature);
   }
 
@@ -1883,7 +2600,6 @@ function runCreatureAI(creature) {
   creature.tookDamageThisTurn = false;
 
   // ── Signal emission (Prompt L-A) ──
-  // Update water state from current tile, then compute all signals.
   _updateInWater(creature);
   computeSignals(creature);
 }

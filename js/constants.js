@@ -646,6 +646,35 @@ export const HEAL_REST_MULTIPLIER = 3.0;     // resting creatures heal 3× faste
 export const DRIVE_COMPARE_THRESHOLD = 0.01;   // integration capacity >= this → Tier 2
 export const PLANNING_THRESHOLD      = 0.08;   // integration capacity >= this → Tier 3
 
+// --- SNR-Based Information Quality (Prompt O) ---
+// Noise floor: NOISE_BASE / (transducerQuality ^ NOISE_EXPONENT)
+export const NOISE_BASE              = 1.0;    // base noise floor (before quality scaling)
+export const NOISE_EXPONENT          = 1.3;    // diminishing returns on quality improvements
+// Signal attenuation: emission / (distance ^ ATTENUATION_EXPONENT) per medium
+export const ATTENUATION_CHEMICAL    = 1.5;    // chemical attenuates moderately with distance
+export const ATTENUATION_VIBRATION   = 2.0;    // vibration attenuates faster (ground coupling loss)
+export const ATTENUATION_VISUAL      = 1.8;    // visual attenuates with distance
+// SNR thresholds — what information is available at each level
+export const SNR_MOVEMENT            = 1.5;    // resolve moving vs still (vibration)
+export const SNR_MAGNITUDE           = 3.0;    // resolve relative size category
+export const SNR_DISCRIMINATION      = 5.0;    // resolve compound profiles (predator vs herbivore chemistry)
+export const SNR_IDENTIFICATION      = 8.0;    // resolve species-specific pattern
+export const SNR_DETAIL              = 12.0;   // resolve fine structure (gait anomaly, wound chemistry)
+
+// --- Reactive-Deliberative Override (Prompt O) ---
+export const OVERRIDE_SCALE          = 3.5;    // overrideCapacity = integrationCapacity × this
+export const STIMULUS_RESISTANCE     = 1.0;    // override threshold = reactiveMagnitude × this
+export const CRITICAL_MAGNITUDE      = 0.9;    // magnitude at which override is impossible
+export const REACTIVE_HUNGER_THRESHOLD = 0.5;  // hunger level for reactive food rules
+
+// --- Deliberative Seeking Range (Prompt O) ---
+export const MIN_SEEK                = 8;      // minimum deliberative seek range (tiles)
+export const SEEK_SCALE              = 90;     // seekRange = MIN_SEEK + integrationCapacity × this
+export const PERSISTENCE_SCALE       = 30;     // goal persistence (turns) = integrationCapacity × this
+
+// --- Fight Assessment (Prompt O) ---
+export const ASSESS_INTEGRATION_THRESHOLD = 0.15; // integration capacity needed for fight assessment
+
 // --- Hunt/Forage (I-C) ---
 export const CHASE_LEASH_BASE        = 8;     // minimum chase distance (tiles) even at low hunger
 export const CHASE_LEASH_HUNGER_MULT = 15;    // additional chase tiles at hunger 1.0

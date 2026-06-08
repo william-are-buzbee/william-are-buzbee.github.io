@@ -53,6 +53,12 @@ const TRANSIENT_FIELDS = [
 
     // Player non-visual detection results (Phase 2 — Prompt N)
     'sensedCreatures',
+
+    // Prompt O: SNR-based detection info (entity references, recomputed each turn)
+    'detectionInfo',
+
+    // Prompt O: goal persistence counter (transient tracking state)
+    '_goalLostTurns',
 ];
 
 /** Create a shallow copy with all transient per-turn fields removed. */
@@ -82,6 +88,8 @@ function initTransientFields(entity) {
     entity.tier = 1;
     entity.currentBehavior = 'wander';
     entity.sensedCreatures = [];
+    entity.detectionInfo = [];         // Prompt O
+    entity._goalLostTurns = 0;         // Prompt O
 }
 
 // ==================== HELPERS ====================

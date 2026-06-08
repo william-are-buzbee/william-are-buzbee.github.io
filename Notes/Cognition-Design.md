@@ -1,10 +1,14 @@
 # Cognition Design — Neural Architecture, Memory, and Hormonal Systems
 
-This document captures the design theory for how cognition works in the game. It was developed through extended discussion between the human and the collaborator, grounded in real neuroscience and evolutionary biology. The principles here drive all future cognitive system implementation.
+This document captures the design theory for how cognition works in the game. It was developed through extended discussion between the human and the collaborator, grounded in real neuroscience and evolutionary biology. The principles here drive all cognitive system implementation.
+
+Include alongside Surface-Creatures.md, Sensory-Design.md, and Ecology-Foundations.md when working on AI behavior, perception, or creature design.
 
 ## Core Principle
 
 Cognition is not a stat. It's neural tissue, physically located in zones, allocated to specific functions, connected by pathways with bandwidth limits. Every cognitive capability is a downstream consequence of the physical neural architecture described in the body map.
+
+A corollary: reactivity is not failed cognition. A creature with zero integration and excellent sensors is not broken — it's a well-evolved animal whose reactive pathways are refined, fast, and domain-appropriate. Integration adds capability on top of reactivity. It does not replace it.
 
 ---
 
@@ -57,25 +61,126 @@ The hub ganglion receives compressed summaries, not raw sensory data. It's an ad
 
 ### Layer 3 — Integration
 
-The hub zone (whichever zone has the highest integration allocation) receives transmitted signals from all connected zones. Its job is to combine compressed summaries into a unified picture and make decisions.
+The hub zone (whichever zone has the highest integration allocation) receives transmitted signals from all connected zones. Its job is to combine compressed summaries into a unified picture and make decisions that override reactive behavior when context warrants it.
 
 **Integration capacity:**
 ```
 integrationCapacity = sum across all surviving zones of (neuralMass × integrationAllocation)
 ```
 
-Integration capacity gates behavioral sophistication along a continuum (not hard tiers — tiers are scaffolding, the final version uses continuous scaling):
+Integration capacity determines override reliability — how consistently the creature can suppress reactive impulses with contextual decisions. It also determines fight assessment capability and deliberative seeking range. See the Reactive-Deliberative Architecture section below for how this works.
 
-- **Very low integration:** Cannot compare drives. Responds to loudest stimulus. No long-range seeking. Reactive, stimulus-driven. Behavior emerges from ensemble of local responses.
-- **Low integration:** Can compare drives but slowly and noisily. Simple coordination. Responds to current state, not projected future.
-- **Moderate integration:** Accurate drive comparison, purposeful behavior, chase commitment. Can assess current fight but not project outcomes.
-- **High integration:** Multi-step planning, working memory, pre-emptive decisions. Can assess a losing fight before it becomes critical.
-
-The final system should use continuous scaling: integration capacity produces a noise level for drive comparison, a maximum seeking range, a threat assessment accuracy, etc. Each capability degrades continuously as integration is lost, rather than dropping at discrete thresholds.
+Current creature values:
+- Apex predator: 0.252
+- Large herbivore: 0.154
+- Meso-predator: 0.128
+- Ambush predator (lurker): 0.014
+- Small herbivore: 0.000
 
 ### Layer 4 — Motor Output
 
 Decisions translate to actions through motor control allocation. Zones with high motorControl execute precise, coordinated movements. Low allocation means clumsy execution. This already works implicitly through effectiveMuscle scaling with zone HP.
+
+---
+
+## Reactive-Deliberative Architecture
+
+### The Two-Layer Decision Model
+
+Every creature runs two decision layers each turn:
+
+**The reactive layer** fires every turn on every creature. It scans current stimuli, evaluates them against a universal set of prioritized rules, and produces a behavioral recommendation with an associated stimulus magnitude. The rules are identical for every creature — behavioral differences emerge because each rule's conditions query the creature's body map, and different bodies produce different answers. There are no per-species behavioral profiles.
+
+**The deliberative layer** attempts to override the reactive recommendation when integration capacity is sufficient. Override success is deterministic — a contest between the stimulus magnitude (how urgently the reactive layer wants to act) and the integration capacity (how much cognitive override the creature can muster).
+
+### Reactivity Is Not Failed Integration
+
+A cockroach cercal system detects air displacement from a lunging predator and triggers a directional escape in under 10 milliseconds. This is a dedicated circuit, refined over 300 million years of selection. It is not trying to compare drives and failing. It is executing a hardwired pathway that converts a specific stimulus into a specific motor output with near-zero processing.
+
+A rabbit freezes, then bolts. Not because it's badly evaluating hunger versus safety. Because freeze-then-bolt is an evolved strategy that evolution already optimized.
+
+Reactive pathways are the product of immense evolutionary optimization. They are fast, reliable, and domain-appropriate. They are a different kind of cognition, not a worse kind. The small herbivore with zero integration and ground vibration quality 5 on its fore-limbs is a superb sensing machine attached to refined reactive circuits. It doesn't need to think because its sensors give it enough warning to simply run.
+
+### The Physical Basis of Override
+
+The reactive pathway is anatomically short: stimulus hits local ganglion, local ganglion fires motor output. Two stops. Very fast.
+
+The deliberative pathway is anatomically long: stimulus travels through neural pathway to the integration hub, hub holds the signal in workspace alongside other sensory data, hub evaluates, suppression signal travels back through the pathway to the motor output. Many stops, constrained by pathway bandwidth at every hop.
+
+Override success is fundamentally a signal race. Can the deliberative suppression signal complete its round trip before the reactive motor output executes? This depends on pathway bandwidth, pathway hop count, and integration processing speed.
+
+**Current implementation** approximates this as:
+```
+overrideCapacity = integrationCapacity × OVERRIDE_SCALE
+if overrideCapacity > reactiveMagnitude × STIMULUS_RESISTANCE:
+    deliberative layer runs
+else:
+    reactive wins
+```
+
+This correlates well with physical override capability because higher-integration creatures also tend to have higher-bandwidth pathways. When Layer 2 (signal transmission timing) is fully implemented, the formula should be replaced with an actual signal race computation.
+
+### Universal Reactive Rules
+
+The reactive layer asks physical questions and the body answers:
+
+- **combatCapability** — do I have attacks on surviving zones? How much damage can I deal? (Determines fight vs flee)
+- **relativeMagnitude** — how does this signal compare to my own body's emissions? (Determines threat/prey assessment from signal magnitude)
+- **movementCompromisesSense** — does my dominant detection channel degrade when I move? (Determines hold vs wander as default)
+- **hasRefuge** — can I enter water? Do I have a territory to return to? (Determines flee target)
+- **dietResponse** — am I a predator or herbivore? (Determines whether "bigger than me" means flee or investigate)
+
+These queries produce the full behavioral repertoire:
+
+The lurker freezes when prey enters its territory because its dominant sense is ground vibration, and movement both degrades its detection and creates detectable emission. No lurker-specific code — the body answers "movement compromises sense" and the universal rule says "hold still."
+
+The meso-predator wanders and patrols because its dominant sense is airborne chemical, which works fine while moving. The body answers "movement doesn't compromise sense" and the universal rule says "wander."
+
+The small herbivore flees from anything larger because it has no attacks (combatCapability = false) and it's an herbivore (large signals are threats, not prey). It detects threats at substantial range through excellent distributed vibration sensing and bolts early.
+
+### What Override Produces
+
+When the deliberative layer fires, it runs drive comparison (existing hunger/safety/rest urgency system) with SNR-gated information about detected entities (see below). This is where contextual behavior emerges:
+
+The large herbivore smells a predator at range (reactive says: flee to water). Override fires because integration is sufficient and the stimulus is moderate. Deliberative layer evaluates: predator far away, not approaching, I'm near water. Continue grazing. When the predator closes and stimulus magnitude increases, the override fails and the herbivore bolts. This produces calm-until-threatened behavior.
+
+The apex predator takes moderate damage (reactive says: retaliate). Override fires. Deliberative layer evaluates: I'm winning this fight, target is wounded, continue attacking. The meso-predator in the same situation may fail to override — it retaliates reflexively where the apex deliberates. The apex feels composed; the meso-predator feels twitchy. Both have the same reactive circuits. The difference is in the override.
+
+### Seeking Range
+
+Reactive seeking is short (2-4 tiles). The creature responds to nearby opportunity.
+
+Deliberative seeking scales with integration:
+```
+seekRange = MIN_SEEK + integrationCapacity × SEEK_SCALE
+```
+
+Goal persistence: if the target leaves all detection channels for more turns than integrationCapacity × PERSISTENCE_SCALE, the deliberative goal expires and the creature falls back to reactive. The apex predator sustains pursuits across the map. The meso-predator gives up sooner. The lurker barely sustains goals past its territory edge.
+
+### Critical Override
+
+Some stimuli bypass deliberation regardless of integration. Ambush damage from an undetected source, blood crossing the critical threshold, massive torso trauma — these fire the reactive pathway before any deliberative signal can complete its round trip. Even the apex predator flinches from an ambush. The reactive circuitry is always running, and extreme stimuli produce signals too strong for the deliberative layer to override.
+
+---
+
+## SNR-Based Information Quality
+
+What a creature learns about what it detects depends on signal-to-noise ratio per detection channel. SNR = signal strength / noise floor, where noise floor is derived from transducer quality. See Sensory-Design.md for the full framework.
+
+Key thresholds (tunable):
+- **SNR_MOVEMENT (~1.5):** Can tell if the signal source is moving or still
+- **SNR_MAGNITUDE (~3.0):** Can estimate relative size (bigger/similar/smaller than me)
+- **SNR_DISCRIMINATION (~5.0):** Can resolve compound profiles (predator vs herbivore scent)
+- **SNR_IDENTIFICATION (~8.0):** Can match species signature from single-channel pattern library
+- **SNR_DETAIL (~12.0):** Can resolve fine structure (gait anomaly, wound chemistry, behavioral state)
+
+Each channel provides its own information independently. A creature detected through both chemical and vibration gets separate SNR per channel, separate information per channel. The cognitive system works with whatever the sensory system provides.
+
+**Fight outcome assessment** is the one classification that requires integration capacity rather than sensory hardware. Holding a model of self and other, comparing multiple attributes, projecting a hypothetical — that's workspace computation. No single channel provides it. Requires integration above ~0.15.
+
+**The reactive layer reads SNR-derived information for its conditions** (relative magnitude for threat assessment, movement state for vibration-triggered rules). When SNR is too low to provide a field, the reactive layer uses conservative defaults — unknown magnitude is treated as potentially larger, unknown diet as potential threat.
+
+**The deliberative layer reads the full SNR-derived information** for drive comparison and target selection. Better sensors give the deliberative layer more to work with, producing more contextual decisions.
 
 ---
 
@@ -119,6 +224,12 @@ The "episodic memory" is the coordinated reactivation across the mesh.
 
 **The deepest clade distinction:** Clade A remembers stories (coherent, sequential, episodic). Clade B remembers feelings ("this place makes my attack limbs tense and my sensor limbs cautious" — a distributed somatic memory that influences behavior without producing a coherent narrative).
 
+### Species Identification and Pattern Libraries
+
+Species identification from a single sensory channel requires hardware quality (high enough SNR to resolve a distinguishing signature) plus a pattern library (stored reference patterns to match against). This is hardware plus memory, not integration. A lurker's sensor limb with ground vibration quality 5 and a rich local pattern library identifies a meso-predator from footfall signature alone. The local ganglion does the match — it never routes to the hub. One channel, one library, done.
+
+**Current approximation:** Pattern libraries are not yet implemented as explicit memory systems. For the AI, species identification is approximated by a hardware quality threshold — if the detecting channel's SNR exceeds SNR_IDENTIFICATION, the creature "recognizes" the target. This assumes adult animals in a stable ecosystem have encountered common species often enough to have built the relevant patterns. When the memory system is implemented, species identification will depend on actual learned patterns rather than assumed ones.
+
 ---
 
 ## Hormonal System
@@ -133,7 +244,7 @@ Neural signals are fast, targeted, specific — a phone call between two zones t
 
 **Clade A (closed circulation):** High pressure, fast delivery. When the brain triggers an adrenaline-equivalent spike, the hormone reaches every muscle within 1-2 turns. The creature goes from calm to fight-or-flight almost instantly. This is why Clade A can make snap decisions — the broadcast system keeps up with the brain.
 
-**Clade B (open circulation):** Low pressure, diffuse delivery. Hemolymph fills body cavities and slowly washes over tissues. When a ganglion triggers a fear-hormone release, the hormone seeps through hemolymph over several turns. Zone by zone, the body enters a fear state. The sensor limbs near the threat feel it first. Far-side limbs feel it last.
+**Clade B (open/semi-open circulation):** Low pressure, diffuse delivery. Hemolymph fills body cavities and slowly washes over tissues. When a ganglion triggers a fear-hormone release, the hormone seeps through hemolymph over several turns. Zone by zone, the body enters a fear state. The sensor limbs near the threat feel it first. Far-side limbs feel it last.
 
 **This physically explains why Clade B behavior looks like ensemble averaging.** It's not just that the ganglia are independent processors — the motivational state itself propagates slowly. The left side is scared before the right side knows there's a problem. The body is a committee not because the ganglia disagree on interpretation, but because they're literally in different hormonal states at the same moment.
 
@@ -143,17 +254,17 @@ The lag between perception and motivation is the most Clade B characteristic in 
 
 ### Implementation Status
 
-Designed but deferred. First pass uses a simple HORMONE_DELAY constant (3 turns) for open-circulation creatures. Drive spikes distribute evenly over the delay period instead of applying instantly. A more complete model would track per-zone hormone concentrations with circulatory propagation.
+Designed but deferred. First pass uses a simple HORMONE_DELAY constant (3 turns) for open-circulation creatures. Drive spikes distribute evenly over the delay period instead of applying instantly. A more complete model would track per-zone hormone concentrations with circulatory propagation. See Circulatory-Immune-Design.md for how circulatory architecture relates to hormonal delivery.
 
 ---
 
 ## Cognitive Tradeoffs (Evolutionary)
 
-**Centralization buys intelligence and pays for it in vulnerability.** More integration capacity means better drive comparison, longer planning horizons, richer memory. But concentrating neural mass in one zone makes destroying that zone catastrophic.
+**Centralization buys intelligence and pays for it in vulnerability.** More integration capacity means better override reliability, longer planning horizons, richer memory. But concentrating neural mass in one zone makes destroying that zone catastrophic.
 
 **Distribution buys robustness and pays for it in coordination.** No single point of cognitive failure. But lower maximum cognitive capability, slower decision-making, noisier integration, and higher total metabolic cost (distributed processing requires more total neural mass to achieve equivalent computation because of pathway losses).
 
-**Neural mass is the most expensive tissue per kg.** Requires constant blood supply, disproportionate calories, generates heat. The hunger system already scales with neural mass. The bleed system already requires closed circulation for high-pressure brain delivery.
+**Neural mass is the most expensive tissue per kg.** Requires constant blood supply, disproportionate calories, generates heat. The hunger system already scales with neural mass. See Circulatory-Immune-Design.md for the relationship between neural demand and circulatory architecture — closed circulation solves the concentration problem of feeding a metabolically expensive brain, but distributed neural architectures can avoid needing that solution by keeping demand flat.
 
 **Allocation is zero-sum.** Each kg of neural mass is divided among functions. More chemicalProcessing means less integration. More episodicMemory means less patternLibrary. You can't be good at everything without more total neural mass, which costs more to feed and protect.
 
@@ -175,24 +286,39 @@ For game design: a zone with small neural mass but high integration allocation a
 
 ## Implementation Status
 
-**Implemented (first pass):**
+**Implemented:**
 - Integration capacity computed from body map each turn
-- Tier assignment (1/2/3) from thresholds (scaffolding for continuous scaling)
-- Tier 1 reactive behavior (loudest stimulus, no drive comparison, no long-range seeking)
-- Tier 2/3 existing drive comparison system
-- Head destruction drops tier in real time
+- Recomputed on zone destruction — drops in real time
+- circulationType on all creature templates
 
-**Designed, not implemented:**
+**Implementing (Prompt O):**
+- Reactive-deliberative two-layer architecture replacing the tier-based code fork
+- Universal reactive rules with body-map-derived conditions (no per-species profiles)
+- Deliberative override scaled by integration capacity (approximation of signal race)
+- SNR-based information quality gating what creatures learn from detections
+- Fight outcome assessment gated by integration threshold (~0.15)
+- Deliberative seeking range scaled by integration
+- Goal persistence scaled by integration
+- Critical override for extreme stimuli (unoverridable regardless of integration)
+
+**Designed, not yet implemented:**
+- Layer 2 signal compression and transmission timing (replaces override approximation with actual signal race)
 - Hormonal propagation delay (HORMONE_DELAY for open circulation)
-- Local processing quality per zone per sense
-- Signal compression through pathways
-- Continuous scaling replacing threshold tiers (noise in drive comparison, seeking range proportional to integration, threat assessment accuracy)
-- Episodic memory for Tier 3 creatures
-- Distributed pattern-library memory for Clade B
+- Local processing quality per zone per sense (localAssessment formula)
+- Episodic memory for Clade A (Phase 4)
+- Distributed pattern-library memory for Clade B (Phase 4)
 - Per-zone hormone concentrations with circulatory propagation
+- Sensitivity windows and saturation (see Sensory-Design.md)
+- Gain control and sensory adaptation
+- Territory-based sensory calibration
 
 **Design principles established:**
-- Transducer values = physical hardware at the zone, sensing from physically coupled media
+- Reactivity is not failed integration — it's a refined, evolved decision system
+- The reactive layer is universal, the body makes it specific
+- Integration buys override, not better reactions
+- Transducer values = physical hardware, sensing from physically coupled media
+- SNR determines information quality on a continuous gradient — nothing is free
+- Classification is hardware + pattern library, not integration (except fight assessment)
 - Information through pathways = cognition, not sensation
 - The hub receives compressed summaries, not raw data
 - Destroying a sensor limb kills a local mind, not just a sensor
