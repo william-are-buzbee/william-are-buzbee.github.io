@@ -15,6 +15,3 @@ This is when the game begins. You play as an alien creature trying to survive in
 ---------
 
 This game is inspired by Biblaridion's _Alien Biospheres_ series, an intelligent speculative evolution project. Other strong influences come from classic roguelikes like _Nethack_ and _Caves of Qud._
-
-A big fat work in progress. Check the Todo document for what I'm currently building. 
-
