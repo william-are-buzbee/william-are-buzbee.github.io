@@ -8,9 +8,9 @@ The environments, flora and fauna of this planet have evolved according to selec
 
 This mixture of two distinct strategies is mirrored in the evolution of large fauna on this planet. All fauna can be traced back to two ancient lineages: one that uses scent, centralized intelligence and closed circulation, while another uses vibration, open circulation and an octopus-like nervous system. 
 
-Over millions of years, these two clades radiate into every possible niche. They come to occupy the roles of apex predators. tiny generalist, along with titanic herbivores and carrion eating scavengers. Their expanse touches every biome and corner of the planet, including aquatic and sub-terrestial ecosystems.
+Over millions of years, these two clades radiate into every possible niche. They come to occupy the roles of apex predators, tiny generalists, titanic herbivores and carrion eating scavengers. Their expanse touches every biome and corner of the planet, including aquatic and sub-terrestial ecosystems.
 
-Millions of years have passed. You play as an alien creature trying to survive. Learn the ecology of the planet and how its inhabitants operate. Use your animal weaponry and senses to survive. Navigate a web of ecological interactions. Discover a unique strategy for survival on this alien world. 
+This is when the game begins. You play as an alien creature trying to survive in this vast ecology. Learn the ecology of the planet and how its inhabitants operate. Navigate a web of ecological interaction. Use your animal weaponry, senses and cognition to survive. Learn how to fight and how to live another day. 
 
 ---------
 
