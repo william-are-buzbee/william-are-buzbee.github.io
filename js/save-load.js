@@ -59,6 +59,9 @@ const TRANSIENT_FIELDS = [
 
     // Prompt O: goal persistence counter (transient tracking state)
     '_goalLostTurns',
+
+    // Prompt O: decision trace for debugCognition (debug-only, recomputed each turn)
+    '_lastTrace',
 ];
 
 /** Create a shallow copy with all transient per-turn fields removed. */
@@ -90,6 +93,7 @@ function initTransientFields(entity) {
     entity.sensedCreatures = [];
     entity.detectionInfo = [];         // Prompt O
     entity._goalLostTurns = 0;         // Prompt O
+    entity._lastTrace = null;          // Prompt O: debugCognition trace
 }
 
 // ==================== HELPERS ====================

@@ -2522,6 +2522,47 @@ function updateGoalPersistence(creature) {
   }
 }
 
+// ==================== DEBUG: RULE LABEL MAPPER ====================
+// Maps reactive action outputs back to human-readable rule names.
+const _RULE_LABELS = {
+  // magnitude 0.9 — Rule 1
+  'retaliate:0.9': 'R1 CRITICAL retaliate',
+  'flee_refuge:0.9': 'R1 CRITICAL flee_refuge',
+  'flee:0.9': 'R1 CRITICAL flee',
+  // magnitude 0.7 — Rule 2
+  'retaliate:0.7': 'R2 DAMAGE retaliate',
+  'flee_refuge:0.7': 'R2 DAMAGE flee_refuge',
+  'flee:0.7': 'R2 DAMAGE flee',
+  // magnitude 0.6 — Rule 3
+  'retaliate:0.6': 'R3 ADJ_THREAT retaliate',
+  'flee_refuge:0.6': 'R3 ADJ_THREAT flee_refuge',
+  'flee:0.6': 'R3 ADJ_THREAT flee',
+  'orient:0.6': 'R3 ADJ_THREAT orient',
+  // magnitude 0.5 — Rule 4
+  'flee_refuge:0.5': 'R4 NEARBY_STRONG flee',
+  'flee:0.5': 'R4 NEARBY_STRONG flee',
+  'hold:0.5': 'R4 NEARBY_STRONG hold',
+  'orient:0.5': 'R4 NEARBY_STRONG orient',
+  // magnitude 0.3 — Rule 5
+  'attack_adjacent:0.3': 'R5 ADJ_FOOD attack',
+  'eat_corpse:0.3': 'R5 ADJ_FOOD eat_corpse',
+  'graze:0.3': 'R5 ADJ_FOOD graze',
+  // magnitude 0.2 — Rule 6/7/8
+  'approach_food:0.2': 'R6 NEARBY_FOOD approach',
+  'approach_corpse:0.2': 'R6 NEARBY_FOOD corpse',
+  'approach_food_tile:0.2': 'R6 NEARBY_FOOD forage',
+  'return_home:0.2': 'R7 TERRITORY return',
+  'rest:0.2': 'R8 REST rest',
+  // magnitude 0.1 — Rule 9
+  'hold:0.1': 'R9 DEFAULT hold',
+  'wander:0.1': 'R9 DEFAULT wander',
+};
+
+function _ruleLabel(action) {
+  const key = action.behavior + ':' + action.magnitude;
+  return _RULE_LABELS[key] || ('R? ' + action.behavior + ' @' + action.magnitude);
+}
+
 function runCreatureAI(creature) {
   if (creature.hp <= 0) return;
 
@@ -2577,10 +2618,33 @@ function runCreatureAI(creature) {
 
   // Step 2: Deliberative override attempt
   let action = reactiveAction;
+  let overrideAttempted = false;
+  let overrideSucceeded = false;
+  const overrideCapacity = creature.integrationCapacity * OVERRIDE_SCALE;
+  const overrideThreshold = reactiveAction.magnitude * STIMULUS_RESISTANCE;
+  const overrideProbability = (reactiveAction.magnitude >= CRITICAL_MAGNITUDE) ? 0
+    : (overrideThreshold > 0 ? Math.min(1, overrideCapacity / overrideThreshold) : 1);
+
   if (canOverrideReactive(creature, reactiveAction.magnitude)) {
+    overrideAttempted = true;
     const deliberateAction = deliberativeEvaluation(creature);
-    if (deliberateAction) action = deliberateAction;
+    if (deliberateAction) {
+      overrideSucceeded = true;
+      action = deliberateAction;
+    }
   }
+
+  // ── Store decision trace for debugCognition() ──
+  creature._lastTrace = {
+    reactiveRule: _ruleLabel(reactiveAction),
+    reactiveBehavior: reactiveAction.behavior,
+    reactiveMagnitude: reactiveAction.magnitude,
+    overrideProbability: overrideProbability,
+    overrideAttempted: overrideAttempted,
+    overrideSucceeded: overrideSucceeded,
+    finalBehavior: action.behavior,
+    fromDeliberate: !!action.fromDeliberate,
+  };
 
   // Step 3: Execute the selected action
   creature.currentBehavior = action.behavior;
@@ -3214,6 +3278,95 @@ function debugForceHunger(value = 0.85) {
   return count;
 }
 
+/** Dump the full reactive-deliberative decision trace for all creatures.
+ *  Shows which reactive rule fired, override probability and result,
+ *  and what SNR-based info each creature has about its detections.
+ *  Call from console: window.debugCognition() */
+function debugCognition() {
+  const mons = monstersHere();
+  const rows = [];
+
+  for (const m of mons) {
+    if (m.hp <= 0) continue;
+
+    const t = m._lastTrace || {};
+    const ic = (m.integrationCapacity || 0).toFixed(3);
+
+    // Summarize best detection info
+    let snrSummary = '—';
+    if (m.detectionInfo && m.detectionInfo.length > 0) {
+      const parts = [];
+      for (const det of m.detectionInfo) {
+        const who = det.entity ? (det.entity.name || det.entity.key || 'player') : '?';
+        const sz = det.sizeRelative || '?';
+        const dt = det.dietType || '?';
+        const mv = det.isMoving != null ? (det.isMoving ? 'mv' : 'still') : '?';
+        const asmt = det.threatAssessment || '';
+        const d = det.distance ? det.distance.toFixed(1) : '?';
+        let detail = `${who}(${d}t): sz=${sz}`;
+        if (dt !== '?') detail += ` diet=${dt}`;
+        if (mv !== '?') detail += ` ${mv}`;
+        if (det.woundChemistry) detail += ' wound';
+        if (det.gaitAnomaly) detail += ' limp';
+        if (asmt) detail += ` [${asmt}]`;
+        parts.push(detail);
+      }
+      snrSummary = parts.join(' | ');
+    }
+
+    // Dominant sense
+    const s = m._senses || {};
+    const senseVals = [
+      { ch: 'Chem', v: s.chemical || 0 },
+      { ch: 'VibG', v: s.vibGround || 0 },
+      { ch: 'VibA', v: s.vibAir || 0 },
+      { ch: 'Vis',  v: s.visual || 0 },
+    ];
+    senseVals.sort((a, b) => b.v - a.v);
+    const domSense = senseVals[0].v > 0 ? senseVals[0].ch : 'none';
+
+    rows.push({
+      name: m.name,
+      IC: ic,
+      domSense: domSense,
+      rule: t.reactiveRule || '—',
+      mag: t.reactiveMagnitude != null ? t.reactiveMagnitude.toFixed(1) : '—',
+      'P(ovr)': t.overrideProbability != null ? (t.overrideProbability * 100).toFixed(0) + '%' : '—',
+      override: t.overrideSucceeded ? 'YES' : (t.overrideAttempted ? 'tried' : 'no'),
+      final: t.finalBehavior || '—',
+      delib: t.fromDeliberate ? '✓' : '',
+      detections: snrSummary,
+    });
+  }
+
+  if (rows.length === 0) {
+    console.log('No living creatures on the active layer.');
+    return [];
+  }
+
+  console.table(rows);
+
+  // Also log a compact override-effectiveness summary
+  const bySpecies = {};
+  for (const m of mons) {
+    if (m.hp <= 0) continue;
+    const k = m.key || m.name;
+    if (!bySpecies[k]) bySpecies[k] = { key: k, ic: m.integrationCapacity, overrides: 0, reactive: 0, total: 0 };
+    bySpecies[k].total++;
+    if (m._lastTrace) {
+      if (m._lastTrace.overrideSucceeded) bySpecies[k].overrides++;
+      else bySpecies[k].reactive++;
+    }
+  }
+  console.log('\n── Override summary ──');
+  for (const sp of Object.values(bySpecies)) {
+    const rate = sp.total > 0 ? ((sp.overrides / sp.total) * 100).toFixed(0) : '0';
+    console.log(`  ${sp.key} (IC=${sp.ic.toFixed(3)}): ${sp.overrides}/${sp.total} overrode (${rate}%)`);
+  }
+
+  return rows;
+}
+
 export { endPlayerTurn, enemyAct, monsterMelee, playerInTerritory, monInOwnTerritory,
          canSeePlayer, canSeePlayerTile, monsterViewRadius,
          syncSwarmAI, mushroomPackAI, mushroomTouch, wanderInTerritory, moveMonsterToward,
@@ -3222,4 +3375,4 @@ export { endPlayerTurn, enemyAct, monsterMelee, playerInTerritory, monInOwnTerri
          isWaterLocked, isWaterTile, processBleed,
          applySafetyFromDamage,
          computePlayerPerception,
-         debugEcology, debugForceHunger };
+         debugEcology, debugForceHunger, debugCognition };
