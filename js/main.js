@@ -12,9 +12,10 @@ import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion,
 import { terrainName } from './terrain.js';
 import { inBounds, getCover, monsterAt as worldMonsterAt } from './world-state.js';
 import { getItems } from './ground-items.js';
-import { setOnPlayerDeathCallback, debugEcology, debugForceHunger } from './enemy-ai.js';
+import { setOnPlayerDeathCallback, debugEcology, debugForceHunger, debugCognition } from './enemy-ai.js';
 window.debugEcology = debugEcology;
 window.debugForceHunger = debugForceHunger;
+window.debugCognition = debugCognition;
 import { setOnVictoryCallback, toggleStealth } from './combat.js';
 import { useAction, showHelp, examineTile, readBook } from './interactions.js';
 import { log } from './log.js';
@@ -478,4 +479,6 @@ updateTitleButtons();
 //   fh(0.95)     → starving — extended chase, fights through damage
 window.dbg = debugEcology;
 window.fh  = debugForceHunger;
+window.dc  = debugCognition;
+window.debugCognition = debugCognition;
 window.state = state;    
