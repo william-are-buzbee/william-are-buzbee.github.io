@@ -6,7 +6,7 @@ A tile-based browser game about survival on a believably simulated alien world.
 
 The environments, flora and fauna of this planet have evolved according to selective pressure. The dense atmosphere, dim sunlight and moist conditions inform the surface- swampy marshlands covered in mahogany-red flora. The strong presence of metals like manganese and copper in the planet's core provide a nearly inexhaustible supply of energy for chemosynthetic life, creating niches of flora that rival traditional photosynthesisers. 
 
-This mixture of two distinct strategies is mirrored in the evolution of large fauna on this planet. All fauna can be traced back to two ancient lineages- one that uses scent, centralized intelligemce and closed circulation, while another uses vibration, open circulation and has an octopus-like nervous system. 
+This mixture of two distinct strategies is mirrored in the evolution of large fauna on this planet. All fauna can be traced back to two ancient lineages- one that uses scent, centralized intelligence and closed circulation, while another uses vibration, open circulation and has an octopus-like nervous system. 
 
 Over millions of years, these two clades radiate into every possible niche, from apex predators and tiny generalists to titanic herbivores and carrion eating scavengers. Their expanse touches every biome and corner of the planet, including aquatic and sub-terrestial ecosystems.
 
