@@ -659,8 +659,8 @@ export const DIET_CONF_MIN          = 2.0;     // SNR below this: diet unknown
 export const DIET_CONF_FULL         = 6.0;     // SNR above this: diet certain
 
 // Species identification confidence curve (any channel)
-export const SPECIES_CONF_MIN       = 5.0;     // SNR below this: species unknown
-export const SPECIES_CONF_FULL      = 10.0;    // SNR above this: species identified
+export const SPECIES_CONF_MIN       = 1.5;     // SNR below this: species unknown
+export const SPECIES_CONF_FULL      = 3.5;    // SNR above this: species identified
 
 // Wound/condition detection confidence curve
 export const CONDITION_CONF_MIN     = 7.0;
