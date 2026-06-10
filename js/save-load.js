@@ -62,6 +62,12 @@ const TRANSIENT_FIELDS = [
 
     // Prompt O/P: decision trace for debugCognition (debug-only, recomputed each turn)
     '_lastTrace',
+
+    // Prompt Q: per-turn fields that were missing from stripping
+    '_actedNormally',       // NPC speed system flag (set/reset in endPlayerTurn loop)
+    '_cachedWater',         // cached nearest water tile position (periodically refreshed)
+    '_cachedWaterAge',      // age counter for _cachedWater cache
+    'bleedPenalty',         // recomputed each turn via computeBleedPenalty
 ];
 
 /** Create a shallow copy with all transient per-turn fields removed. */
@@ -94,6 +100,10 @@ function initTransientFields(entity) {
     entity.detectionInfo = [];         // Prompt P
     entity._goalLostTurns = 0;         // Prompt O/P
     entity._lastTrace = null;          // Prompt O/P: debugCognition trace
+    entity._actedNormally = false;     // Prompt Q: NPC speed system flag
+    entity._cachedWater = null;        // Prompt Q: cached nearest water tile
+    entity._cachedWaterAge = 0;        // Prompt Q: cache age counter
+    entity.bleedPenalty = 0;           // Prompt Q: recomputed from computeBleedPenalty
 }
 
 // ==================== HELPERS ====================
@@ -238,6 +248,21 @@ function serializePlayer(p) {
   // Blood system — save current blood level (bloodMax/bleedPenalty/bloodShare are derived on load)
   // Keep blood on out — it's a simple float, JSON-safe
 
+  // ── Prompt Q: defensive entity-reference clearing ──
+  // sensedCreatures contains live creature object references ({creature, bestSNR, ...}).
+  // detectionInfo contains entity references ({entity, ...}).
+  // These MUST be removed before JSON.stringify — if they survive, stringify follows
+  // the references and serializes every creature's full bodyMap, detectionInfo, etc.,
+  // cascading into hundreds of KB and triggering QuotaExceededError.
+  // Belt-and-suspenders: delete explicitly here AND via stripTransientFields below.
+  delete out.sensedCreatures;
+  delete out.detectionInfo;
+  delete out.detectedThreats;
+  delete out.detectedPrey;
+  delete out.detectedCorpses;
+  delete out.huntTarget;
+  delete out.threatSource;
+
   // Strip transient per-turn fields (recomputed every turn, may contain entity refs)
   return stripTransientFields(out);
 }
@@ -364,6 +389,12 @@ function serializeMonsters(allLayers) {
       } else {
         out._huntTargetRef = null; // NPC targets are transient — don't persist
       }
+      // ── Prompt Q: defensive entity-reference clearing ──
+      // detectionInfo entries contain entity references (info.entity = target).
+      // If these survive into JSON.stringify they cascade into full creature trees.
+      // Belt-and-suspenders: delete explicitly here AND via TRANSIENT_FIELDS below.
+      delete out.detectionInfo;
+      delete out.sensedCreatures;
       // Strip all transient per-turn fields (recomputed every turn, may contain
       // entity references that cause circular-ref errors in JSON.stringify)
       for (const field of TRANSIENT_FIELDS) {
@@ -558,6 +589,24 @@ export function saveGame() {
     };
 
     const json = JSON.stringify(saveData);
+
+    // Prompt Q: save-size sanity check — catch bloat early
+    if (json.length > 2 * 1024 * 1024) {
+      console.warn(`[Save] Save data is ${(json.length / 1024).toFixed(0)} KB — unexpectedly large. ` +
+                   `Checking for entity reference leaks...`);
+      // Spot-check: player should be a few KB, not hundreds
+      const playerJson = JSON.stringify(saveData.state.player || {});
+      console.warn(`[Save]   player: ${(playerJson.length / 1024).toFixed(1)} KB`);
+      // Spot-check: each monster should be a few KB
+      for (const li of Object.keys(saveData.monsters || {})) {
+        const layerMons = saveData.monsters[li] || [];
+        const layerJson = JSON.stringify(layerMons);
+        if (layerJson.length > 500 * 1024) {
+          console.warn(`[Save]   monsters layer ${li}: ${(layerJson.length / 1024).toFixed(1)} KB (${layerMons.length} creatures)`);
+        }
+      }
+    }
+
     localStorage.setItem(SAVE_KEY, json);
   } catch (err) {
     console.error('[Save] Failed to save game:', err);
