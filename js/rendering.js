@@ -1,6 +1,8 @@
 // ==================== RENDERING ====================
 import { state, worlds, covers, groundItems } from './state.js';
-import { TILE, VIEW_W, VIEW_H, LAYER_UNDER, BIOME, SNR_FULL_RENDER } from './constants.js';
+import { TILE, VIEW_W, VIEW_H, LAYER_UNDER, BIOME, SNR_FULL_RENDER,
+         SPECIES_DISPLAY_CONFIDENCE, MARKER_MIN_RADIUS, MARKER_MAX_RADIUS,
+         MARKER_MASS_MIN, MARKER_MASS_MAX } from './constants.js';
 import { T, terrainInfo } from './terrain.js';
 import { spriteCache, tintedSprite, tintedMonsterSprite, COLOR_PALETTES } from './sprites.js';
 import { inBounds, isTownCell, monsterAt, getCover } from './world-state.js';
@@ -368,11 +370,11 @@ function render(){
 
   drawTimeTint(ctx, 0, 0, VIEW_W * TILE, VIEW_H * TILE, layer);
 
-  // ── Prompt P: Render creatures detected through non-visual senses ──
-  // Draws sprites with SNR-based opacity for creatures the player senses
-  // (chemical, vibration) but cannot see visually. Faint ghost at detection
-  // edge (opacity ~0.1), solid sprite up close (opacity 1.0).
-  // The tile remains fogged/dark; only the creature sprite appears on top.
+  // ── Prompt Q: Species-confidence gated rendering of non-visual detections ──
+  // Below SPECIES_DISPLAY_CONFIDENCE: generic size-scaled blob (no species info).
+  // Above SPECIES_DISPLAY_CONFIDENCE: creature's actual sprite (identified).
+  // Both states use the existing SNR-based opacity gradient from Prompt P.
+  // Visual FOV creatures are unaffected — they render as full sprites on revealed tiles.
   if (state.player.sensedCreatures && state.player.sensedCreatures.length > 0) {
     for (const sensed of state.player.sensedCreatures) {
       const creature = sensed.creature;
@@ -392,16 +394,21 @@ function render(){
       ctx.save();
       ctx.globalAlpha = opacity;
 
-      // Draw the creature sprite identically to how drawEntityAtTile draws monsters
-      let tintColor = null;
-      if (creature.tint) {
-        tintColor = creature.tint.startsWith('#') ? creature.tint : (BIOME[creature.tint] && BIOME[creature.tint].tint);
-      }
-      const spr = tintColor ? tintedMonsterSprite(creature.spr, tintColor) : spriteCache[creature.spr];
-      if (spr) ctx.drawImage(spr, spx, spy, TILE, TILE);
-      // Facing indicator
-      if (creature.facing) {
-        drawFacingIndicator(ctx, spx, spy, TILE, creature.facing);
+      if ((sensed.speciesConfidence || 0) >= SPECIES_DISPLAY_CONFIDENCE) {
+        // IDENTIFIED: draw the creature's actual sprite
+        let tintColor = null;
+        if (creature.tint) {
+          tintColor = creature.tint.startsWith('#') ? creature.tint : (BIOME[creature.tint] && BIOME[creature.tint].tint);
+        }
+        const spr = tintColor ? tintedMonsterSprite(creature.spr, tintColor) : spriteCache[creature.spr];
+        if (spr) ctx.drawImage(spr, spx, spy, TILE, TILE);
+        // Facing indicator
+        if (creature.facing) {
+          drawFacingIndicator(ctx, spx, spy, TILE, creature.facing);
+        }
+      } else {
+        // UNIDENTIFIED: draw a size-scaled generic marker
+        drawUnidentifiedMarker(ctx, sensed.sizeEstimate, spx, spy, TILE);
       }
 
       ctx.restore();
@@ -458,6 +465,42 @@ function drawFacingIndicator(ctx, screenX, screenY, tileSize, facing) {
   ctx.stroke();
 
   ctx.restore();
+}
+
+// ── Prompt Q: Unidentified creature marker ──
+// Generic size-scaled blob for non-visually sensed creatures below the species
+// confidence threshold.  Cube-root mass scaling keeps the visual range manageable:
+// 5kg → small blob, 22kg → medium, 200kg → large but not tile-filling.
+// Slightly taller than wide to suggest "creature" not "object".
+// Color: muted blue-grey (#7a8b99) — neutral, no species association.
+function drawUnidentifiedMarker(ctx, sizeEstimate, screenX, screenY, tileSize) {
+  // Use midpoint of size estimate range for marker sizing
+  let estimatedMass = sizeEstimate
+    ? (sizeEstimate.lower + sizeEstimate.upper) / 2
+    : 20;  // fallback if somehow missing
+
+  // Nonlinear scaling: cube root of mass maps to radius.
+  // Prevents huge blobs for 200kg while keeping 5kg visible.
+  const massNormalized = Math.max(0, Math.min(1,
+    (Math.cbrt(estimatedMass) - Math.cbrt(MARKER_MASS_MIN)) /
+    (Math.cbrt(MARKER_MASS_MAX) - Math.cbrt(MARKER_MASS_MIN))
+  ));
+
+  const radius = (MARKER_MIN_RADIUS + massNormalized * (MARKER_MAX_RADIUS - MARKER_MIN_RADIUS)) * tileSize;
+
+  // Ellipse: slightly taller than wide (suggests "creature" not "object")
+  const radiusX = radius * 0.85;
+  const radiusY = radius * 1.0;
+
+  // Center in tile
+  const cx = screenX + tileSize / 2;
+  const cy = screenY + tileSize / 2;
+
+  // Filled ellipse in muted blue-grey
+  ctx.fillStyle = '#7a8b99';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, radiusX, radiusY, 0, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // Draw monster and player at a tile position

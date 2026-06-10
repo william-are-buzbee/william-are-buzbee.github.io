@@ -672,6 +672,20 @@ export const DIET_DECISION_THRESHOLD = 0.7;
 // SNR-based player rendering (Phase 3)
 export const SNR_FULL_RENDER        = 5.0;     // SNR at which sprite reaches full opacity
 
+// --- Species-Confidence Gated Rendering (Prompt Q) ---
+// Below this confidence, non-visual detections render as generic size-scaled blobs.
+// Above it, the creature's actual sprite is shown.  Separate from the AI's
+// DIET_DECISION_THRESHOLD (0.7) — the player "recognises" a species visually at
+// a potentially different confidence than an AI creature commits to a diet classification.
+export const SPECIES_DISPLAY_CONFIDENCE = 0.75;
+
+// Unidentified creature marker sizing (Prompt Q)
+// Cube-root mass scaling maps the biological range onto a manageable visual range.
+export const MARKER_MIN_RADIUS = 0.15;   // fraction of tile size for smallest creatures
+export const MARKER_MAX_RADIUS = 0.45;   // fraction of tile size for largest creatures
+export const MARKER_MASS_MIN   = 3;      // kg — at or below this → minimum marker
+export const MARKER_MASS_MAX   = 250;    // kg — at or above this → maximum marker
+
 // --- Reactive-Deliberative Override (Prompt O) ---
 export const OVERRIDE_SCALE          = 3.5;    // overrideCapacity = integrationCapacity × this
 export const STIMULUS_RESISTANCE     = 1.0;    // override threshold = reactiveMagnitude × this

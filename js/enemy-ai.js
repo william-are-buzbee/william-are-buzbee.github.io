@@ -3202,15 +3202,21 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
 // Each turn, compute what the player detects through non-visual senses.
 // Creatures detected through chemical airborne, ground vibration, or air vibration
 // — but NOT currently in the player's visual FOV — are flagged for rendering
-// with SNR-based opacity gradient.
+// with SNR-based opacity gradient and species-confidence gated blob/sprite display.
 // Uses per-zone detection (Prompt P) — same detectTargetPerZone function as AI.
+// Prompt Q: expanded to include speciesConfidence and sizeEstimate for rendering.
 
 /**
  * Compute which creatures the player detects through non-visual senses.
  * Uses per-zone detection (Prompt P) with SNR computation.
- * Populates player.sensedCreatures with { creature, bestSNR } objects
+ * Populates player.sensedCreatures with
+ *   { creature, bestSNR, speciesConfidence, sizeEstimate }
  * for creatures outside visual FOV that are within detection range.
  * Call after updatePlayerFOV() and after all creature signals are computed.
+ *
+ * Prompt Q: speciesConfidence and sizeEstimate are computed inline (lightweight
+ * version of the species/size curves from buildDetectionInfo) so the rendering
+ * system can gate blob-vs-sprite display.
  */
 function computePlayerPerception() {
   const player = state.player;
@@ -3242,7 +3248,26 @@ function computePlayerPerception() {
       if (det.snr > bestSNR) bestSNR = det.snr;
     }
 
-    player.sensedCreatures.push({ creature, bestSNR });
+    // Prompt Q: species confidence — same curve as buildDetectionInfo (any channel)
+    let speciesConfidence = 0;
+    if (bestSNR > SPECIES_CONF_MIN) {
+      speciesConfidence = Math.min(1.0,
+        (bestSNR - SPECIES_CONF_MIN) / (SPECIES_CONF_FULL - SPECIES_CONF_MIN));
+    }
+
+    // Prompt Q: size estimate — uncertainty narrows with bestSNR
+    let sizeEstimate = null;
+    if (bestSNR > 0) {
+      const uncertaintyFactor = SIZE_UNCERTAINTY_BASE / bestSNR;
+      const rawEstimate = estimateMassFromSignal(creature, player);
+      sizeEstimate = {
+        estimated: rawEstimate,
+        lower: rawEstimate / (1 + uncertaintyFactor),
+        upper: rawEstimate * (1 + uncertaintyFactor),
+      };
+    }
+
+    player.sensedCreatures.push({ creature, bestSNR, speciesConfidence, sizeEstimate });
   }
 }
 
