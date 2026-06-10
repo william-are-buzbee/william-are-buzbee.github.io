@@ -25,7 +25,7 @@ const TRANSIENT_FIELDS = [
     // Signal emission (L-A)
     'signals',
 
-    // Cached senses (L-B)
+    // Cached senses (legacy — no longer populated but stripped for old save compat)
     '_senses',
     '_cachedSenses',
 
@@ -51,16 +51,16 @@ const TRANSIENT_FIELDS = [
     // Current behavior label (recomputed each turn)
     'currentBehavior',
 
-    // Player non-visual detection results (Phase 2 — Prompt N)
+    // Player non-visual detection results (Prompt P: { creature, bestSNR } tuples)
     'sensedCreatures',
 
-    // Prompt O: SNR-based detection info (entity references, recomputed each turn)
+    // Prompt P: continuous-uncertainty detection info (entity references, recomputed each turn)
     'detectionInfo',
 
-    // Prompt O: goal persistence counter (transient tracking state)
+    // Prompt O/P: goal persistence counter (transient tracking state)
     '_goalLostTurns',
 
-    // Prompt O: decision trace for debugCognition (debug-only, recomputed each turn)
+    // Prompt O/P: decision trace for debugCognition (debug-only, recomputed each turn)
     '_lastTrace',
 ];
 
@@ -91,9 +91,9 @@ function initTransientFields(entity) {
     entity.tier = 1;
     entity.currentBehavior = 'wander';
     entity.sensedCreatures = [];
-    entity.detectionInfo = [];         // Prompt O
-    entity._goalLostTurns = 0;         // Prompt O
-    entity._lastTrace = null;          // Prompt O: debugCognition trace
+    entity.detectionInfo = [];         // Prompt P
+    entity._goalLostTurns = 0;         // Prompt O/P
+    entity._lastTrace = null;          // Prompt O/P: debugCognition trace
 }
 
 // ==================== HELPERS ====================

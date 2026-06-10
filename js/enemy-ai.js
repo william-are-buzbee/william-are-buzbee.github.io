@@ -13,7 +13,7 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          MASS_HUNGER_COEFF, NEURAL_HUNGER_COEFF, SAFETY_DECAY_RATE, REST_BASE_RATE,
          SAFETY_THRESHOLD, HUNGER_THRESHOLD,
          CHEM_RANGE_COEFF, VIB_GROUND_RANGE_COEFF, VIB_AIR_RANGE_COEFF, VIS_RANGE_COEFF,
-         VIB_SUM_CAP, MAX_DETECTION_DISTANCE,
+         MAX_DETECTION_DISTANCE,
          SAFETY_PROXIMITY_COEFF, SAFETY_DAMAGE_COEFF,
          CHASE_LEASH_BASE, CHASE_LEASH_HUNGER_MULT, MEAL_HUNGER_REDUCTION,
          BITE_MASS_FRACTION, GRAZE_HUNGER_REDUCTION, HERBIVORE_SAFETY_BONUS,
@@ -23,11 +23,13 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          REST_RECOVERY_NORMAL, REST_RECOVERY_WEAKENED, REST_RECOVERY_CRITICAL,
          REST_EATING_BONUS, REST_THRESHOLD,
          HEAL_BASE_RATE, HEAL_REST_MULTIPLIER,
-         NOISE_BASE, NOISE_EXPONENT, ATTENUATION_CHEMICAL, ATTENUATION_VIBRATION, ATTENUATION_VISUAL,
-         SNR_MOVEMENT, SNR_MAGNITUDE, SNR_DISCRIMINATION, SNR_IDENTIFICATION, SNR_DETAIL,
+         SIZE_UNCERTAINTY_BASE,
+         DIET_CONF_MIN, DIET_CONF_FULL, SPECIES_CONF_MIN, SPECIES_CONF_FULL,
+         CONDITION_CONF_MIN, CONDITION_CONF_FULL, DIET_DECISION_THRESHOLD,
          OVERRIDE_SCALE, STIMULUS_RESISTANCE, CRITICAL_MAGNITUDE, REACTIVE_HUNGER_THRESHOLD,
          MIN_SEEK, SEEK_SCALE, PERSISTENCE_SCALE,
-         ASSESS_INTEGRATION_THRESHOLD } from './constants.js';
+         ASSESS_INTEGRATION_THRESHOLD,
+         CHEM_MASS_COEFF } from './constants.js';
 import { T, isWalkable, isFoodTile, terrainInfo, tileBlocksVision } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -530,49 +532,107 @@ function getLightLevel() {
   }
 }
 
-// --- Effective Sense Caching ---
-// Computed once per creature per turn before detection runs.
-// Chemical and visual use max (best sensor). Vibration uses sum with soft cap.
+// --- Per-Zone Detection (Prompt P) ---
+// Each zone-channel pair independently computes detection range and SNR.
+// No creature-level aggregation. A creature detects when ANY one zone detects.
 
-function getEffectiveChemical(creature) {
-  const bodyMap = getBodyMap(creature);
+// Coefficient map: channel name → range coefficient
+const _CHANNEL_COEFF = {
+  chemicalAirborne: CHEM_RANGE_COEFF,
+  vibrationGround:  VIB_GROUND_RANGE_COEFF,
+  vibrationAir:     VIB_AIR_RANGE_COEFF,
+};
+
+// Emission map: extract target emission for a given channel
+function _getTargetEmission(target, channel) {
+  if (!target.signals) return 0;
+  switch (channel) {
+    case 'chemicalAirborne': return target.signals.chemical || 0;
+    case 'vibrationGround':  return (target.signals.vibration && target.signals.vibration.ground) || 0;
+    case 'vibrationAir':     return (target.signals.vibration && target.signals.vibration.air) || 0;
+    default: return 0;
+  }
+}
+
+/**
+ * Iterate transducers on a zone, yielding [channel, quality] pairs.
+ * Only distance-detection channels: chemical.airborne, vibration.ground, vibration.air.
+ * Skips contact/dissolved/water (touch-range or aquatic).
+ * Skips visual (handled by FOV system).
+ */
+function* _iterZoneTransducers(zone) {
+  if (!zone.transducers) return;
+  // Chemical airborne
+  const chem = zone.transducers.chemical;
+  if (chem) {
+    const airborne = (typeof chem === 'object') ? (chem.airborne || 0) : 0;
+    if (airborne > 0) yield ['chemicalAirborne', airborne];
+  }
+  // Vibration ground
+  const vib = zone.transducers.vibration;
+  if (vib) {
+    if ((vib.ground || 0) > 0) yield ['vibrationGround', vib.ground];
+    if ((vib.air || 0) > 0) yield ['vibrationAir', vib.air];
+  }
+}
+
+/**
+ * Per-zone detection: check whether observer detects target through non-visual channels.
+ * Returns array of { zone, channel, quality, snr } or null if not detected.
+ *
+ * Performance: skips zero-quality channels immediately. Precomputes quality×coeff per
+ * observer zone-channel pair (constant for the turn), skips targets with zero emission.
+ */
+function detectTargetPerZone(observer, target) {
+  const bodyMap = getBodyMap(observer);
+  if (!bodyMap) return null;
+  if (!target.signals) return null;
+
+  const d = dist(observer.x, observer.y, target.x, target.y);
+  if (d > MAX_DETECTION_DISTANCE) return null;
+
+  const detections = [];
+
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+
+    for (const [channel, quality] of _iterZoneTransducers(zone)) {
+      const emission = _getTargetEmission(target, channel);
+      if (emission <= 0) continue;
+
+      const coeff = _CHANNEL_COEFF[channel];
+      const zoneRange = Math.cbrt(emission) * quality * coeff;
+      if (d <= zoneRange) {
+        const snr = d > 0 ? zoneRange / d : zoneRange * 10; // adjacent = very high SNR
+        detections.push({ zone, channel, quality, snr });
+      }
+    }
+  }
+
+  return detections.length > 0 ? detections : null;
+}
+
+/**
+ * Helper: get the best chemical airborne quality from surviving zones.
+ * Used by detectCorpses and movementCompromisesSense.
+ */
+function getBestChemicalAirborne(entity) {
+  const bodyMap = getBodyMap(entity);
   if (!bodyMap) return 0;
   let best = 0;
   for (const zone of bodyMap) {
     if (zone.destroyed) continue;
     const chem = zone.transducers && zone.transducers.chemical;
-    // Support both new object format { contact, airborne, dissolved } and legacy flat number
-    const val = (chem && typeof chem === 'object') ? (chem.airborne || 0) : (chem || 0);
+    const val = (chem && typeof chem === 'object') ? (chem.airborne || 0) : 0;
     if (val > best) best = val;
   }
   return best;
 }
 
-function getEffectiveVibrationGround(creature) {
-  const bodyMap = getBodyMap(creature);
-  if (!bodyMap) return 0;
-  let sum = 0;
-  for (const zone of bodyMap) {
-    if (zone.destroyed) continue;
-    const val = (zone.transducers && zone.transducers.vibration && zone.transducers.vibration.ground) || 0;
-    sum += val;
-  }
-  // Soft cap: sum × VIB_SUM_CAP / (sum + VIB_SUM_CAP)
-  return sum > 0 ? sum * VIB_SUM_CAP / (sum + VIB_SUM_CAP) : 0;
-}
-
-function getEffectiveVibrationAir(creature) {
-  const bodyMap = getBodyMap(creature);
-  if (!bodyMap) return 0;
-  let sum = 0;
-  for (const zone of bodyMap) {
-    if (zone.destroyed) continue;
-    const val = (zone.transducers && zone.transducers.vibration && zone.transducers.vibration.air) || 0;
-    sum += val;
-  }
-  return sum > 0 ? sum * VIB_SUM_CAP / (sum + VIB_SUM_CAP) : 0;
-}
-
+/**
+ * Helper: get effective visual quality (max across surviving zones).
+ * Used by visual detection in canDetect (visual remains max-based).
+ */
 function getEffectiveVisual(creature) {
   const bodyMap = getBodyMap(creature);
   if (!bodyMap) return 0;
@@ -585,43 +645,50 @@ function getEffectiveVisual(creature) {
   return best;
 }
 
-/** Cache all effective sense values on creature._senses. Call once per turn. */
-function cacheEffectiveSenses(creature) {
-  creature._senses = {
-    chemical:  getEffectiveChemical(creature),
-    vibGround: getEffectiveVibrationGround(creature),
-    vibAir:    getEffectiveVibrationAir(creature),
-    visual:    getEffectiveVisual(creature),
-  };
+/**
+ * Compute dominant sense channel for a creature (for movementCompromisesSense).
+ * Returns { type, value } for the highest-quality non-visual sense.
+ */
+function getDominantSenseChannel(creature) {
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return { type: 'none', value: 0 };
+
+  let bestChem = 0, bestVibG = 0, bestVibA = 0, bestVis = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    // Chemical airborne
+    const chem = zone.transducers && zone.transducers.chemical;
+    const chemVal = (chem && typeof chem === 'object') ? (chem.airborne || 0) : 0;
+    if (chemVal > bestChem) bestChem = chemVal;
+    // Vibration
+    const vib = zone.transducers && zone.transducers.vibration;
+    if (vib) {
+      if ((vib.ground || 0) > bestVibG) bestVibG = vib.ground;
+      if ((vib.air || 0) > bestVibA) bestVibA = vib.air;
+    }
+    // Visual
+    const visVal = (zone.transducers && zone.transducers.visual) || 0;
+    if (visVal > bestVis) bestVis = visVal;
+  }
+
+  const channels = [
+    { type: 'groundVibration', value: bestVibG },
+    { type: 'chemicalAirborne', value: bestChem },
+    { type: 'visual', value: bestVis },
+    { type: 'airVibration', value: bestVibA },
+  ];
+  let dominant = channels[0];
+  for (const ch of channels) {
+    if (ch.value > dominant.value) dominant = ch;
+  }
+  return dominant;
 }
 
-// --- Per-Sense Range Functions ---
-// range = cbrt(emission) × sensitivity × SENSE_COEFF
-
-function getChemicalRange(detector, target) {
-  const emission = target.signals ? target.signals.chemical : 0;
-  const sensitivity = detector._senses ? detector._senses.chemical : 0;
-  if (emission <= 0 || sensitivity <= 0) return 0;
-  return Math.cbrt(emission) * sensitivity * CHEM_RANGE_COEFF;
-}
-
-function getVibrationGroundRange(detector, target) {
-  const emission = target.signals ? target.signals.vibration.ground : 0;
-  const sensitivity = detector._senses ? detector._senses.vibGround : 0;
-  if (emission <= 0 || sensitivity <= 0) return 0;
-  return Math.cbrt(emission) * sensitivity * VIB_GROUND_RANGE_COEFF;
-}
-
-function getVibrationAirRange(detector, target) {
-  const emission = target.signals ? target.signals.vibration.air : 0;
-  const sensitivity = detector._senses ? detector._senses.vibAir : 0;
-  if (emission <= 0 || sensitivity <= 0) return 0;
-  return Math.cbrt(emission) * sensitivity * VIB_AIR_RANGE_COEFF;
-}
+// --- Visual Range (unchanged — uses max quality, cone + LOS) ---
 
 function getVisualRange(detector, target) {
   const detectability = target.signals ? target.signals.visual : 0;
-  const sensitivity = detector._senses ? detector._senses.visual : 0;
+  const sensitivity = getEffectiveVisual(detector);
   const light = getLightLevel();
   if (detectability <= 0 || sensitivity <= 0 || light <= 0) return 0;
   return Math.cbrt(detectability * light) * sensitivity * VIS_RANGE_COEFF;
@@ -665,60 +732,76 @@ function hasLineOfSight(detector, target) {
   return hasLOS(layer, detector.x, detector.y, target.x, target.y);
 }
 
-// --- Master Detection Function ---
+// --- Master Detection Function (Prompt P) ---
+// Uses per-zone detection for non-visual channels, max-based for visual.
+// Returns { detected, detections, senses, distance, bestSNR }
 
 function canDetect(detector, target) {
 
   const d = dist(detector.x, detector.y, target.x, target.y);
 
   // Early exit — nothing detects beyond absolute ceiling
-  if (d > MAX_DETECTION_DISTANCE) return { detected: false, senses: [], distance: d };
+  if (d > MAX_DETECTION_DISTANCE) return { detected: false, detections: null, senses: [], distance: d, bestSNR: 0 };
 
   const senses = [];
+  let bestSNR = 0;
 
-  // Chemical — omnidirectional
-  const chemRange = getChemicalRange(detector, target);
-  if (d <= chemRange) senses.push('chemical');
+  // Non-visual: per-zone detection
+  const perZoneDetections = detectTargetPerZone(detector, target);
+  if (perZoneDetections) {
+    // Collect which channel types were detected
+    const channelsSeen = new Set();
+    for (const det of perZoneDetections) {
+      channelsSeen.add(det.channel);
+      if (det.snr > bestSNR) bestSNR = det.snr;
+    }
+    if (channelsSeen.has('chemicalAirborne')) senses.push('chemical');
+    if (channelsSeen.has('vibrationGround')) senses.push('vibration_ground');
+    if (channelsSeen.has('vibrationAir')) senses.push('vibration_air');
+  }
 
-  // Vibration ground — omnidirectional (zero if target is stationary, handled by emission)
-  const vibGroundRange = getVibrationGroundRange(detector, target);
-  if (d <= vibGroundRange) senses.push('vibration_ground');
-
-  // Vibration air — omnidirectional
-  const vibAirRange = getVibrationAirRange(detector, target);
-  if (d <= vibAirRange) senses.push('vibration_air');
-
-  // Visual — cone + line of sight + light
+  // Visual — cone + line of sight + light (unchanged, max-based)
   const visRange = getVisualRange(detector, target);
   if (d <= visRange && isInVisionCone(detector, target) && hasLineOfSight(detector, target)) {
     senses.push('visual');
+    const visSNR = d > 0 ? visRange / d : visRange * 10;
+    if (visSNR > bestSNR) bestSNR = visSNR;
   }
-
-if (target.isPlayer && senses.length > 0) {
-  console.log(`${detector.name} detects player at ${d.toFixed(1)} via [${senses}]  ` +
-    `ranges: C${getChemicalRange(detector,target).toFixed(1)} ` +
-    `VG${getVibrationGroundRange(detector,target).toFixed(1)} ` +
-    `VA${getVibrationAirRange(detector,target).toFixed(1)} ` +
-    `V${getVisualRange(detector,target).toFixed(1)}`);
-}
 
   return {
     detected: senses.length > 0,
+    detections: perZoneDetections,  // per-zone array (non-visual only) or null
     senses:   senses,
     distance: d,
+    bestSNR:  bestSNR,
   };
 }
 
 // --- Legacy helper for external callers / debug ---
 // Returns the max detection range across all senses for a hypothetical average target.
 function getDetectionRange(creature) {
-  if (!creature._senses) cacheEffectiveSenses(creature);
+  // Compute max quality per non-visual channel from zones
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return 0;
+  let bestChem = 0, bestVibG = 0, bestVibA = 0, bestVis = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    const chem = zone.transducers && zone.transducers.chemical;
+    const chemVal = (chem && typeof chem === 'object') ? (chem.airborne || 0) : 0;
+    if (chemVal > bestChem) bestChem = chemVal;
+    const vib = zone.transducers && zone.transducers.vibration;
+    if (vib) {
+      if ((vib.ground || 0) > bestVibG) bestVibG = vib.ground;
+      if ((vib.air || 0) > bestVibA) bestVibA = vib.air;
+    }
+    const visVal = (zone.transducers && zone.transducers.visual) || 0;
+    if (visVal > bestVis) bestVis = visVal;
+  }
   // Rough estimate using typical emission values — for debug display only
-  const s = creature._senses;
-  const chemR  = s.chemical > 0 ? Math.cbrt(2.0) * s.chemical * CHEM_RANGE_COEFF : 0;
-  const vibGR  = s.vibGround > 0 ? Math.cbrt(1.0) * s.vibGround * VIB_GROUND_RANGE_COEFF : 0;
-  const vibAR  = s.vibAir > 0 ? Math.cbrt(0.5) * s.vibAir * VIB_AIR_RANGE_COEFF : 0;
-  const visR   = s.visual > 0 ? Math.cbrt(3.0) * s.visual * VIS_RANGE_COEFF : 0;
+  const chemR  = bestChem > 0 ? Math.cbrt(2.0) * bestChem * CHEM_RANGE_COEFF : 0;
+  const vibGR  = bestVibG > 0 ? Math.cbrt(1.0) * bestVibG * VIB_GROUND_RANGE_COEFF : 0;
+  const vibAR  = bestVibA > 0 ? Math.cbrt(0.5) * bestVibA * VIB_AIR_RANGE_COEFF : 0;
+  const visR   = bestVis > 0 ? Math.cbrt(3.0) * bestVis * VIS_RANGE_COEFF : 0;
   return Math.max(chemR, vibGR, vibAR, visR);
 }
 
@@ -767,7 +850,7 @@ function getPlayerDiet() {
   return PLAYER_DIET_MAP[player.species] || 'predator';
 }
 
-/** Detect threats in range using sense-specific detection (L-B). */
+/** Detect threats in range using per-zone detection (Prompt P). */
 function detectThreats(creature) {
   const threats = [];
 
@@ -783,6 +866,7 @@ function detectThreats(creature) {
           distance: result.distance,
           threatLevel: threatLevel,
           senses: result.senses,
+          bestSNR: result.bestSNR,
         });
       }
     }
@@ -803,6 +887,7 @@ function detectThreats(creature) {
           distance: result.distance,
           threatLevel: threatLevel,
           senses: result.senses,
+          bestSNR: result.bestSNR,
         });
       }
     }
@@ -812,7 +897,7 @@ function detectThreats(creature) {
   return threats;
 }
 
-/** Spike safety based on detected threats. Uses per-sense max range for proximity (L-B). */
+/** Spike safety based on detected threats. Uses detection distance and max range. */
 function applySafetyFromThreats(creature) {
   if (!creature.detectedThreats || creature.detectedThreats.length === 0) return;
 
@@ -822,23 +907,12 @@ function applySafetyFromThreats(creature) {
 
   if (worst.threatLevel <= 0) return;
 
-  // Max range across senses that detected this threat
-  let maxRange = 0;
-  for (const sense of worst.senses) {
-    let r = 0;
-    switch (sense) {
-      case 'chemical':         r = getChemicalRange(creature, worst.source); break;
-      case 'vibration_ground': r = getVibrationGroundRange(creature, worst.source); break;
-      case 'vibration_air':    r = getVibrationAirRange(creature, worst.source); break;
-      case 'visual':           r = getVisualRange(creature, worst.source); break;
-    }
-    if (r > maxRange) maxRange = r;
-  }
-  if (maxRange <= 0) return;
+  // Use bestSNR to determine proximity: SNR 1 = edge of detection, higher = closer
+  // Proximity = 1 - 1/bestSNR, clamped [0, 1]
+  const bestSNR = worst.bestSNR || 1;
+  const proximity = Math.max(0, 1.0 - (1.0 / bestSNR));
 
-  // Closer = scarier. At range boundary, mild spike. At adjacent, maximum spike.
-  const proximity = 1.0 - (worst.distance / maxRange);
-  const spike = Math.max(0, proximity) * worst.threatLevel * SAFETY_PROXIMITY_COEFF;
+  const spike = proximity * worst.threatLevel * SAFETY_PROXIMITY_COEFF;
 
   creature.drives.safety = Math.min(1.0, creature.drives.safety + spike);
   creature.threatSource = worst.source;
@@ -1168,17 +1242,17 @@ function detectPrey(creature) {
 }
 
 /** Detect corpses within chemical detection range. Predators only.
- *  Corpses are detected primarily by smell — uses chemical sense range
- *  with an estimated emission based on corpse mass. */
+ *  Corpses are detected primarily by smell — uses best chemical airborne quality
+ *  per zone with range formula. */
 function detectCorpses(creature) {
   if (creature.diet !== 'predator') return;
 
   creature.detectedCorpses = [];
 
   // Corpse chemical emission estimate: mass × base coeff (stationary, no activity)
-  // Use chemical range formula: cbrt(emission) × sensitivity × coeff
-  const sensitivity = creature._senses ? creature._senses.chemical : 0;
-  if (sensitivity <= 0) {
+  // Use chemical range formula: cbrt(emission) × quality × coeff
+  const bestChemQuality = getBestChemicalAirborne(creature);
+  if (bestChemQuality <= 0) {
     // Fall back to a minimal detection range of 2 tiles (adjacent + 1)
     // for creatures with no chemical sense — they can still stumble on corpses
     const fallbackRange = 2;
@@ -1216,8 +1290,8 @@ function detectCorpses(creature) {
 
       // Estimate corpse chemical emission from its mass
       const corpseMass = item.mass || item.nutrition || 1;
-      const corpseEmission = corpseMass * 0.1;  // CHEM_MASS_COEFF equivalent
-      const range = Math.cbrt(corpseEmission) * sensitivity * CHEM_RANGE_COEFF;
+      const corpseEmission = corpseMass * CHEM_MASS_COEFF;
+      const range = Math.cbrt(corpseEmission) * bestChemQuality * CHEM_RANGE_COEFF;
 
       if (d <= range) {
         creature.detectedCorpses.push({ target: item, distance: d, x: ix, y: iy });
@@ -1825,19 +1899,7 @@ function combatCapability(creature) {
 
 /** Does movement compromise the creature's dominant sense? */
 function movementCompromisesSense(creature) {
-  if (!creature._senses) return false;
-  const s = creature._senses;
-  // Compute effective sensitivity per channel — the one with highest value is dominant
-  const channels = [
-    { type: 'groundVibration', val: s.vibGround },
-    { type: 'chemicalAirborne', val: s.chemical },
-    { type: 'visual', val: s.visual },
-    { type: 'airVibration', val: s.vibAir },
-  ];
-  let dominant = channels[0];
-  for (const ch of channels) {
-    if (ch.val > dominant.val) dominant = ch;
-  }
+  const dominant = getDominantSenseChannel(creature);
   // Ground vibration: own footsteps create noise in the listening channel AND emit detectable signal
   return dominant.type === 'groundVibration';
 }
@@ -1872,143 +1934,167 @@ function getBloodState(creature) {
   return 'healthy';
 }
 
-// ==================== SNR-BASED INFORMATION QUALITY (Prompt O) ====================
-// What a creature learns about what it detects depends on signal-to-noise ratio
-// per detection channel. Better transducer quality + closer range = more information.
+// ==================== CONTINUOUS UNCERTAINTY (Prompt P) ====================
+// Replaces binary SNR thresholds with continuously narrowing uncertainty ranges
+// for size, and confidence curves for diet/species/condition identification.
 
-/** Compute SNR for a specific channel detection. */
-function computeChannelSNR(observer, target, channelType) {
-  if (!observer._senses || !target.signals) return 0;
-
-  let emission = 0;
-  let sensitivity = 0;
-  let attenuationExp = ATTENUATION_CHEMICAL;
-
-  switch (channelType) {
-    case 'chemical':
-      emission = target.signals.chemical || 0;
-      sensitivity = observer._senses.chemical || 0;
-      attenuationExp = ATTENUATION_CHEMICAL;
-      break;
-    case 'vibration_ground':
-      emission = (target.signals.vibration && target.signals.vibration.ground) || 0;
-      sensitivity = observer._senses.vibGround || 0;
-      attenuationExp = ATTENUATION_VIBRATION;
-      break;
-    case 'vibration_air':
-      emission = (target.signals.vibration && target.signals.vibration.air) || 0;
-      sensitivity = observer._senses.vibAir || 0;
-      attenuationExp = ATTENUATION_VISUAL; // air vibration attenuates similarly to visual
-      break;
-    case 'visual':
-      emission = target.signals.visual || 0;
-      sensitivity = observer._senses.visual || 0;
-      attenuationExp = ATTENUATION_VISUAL;
-      break;
-    default:
-      return 0;
+/** Estimate target mass from signal — uses chemical emission as primary mass proxy.
+ *  Observer uses its own body as a measuring stick. */
+function estimateMassFromSignal(target, observer) {
+  const observerMass = getCreatureMass(observer);
+  // Use chemical emission as primary proxy (always nonzero for living creatures)
+  const targetChemEmission = target.signals ? target.signals.chemical : 0;
+  // Compute what the observer's own chemical emission would be (at rest, base)
+  const selfChemEmission = observerMass * CHEM_MASS_COEFF;
+  if (selfChemEmission > 0 && targetChemEmission > 0) {
+    return observerMass * (targetChemEmission / selfChemEmission);
   }
-
-  if (emission <= 0 || sensitivity <= 0) return 0;
-
-  const d = Math.max(1, dist(observer.x, observer.y, target.x, target.y));
-  const signalStrength = emission / Math.pow(d, attenuationExp);
-  const noiseFloor = NOISE_BASE / Math.pow(Math.max(1, sensitivity), NOISE_EXPONENT);
-  return signalStrength / noiseFloor;
+  // Fallback: use vibration ground emission if available
+  const targetVibG = target.signals ? target.signals.vibration.ground : 0;
+  if (targetVibG > 0) {
+    // Vibration scales with mass/contactArea — rough mass proxy
+    return observerMass * (targetVibG / Math.max(0.01, observerMass * 0.02));
+  }
+  // No usable signal — return observer mass as default
+  return observerMass;
 }
 
-/** Estimate relative magnitude from signal emission vs own mass. */
-function estimateRelativeMagnitude(signalEmission, observerMass, channelType) {
-  // Use own mass as reference. Emission scales roughly with mass, so
-  // comparing signal amplitude to what "my size" would emit gives relative size.
-  let selfEmission;
-  if (channelType === 'chemical') {
-    selfEmission = observerMass * 0.1; // CHEM_MASS_COEFF approximation
-  } else if (channelType === 'vibration_ground') {
-    selfEmission = observerMass * 0.15; // VIB_GROUND_COEFF approximation
-  } else {
-    selfEmission = Math.pow(observerMass, 0.33); // visual size approximation
-  }
-  if (selfEmission <= 0) return 'unknown';
-  const ratio = signalEmission / selfEmission;
-  if (ratio > 3.0) return 'much_larger';
-  if (ratio > 1.5) return 'larger';
-  if (ratio > 0.6) return 'similar';
-  if (ratio > 0.25) return 'smaller';
-  return 'much_smaller';
+/** Compute relativeMagnitude from size uncertainty bounds.
+ *  Returns a category string for the reactive layer. */
+function relativeMagnitude(observer, info) {
+  if (!info.sizeEstimate) return 'unknown';
+
+  const selfMass = getCreatureMass(observer);
+  const upper = info.sizeEstimate.upper;
+  const lower = info.sizeEstimate.lower;
+
+  // Worst-case interpretation for reactive layer
+  if (lower > selfMass * 2.0) return 'much_larger';
+  if (lower > selfMass * 1.3) return 'larger';
+  if (upper < selfMass * 0.3) return 'much_smaller';
+  if (upper < selfMass * 0.7) return 'smaller';
+
+  // Range spans "similar" — could be larger or smaller
+  return 'ambiguous';
 }
 
-/** Build SNR-gated detection info for a detected entity.
- *  Multiple channels contribute independently. */
-function buildDetectionInfo(observer, target, senses) {
+/** Check if any locomotion zone is destroyed on the target. */
+function _hasDestroyedLocomotionZone(target) {
+  const bodyMap = getBodyMap(target);
+  if (!bodyMap) return false;
+  return bodyMap.some(z => z.locomotion && z.destroyed);
+}
+
+/** Build continuous-uncertainty detection info from per-zone detections.
+ *  Produces narrowing size ranges and confidence curves instead of binary flags. */
+function buildDetectionInfo(observer, target, detections) {
   const info = {
+    detected: true,
     distance: dist(observer.x, observer.y, target.x, target.y),
     direction: directionToward(observer.x, observer.y, target.x, target.y),
-    detected: true,
-    sizeRelative: null,
+    bestSNR: 0,
+
+    // Size: narrowing range
+    sizeEstimate: null,  // { lower, upper, estimated }
+    sizeRelative: null,  // category for reactive rules compatibility
+
+    // Movement: from vibration detections
     isMoving: null,
+
+    // Diet: confidence curve from chemical airborne
+    dietConfidence: 0,
     dietType: null,
+
+    // Species: confidence curve from best channel
+    speciesConfidence: 0,
     species: null,
+
+    // Condition: confidence curve from high-SNR channels
+    conditionConfidence: 0,
     woundChemistry: false,
     visibleWounds: false,
     gaitAnomaly: false,
+
+    // Fight assessment
     threatAssessment: null,
   };
 
-  const observerMass = getCreatureMass(observer);
+  let bestSNR = 0;
+  let bestChemSNR = 0;
+  let bestVibSNR = 0;
 
-  for (const channelType of senses) {
-    const snr = computeChannelSNR(observer, target, channelType);
+  for (const det of detections) {
+    if (det.snr > bestSNR) bestSNR = det.snr;
 
-    // Movement detection (vibration channels)
-    if (snr >= SNR_MOVEMENT && (channelType === 'vibration_ground' || channelType === 'vibration_air')) {
-      info.isMoving = !!target.movedThisTurn;
+    if (det.channel === 'chemicalAirborne' && det.snr > bestChemSNR) {
+      bestChemSNR = det.snr;
+    }
+    if ((det.channel === 'vibrationGround' || det.channel === 'vibrationAir')
+        && det.snr > bestVibSNR) {
+      bestVibSNR = det.snr;
     }
 
-    // Magnitude estimation
-    if (snr >= SNR_MAGNITUDE && info.sizeRelative === null) {
-      let emission = 0;
-      if (channelType === 'chemical') emission = target.signals ? target.signals.chemical : 0;
-      else if (channelType === 'vibration_ground') emission = target.signals ? target.signals.vibration.ground : 0;
-      else if (channelType === 'visual') emission = target.signals ? target.signals.visual : 0;
-      else if (channelType === 'vibration_air') emission = target.signals ? target.signals.vibration.air : 0;
-      info.sizeRelative = estimateRelativeMagnitude(emission, observerMass, channelType);
-    }
-
-    // Diet discrimination (chemical channel only)
-    if (snr >= SNR_DISCRIMINATION && channelType === 'chemical') {
-      info.dietType = target.diet || null;
-    }
-
-    // Species identification
-    if (snr >= SNR_IDENTIFICATION) {
-      info.species = target.key || target.species || null;
-    }
-
-    // Fine detail
-    if (snr >= SNR_DETAIL) {
-      if (channelType === 'chemical') {
-        info.woundChemistry = target.blood != null && target.bloodMax != null &&
-                              target.blood < target.bloodMax * 0.7;
-      }
-      if (channelType === 'visual') {
-        const targetBodyMap = getBodyMap(target);
-        if (targetBodyMap) {
-          info.visibleWounds = targetBodyMap.some(z => z.destroyed);
-        }
-      }
-      if (channelType === 'vibration_ground') {
-        const targetBodyMap = getBodyMap(target);
-        if (targetBodyMap) {
-          info.gaitAnomaly = targetBodyMap.some(z => z.locomotion && z.destroyed);
-        }
-      }
+    // Movement is inherent in vibration detection — if vibration detected, target was moving
+    if (det.channel === 'vibrationGround' || det.channel === 'vibrationAir') {
+      info.isMoving = true;
     }
   }
 
-  // Fight assessment requires integration capacity above threshold
+  info.bestSNR = bestSNR;
+
+  // Size estimate: uncertainty narrows with best SNR from any channel
+  if (bestSNR > 0) {
+    const uncertaintyFactor = SIZE_UNCERTAINTY_BASE / bestSNR;
+    const rawEstimate = estimateMassFromSignal(target, observer);
+    info.sizeEstimate = {
+      estimated: rawEstimate,
+      lower: rawEstimate / (1 + uncertaintyFactor),
+      upper: rawEstimate * (1 + uncertaintyFactor),
+    };
+    // Compute category for reactive layer compatibility
+    info.sizeRelative = relativeMagnitude(observer, info);
+  }
+
+  // Diet: chemical airborne only
+  if (bestChemSNR > DIET_CONF_MIN) {
+    info.dietConfidence = Math.min(1.0,
+      (bestChemSNR - DIET_CONF_MIN) / (DIET_CONF_FULL - DIET_CONF_MIN));
+    info.dietType = target.diet || null;
+  }
+
+  // Species: best SNR on any channel
+  if (bestSNR > SPECIES_CONF_MIN) {
+    info.speciesConfidence = Math.min(1.0,
+      (bestSNR - SPECIES_CONF_MIN) / (SPECIES_CONF_FULL - SPECIES_CONF_MIN));
+    info.species = target.key || target.species || null;
+  }
+
+  // Condition: requires high SNR
+  if (bestChemSNR > CONDITION_CONF_MIN) {
+    info.conditionConfidence = Math.min(1.0,
+      (bestChemSNR - CONDITION_CONF_MIN) / (CONDITION_CONF_FULL - CONDITION_CONF_MIN));
+    info.woundChemistry = target.blood != null && target.bloodMax != null &&
+                          target.blood < target.bloodMax * 0.7;
+  }
+  if (bestVibSNR > CONDITION_CONF_MIN) {
+    const vibCondConf = Math.min(1.0,
+      (bestVibSNR - CONDITION_CONF_MIN) / (CONDITION_CONF_FULL - CONDITION_CONF_MIN));
+    if (vibCondConf > info.conditionConfidence) {
+      info.conditionConfidence = vibCondConf;
+    }
+    info.gaitAnomaly = _hasDestroyedLocomotionZone(target);
+  }
+  // Visual wounds (still uses visual detection if present — check via FOV/visual sense)
+  if (bestSNR > CONDITION_CONF_MIN) {
+    const targetBodyMap = getBodyMap(target);
+    if (targetBodyMap) {
+      info.visibleWounds = targetBodyMap.some(z => z.destroyed);
+    }
+  }
+
+  // Fight assessment requires integration capacity above threshold AND useful info
   if (observer.integrationCapacity >= ASSESS_INTEGRATION_THRESHOLD) {
-    if (info.sizeRelative && info.dietType) {
+    if (info.sizeEstimate && info.dietConfidence > 0.5) {
       info.threatAssessment = assessFightOutcome(observer, target, info);
     }
   }
@@ -2016,7 +2102,7 @@ function buildDetectionInfo(observer, target, senses) {
   return info;
 }
 
-/** Fight assessment — requires integration workspace to hold dual models. */
+/** Fight assessment — uses size uncertainty range for conservative evaluation. */
 function assessFightOutcome(observer, target, info) {
   const cc = combatCapability(observer);
   const observerMass = getCreatureMass(observer);
@@ -2024,9 +2110,8 @@ function assessFightOutcome(observer, target, info) {
                     ((observer.blood != null && observer.bloodMax > 0) ?
                      (observer.blood / observer.bloodMax) : 1.0);
 
-  // Estimate target mass from relative size
-  const MASS_MULT = { much_larger: 4.0, larger: 2.0, similar: 1.0, smaller: 0.5, much_smaller: 0.2 };
-  const estimatedTargetMass = observerMass * (MASS_MULT[info.sizeRelative] || 1.0);
+  // Use worst-case (upper bound) for assessing target danger
+  const estimatedTargetMass = info.sizeEstimate ? info.sizeEstimate.upper : observerMass;
 
   let targetConditionModifier = 1.0;
   if (info.woundChemistry) targetConditionModifier *= 0.7;
@@ -2043,8 +2128,8 @@ function assessFightOutcome(observer, target, info) {
   return 'overwhelming';                   // target is overwhelming
 }
 
-// ==================== DETECTION INFO PER CREATURE (Prompt O) ====================
-// Build detection info for all detected entities each turn.
+// ==================== DETECTION INFO PER CREATURE (Prompt P) ====================
+// Build continuous-uncertainty detection info for all detected entities each turn.
 
 function buildAllDetectionInfo(creature) {
   creature.detectionInfo = [];
@@ -2062,7 +2147,17 @@ function buildAllDetectionInfo(creature) {
   for (const target of allTargets) {
     const result = canDetect(creature, target);
     if (!result.detected) continue;
-    const info = buildDetectionInfo(creature, target, result.senses);
+
+    // Gather per-zone detections (non-visual). If only visual detected, create minimal info.
+    let detections = result.detections || [];
+    // If visual detected but no per-zone non-visual detections, create a synthetic entry
+    // so buildDetectionInfo has something to work with (visual SNR)
+    if (detections.length === 0 && result.senses.includes('visual')) {
+      const visSNR = result.bestSNR || 1;
+      detections = [{ zone: null, channel: 'visual', quality: getEffectiveVisual(creature), snr: visSNR }];
+    }
+
+    const info = buildDetectionInfo(creature, target, detections);
     info.entity = target;
     info.senses = result.senses;
     creature.detectionInfo.push(info);
@@ -2169,6 +2264,26 @@ function evaluateReactiveRules(creature) {
         return { behavior: 'retaliate', magnitude: 0.6, target: det.entity };
       }
     }
+    // Ambiguous size — could be larger or smaller
+    if (size === 'ambiguous') {
+      if (diet === 'herbivore') {
+        // Herbivores treat ambiguity as potentially larger — flee
+        if (!cc.canFight) {
+          if (refuge.type !== 'none') {
+            return { behavior: 'flee_refuge', magnitude: 0.6, target: refuge.target, refugeType: refuge.type };
+          }
+          return { behavior: 'flee', magnitude: 0.6 };
+        }
+        if (refuge.type !== 'none') {
+          return { behavior: 'flee_refuge', magnitude: 0.6, target: refuge.target, refugeType: refuge.type };
+        }
+        return { behavior: 'retaliate', magnitude: 0.6, target: det.entity };
+      }
+      // Predators treat ambiguous as caution — orient, don't commit
+      if (cc.canFight) {
+        return { behavior: 'orient', magnitude: 0.6, target: det.entity };
+      }
+    }
     // Similar size — orient toward (face potential threat)
     if (size === 'similar' && cc.canFight) {
       return { behavior: 'orient', magnitude: 0.6, target: det.entity };
@@ -2179,9 +2294,9 @@ function evaluateReactiveRules(creature) {
   for (const det of nearbyDetections) {
     if (det.distance <= 1.5) continue; // already handled by Rule 3
     const size = det.sizeRelative || 'unknown';
-    if (size === 'larger' || size === 'much_larger' || size === 'unknown') {
+    if (size === 'larger' || size === 'much_larger' || size === 'unknown' || size === 'ambiguous') {
       const isStrong = det.isMoving !== false; // moving or unknown movement = strong signal
-      if (!isStrong && size !== 'unknown') continue;
+      if (!isStrong && size !== 'unknown' && size !== 'ambiguous') continue;
 
       if (diet === 'herbivore') {
         if (refuge.type !== 'none') {
@@ -2193,6 +2308,7 @@ function evaluateReactiveRules(creature) {
         if (size === 'much_larger') {
           return { behavior: 'hold', magnitude: 0.5 };
         }
+        // Ambiguous or larger: orient cautiously, don't commit
         return { behavior: 'orient', magnitude: 0.5, target: det.entity };
       }
     }
@@ -2255,7 +2371,7 @@ function evaluateReactiveRules(creature) {
   if ((bState === 'impaired' || bState === 'critical') &&
       nearbyDetections.filter(d => {
         const sz = d.sizeRelative || 'unknown';
-        return sz === 'larger' || sz === 'much_larger' || sz === 'unknown';
+        return sz === 'larger' || sz === 'much_larger' || sz === 'unknown' || sz === 'ambiguous';
       }).length === 0) {
     return { behavior: 'rest', magnitude: 0.2 };
   }
@@ -2335,6 +2451,8 @@ function deliberativeEvaluation(creature) {
             const pInfo = detections.find(d => d.entity === prey.target);
             if (pInfo && pInfo.threatAssessment === 'overwhelming') continue; // skip dangerous targets
             if (pInfo && pInfo.threatAssessment === 'stronger') continue;      // too risky
+            // Require minimum diet confidence before committing to a hunt (Prompt P)
+            if (pInfo && pInfo.dietConfidence < DIET_DECISION_THRESHOLD) continue;
             return { behavior: 'hunt_chase', target: prey.target, fromDeliberate: true };
           }
         }
@@ -2575,7 +2693,6 @@ function runCreatureAI(creature) {
     updateDrives(creature);
     creature.integrationCapacity = computeIntegrationCapacity(creature);
     creature.tier = getTier(creature.integrationCapacity);
-    cacheEffectiveSenses(creature);
     detectThreats(creature);
     applySafetyFromThreats(creature);
     detectPrey(creature);
@@ -2594,10 +2711,7 @@ function runCreatureAI(creature) {
   creature.integrationCapacity = computeIntegrationCapacity(creature);
   creature.tier = getTier(creature.integrationCapacity);
 
-  // Cache effective sense values (L-B) — once per turn, before detection
-  cacheEffectiveSenses(creature);
-
-  // Threat detection (L-B — sense-specific) — still used for safety drive spikes
+  // Threat detection (Prompt P — per-zone) — used for safety drive spikes
   detectThreats(creature);
   applySafetyFromThreats(creature);
 
@@ -2605,7 +2719,7 @@ function runCreatureAI(creature) {
   detectPrey(creature);
   detectCorpses(creature);
 
-  // ── Build SNR-based detection info (Prompt O) ──
+  // ── Build continuous-uncertainty detection info (Prompt P) ──
   buildAllDetectionInfo(creature);
 
   // ── Goal persistence check ──
@@ -2796,10 +2910,6 @@ function endPlayerTurn(action){
   // so NPCs see current player emission values.
   _updateInWater(state.player);
   computeSignals(state.player);
-
-  // ── Cache player effective senses (L-B) ──
-  // Available if any NPC needs to check whether the player can detect it.
-  cacheEffectiveSenses(state.player);
 
   // Reset player per-turn flags AFTER signals are computed (Prompt L-A).
   // They'll be set again during the player's next action.
@@ -3088,55 +3198,18 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
   }
 }
 
-// ==================== PLAYER NON-VISUAL PERCEPTION (Prompt N, Phase 2) ====================
+// ==================== PLAYER NON-VISUAL PERCEPTION (Prompt P) ====================
 // Each turn, compute what the player detects through non-visual senses.
 // Creatures detected through chemical airborne, ground vibration, or air vibration
-// — but NOT currently in the player's visual FOV — are flagged for rendering.
-// Uses the same detection formulas and coefficients as the AI detection system.
-
-/**
- * Compute the player's effective sensitivity per non-visual channel
- * from surviving body zones. Same formulas as cacheEffectiveSenses but
- * returns a structured object for the player detection loop.
- */
-function computePlayerSensoryProfile(player) {
-  const bodyMap = getBodyMap(player);
-  if (!bodyMap) return { chemAirborne: 0, vibGround: 0, vibAir: 0 };
-
-  // Chemical airborne: max (best nose)
-  let chemAirborne = 0;
-  for (const zone of bodyMap) {
-    if (zone.destroyed) continue;
-    const chem = zone.transducers && zone.transducers.chemical;
-    const val = (chem && typeof chem === 'object') ? (chem.airborne || 0) : (chem || 0);
-    if (val > chemAirborne) chemAirborne = val;
-  }
-
-  // Ground vibration: sum with soft cap (spatial coverage)
-  let vibGroundSum = 0;
-  for (const zone of bodyMap) {
-    if (zone.destroyed) continue;
-    const val = (zone.transducers && zone.transducers.vibration && zone.transducers.vibration.ground) || 0;
-    vibGroundSum += val;
-  }
-  const vibGround = vibGroundSum > 0 ? vibGroundSum * VIB_SUM_CAP / (vibGroundSum + VIB_SUM_CAP) : 0;
-
-  // Air vibration: sum with soft cap
-  let vibAirSum = 0;
-  for (const zone of bodyMap) {
-    if (zone.destroyed) continue;
-    const val = (zone.transducers && zone.transducers.vibration && zone.transducers.vibration.air) || 0;
-    vibAirSum += val;
-  }
-  const vibAir = vibAirSum > 0 ? vibAirSum * VIB_SUM_CAP / (vibAirSum + VIB_SUM_CAP) : 0;
-
-  return { chemAirborne, vibGround, vibAir };
-}
+// — but NOT currently in the player's visual FOV — are flagged for rendering
+// with SNR-based opacity gradient.
+// Uses per-zone detection (Prompt P) — same detectTargetPerZone function as AI.
 
 /**
  * Compute which creatures the player detects through non-visual senses.
- * Populates player.sensedCreatures with creatures outside visual FOV
- * that are within detection range of at least one non-visual channel.
+ * Uses per-zone detection (Prompt P) with SNR computation.
+ * Populates player.sensedCreatures with { creature, bestSNR } objects
+ * for creatures outside visual FOV that are within detection range.
  * Call after updatePlayerFOV() and after all creature signals are computed.
  */
 function computePlayerPerception() {
@@ -3145,11 +3218,6 @@ function computePlayerPerception() {
 
   // Clear previous turn's results
   player.sensedCreatures = [];
-
-  const profile = computePlayerSensoryProfile(player);
-
-  // Early exit if the player has no non-visual senses
-  if (profile.chemAirborne <= 0 && profile.vibGround <= 0 && profile.vibAir <= 0) return;
 
   const fovSet = state.fovSet;
   const mons = monstersHere();
@@ -3161,37 +3229,20 @@ function computePlayerPerception() {
     // Skip creatures already in visual FOV — they render normally
     if (fovSet && fovSet.has(`${creature.x},${creature.y}`)) continue;
 
-    const d = dist(player.x, player.y, creature.x, creature.y);
-
-    // Absolute ceiling — nothing detected beyond this
-    if (d > MAX_DETECTION_DISTANCE) continue;
-
     // Ensure creature has signals computed
     if (!creature.signals) continue;
 
-    let detected = false;
+    // Per-zone detection against this creature
+    const detections = detectTargetPerZone(player, creature);
+    if (!detections) continue;
 
-    // Chemical airborne detection — omnidirectional
-    if (profile.chemAirborne > 0 && creature.signals.chemical > 0) {
-      const chemRange = Math.cbrt(creature.signals.chemical) * profile.chemAirborne * CHEM_RANGE_COEFF;
-      if (d <= chemRange) detected = true;
+    // Find best SNR across all detecting player zones
+    let bestSNR = 0;
+    for (const det of detections) {
+      if (det.snr > bestSNR) bestSNR = det.snr;
     }
 
-    // Ground vibration detection — omnidirectional, zero for still creatures
-    if (!detected && profile.vibGround > 0 && creature.signals.vibration.ground > 0) {
-      const vibGroundRange = Math.cbrt(creature.signals.vibration.ground) * profile.vibGround * VIB_GROUND_RANGE_COEFF;
-      if (d <= vibGroundRange) detected = true;
-    }
-
-    // Air vibration detection — omnidirectional
-    if (!detected && profile.vibAir > 0 && creature.signals.vibration.air > 0) {
-      const vibAirRange = Math.cbrt(creature.signals.vibration.air) * profile.vibAir * VIB_AIR_RANGE_COEFF;
-      if (d <= vibAirRange) detected = true;
-    }
-
-    if (detected) {
-      player.sensedCreatures.push(creature);
-    }
+    player.sensedCreatures.push({ creature, bestSNR });
   }
 }
 
@@ -3240,8 +3291,9 @@ function debugEcology() {
   const summary = [];
   for (const m of mons) {
     if (m.hp <= 0) continue;
-    if (!m._senses) cacheEffectiveSenses(m);
-    const s = m._senses;
+    const dom = getDominantSenseChannel(m);
+    const bestChem = getBestChemicalAirborne(m);
+    const bestVis = getEffectiveVisual(m);
     summary.push({
       name: m.name,
       key: m.key,
@@ -3255,7 +3307,7 @@ function debugEcology() {
       prey: m.detectedPrey ? m.detectedPrey.length : 0,
       corpses: m.detectedCorpses ? m.detectedCorpses.length : 0,
       huntTarget: m.huntTarget ? (m.huntTarget.name || m.huntTarget.key || 'player') : null,
-      senses: `C${s.chemical.toFixed(1)} VG${s.vibGround.toFixed(1)} VA${s.vibAir.toFixed(1)} V${s.visual.toFixed(1)}`,
+      dominant: dom.type + '(' + dom.value + ')',
       detRange: Math.round(getDetectionRange(m)),
     });
   }
@@ -3292,19 +3344,22 @@ function debugCognition() {
     const t = m._lastTrace || {};
     const ic = (m.integrationCapacity || 0).toFixed(3);
 
-    // Summarize best detection info
+    // Summarize best detection info (Prompt P: continuous uncertainty)
     let snrSummary = '—';
     if (m.detectionInfo && m.detectionInfo.length > 0) {
       const parts = [];
       for (const det of m.detectionInfo) {
         const who = det.entity ? (det.entity.name || det.entity.key || 'player') : '?';
         const sz = det.sizeRelative || '?';
+        const snr = det.bestSNR ? det.bestSNR.toFixed(1) : '?';
+        const dc = det.dietConfidence ? det.dietConfidence.toFixed(2) : '0';
         const dt = det.dietType || '?';
         const mv = det.isMoving != null ? (det.isMoving ? 'mv' : 'still') : '?';
         const asmt = det.threatAssessment || '';
         const d = det.distance ? det.distance.toFixed(1) : '?';
-        let detail = `${who}(${d}t): sz=${sz}`;
-        if (dt !== '?') detail += ` diet=${dt}`;
+        let detail = `${who}(${d}t snr=${snr}): sz=${sz}`;
+        if (det.sizeEstimate) detail += ` [${det.sizeEstimate.lower.toFixed(1)}-${det.sizeEstimate.upper.toFixed(1)}kg]`;
+        if (dt !== '?' && dc !== '0') detail += ` diet=${dt}@${dc}`;
         if (mv !== '?') detail += ` ${mv}`;
         if (det.woundChemistry) detail += ' wound';
         if (det.gaitAnomaly) detail += ' limp';
@@ -3314,21 +3369,13 @@ function debugCognition() {
       snrSummary = parts.join(' | ');
     }
 
-    // Dominant sense
-    const s = m._senses || {};
-    const senseVals = [
-      { ch: 'Chem', v: s.chemical || 0 },
-      { ch: 'VibG', v: s.vibGround || 0 },
-      { ch: 'VibA', v: s.vibAir || 0 },
-      { ch: 'Vis',  v: s.visual || 0 },
-    ];
-    senseVals.sort((a, b) => b.v - a.v);
-    const domSense = senseVals[0].v > 0 ? senseVals[0].ch : 'none';
+    // Dominant sense (Prompt P: computed from zones, not _senses cache)
+    const dom = getDominantSenseChannel(m);
 
     rows.push({
       name: m.name,
       IC: ic,
-      domSense: domSense,
+      domSense: dom.type,
       rule: t.reactiveRule || '—',
       mag: t.reactiveMagnitude != null ? t.reactiveMagnitude.toFixed(1) : '—',
       'P(ovr)': t.overrideProbability != null ? (t.overrideProbability * 100).toFixed(0) + '%' : '—',

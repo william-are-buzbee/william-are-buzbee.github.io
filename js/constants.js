@@ -612,12 +612,15 @@ export const SAFETY_THRESHOLD    = 0.5;       // above this → flee (I-B)
 export const HUNGER_THRESHOLD    = 0.6;       // above this → hunt/forage (I-C)
 export const REST_THRESHOLD      = 0.7;       // above this → rest (I-D)
 
-// --- Perception Range (L-B) — replaces I-B flat range multipliers ---
-export const CHEM_RANGE_COEFF        = 1.9;   // chemical range = cbrt(emission) × sensitivity × coeff
-export const VIB_GROUND_RANGE_COEFF  = 0.75;  // ground vibration range coefficient
-export const VIB_AIR_RANGE_COEFF     = 1.0;   // air vibration range coefficient
+// --- Perception Range (Prompt P) — per-zone detection coefficients ---
+// Retuned for per-zone quality (no aggregation). Range = cbrt(emission) × quality × coeff.
+// Chemical: meso-pred nose (q6) detects 22kg meso at ~12-13 tiles.
+// VibGround: lurker sensor (q5) detects 22kg meso at ~10-11 tiles; q1 limb at ~2 tiles.
+// VibAir: meso-pred head (q2) detects combat at ~3-4 tiles.
+export const CHEM_RANGE_COEFF        = 1.3;   // chemical airborne range coefficient
+export const VIB_GROUND_RANGE_COEFF  = 1.75;  // ground vibration range coefficient
+export const VIB_AIR_RANGE_COEFF     = 1.15;  // air vibration range coefficient
 export const VIS_RANGE_COEFF         = 1.9;   // visual range = cbrt(detectability × light) × sensitivity × coeff
-export const VIB_SUM_CAP             = 15;    // soft cap for summed vibration sensors: sum × cap / (sum + cap)
 export const MAX_DETECTION_DISTANCE  = 40;    // absolute ceiling — nothing detected beyond this
 
 // --- Safety Spikes (I-B) ---
@@ -646,20 +649,28 @@ export const HEAL_REST_MULTIPLIER = 3.0;     // resting creatures heal 3× faste
 export const DRIVE_COMPARE_THRESHOLD = 0.01;   // integration capacity >= this → Tier 2
 export const PLANNING_THRESHOLD      = 0.08;   // integration capacity >= this → Tier 3
 
-// --- SNR-Based Information Quality (Prompt O) ---
-// Noise floor: NOISE_BASE / (transducerQuality ^ NOISE_EXPONENT)
-export const NOISE_BASE              = 1.0;    // base noise floor (before quality scaling)
-export const NOISE_EXPONENT          = 1.3;    // diminishing returns on quality improvements
-// Signal attenuation: emission / (distance ^ ATTENUATION_EXPONENT) per medium
-export const ATTENUATION_CHEMICAL    = 1.5;    // chemical attenuates moderately with distance
-export const ATTENUATION_VIBRATION   = 2.0;    // vibration attenuates faster (ground coupling loss)
-export const ATTENUATION_VISUAL      = 1.8;    // visual attenuates with distance
-// SNR thresholds — what information is available at each level
-export const SNR_MOVEMENT            = 1.5;    // resolve moving vs still (vibration)
-export const SNR_MAGNITUDE           = 3.0;    // resolve relative size category
-export const SNR_DISCRIMINATION      = 5.0;    // resolve compound profiles (predator vs herbivore chemistry)
-export const SNR_IDENTIFICATION      = 8.0;    // resolve species-specific pattern
-export const SNR_DETAIL              = 12.0;   // resolve fine structure (gait anomaly, wound chemistry)
+// --- Continuous Uncertainty (Prompt P) ---
+// Replaces binary SNR thresholds with continuously narrowing ranges.
+// Size uncertainty: range width = SIZE_UNCERTAINTY_BASE / bestSNR
+export const SIZE_UNCERTAINTY_BASE   = 3.0;    // controls how wide size range is at low SNR
+
+// Diet discrimination confidence curve (chemical airborne only)
+export const DIET_CONF_MIN          = 2.0;     // SNR below this: diet unknown
+export const DIET_CONF_FULL         = 6.0;     // SNR above this: diet certain
+
+// Species identification confidence curve (any channel)
+export const SPECIES_CONF_MIN       = 5.0;     // SNR below this: species unknown
+export const SPECIES_CONF_FULL      = 10.0;    // SNR above this: species identified
+
+// Wound/condition detection confidence curve
+export const CONDITION_CONF_MIN     = 7.0;
+export const CONDITION_CONF_FULL    = 14.0;
+
+// Deliberative diet decision threshold — must have this confidence to commit
+export const DIET_DECISION_THRESHOLD = 0.7;
+
+// SNR-based player rendering (Phase 3)
+export const SNR_FULL_RENDER        = 5.0;     // SNR at which sprite reaches full opacity
 
 // --- Reactive-Deliberative Override (Prompt O) ---
 export const OVERRIDE_SCALE          = 3.5;    // overrideCapacity = integrationCapacity × this

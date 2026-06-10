@@ -1,6 +1,6 @@
 // ==================== RENDERING ====================
 import { state, worlds, covers, groundItems } from './state.js';
-import { TILE, VIEW_W, VIEW_H, LAYER_UNDER, BIOME } from './constants.js';
+import { TILE, VIEW_W, VIEW_H, LAYER_UNDER, BIOME, SNR_FULL_RENDER } from './constants.js';
 import { T, terrainInfo } from './terrain.js';
 import { spriteCache, tintedSprite, tintedMonsterSprite, COLOR_PALETTES } from './sprites.js';
 import { inBounds, isTownCell, monsterAt, getCover } from './world-state.js';
@@ -368,12 +368,16 @@ function render(){
 
   drawTimeTint(ctx, 0, 0, VIEW_W * TILE, VIEW_H * TILE, layer);
 
-  // ── Prompt N: Render creatures detected through non-visual senses ──
-  // Draws sprites for creatures the player senses (chemical, vibration)
-  // but cannot see visually. The tile remains fogged/dark; only the
-  // creature sprite appears on top.
+  // ── Prompt P: Render creatures detected through non-visual senses ──
+  // Draws sprites with SNR-based opacity for creatures the player senses
+  // (chemical, vibration) but cannot see visually. Faint ghost at detection
+  // edge (opacity ~0.1), solid sprite up close (opacity 1.0).
+  // The tile remains fogged/dark; only the creature sprite appears on top.
   if (state.player.sensedCreatures && state.player.sensedCreatures.length > 0) {
-    for (const creature of state.player.sensedCreatures) {
+    for (const sensed of state.player.sensedCreatures) {
+      const creature = sensed.creature;
+      const bestSNR = sensed.bestSNR || 1;
+
       // Convert world position to viewport position
       const svx = creature.x - ox;
       const svy = creature.y - oy;
@@ -381,6 +385,13 @@ function render(){
       if (svx < 0 || svx >= VIEW_W || svy < 0 || svy >= VIEW_H) continue;
       const spx = svx * TILE;
       const spy = svy * TILE;
+
+      // SNR-based opacity: faint at detection edge, solid up close
+      const opacity = Math.min(1.0, Math.max(0.1, (bestSNR - 1.0) / (SNR_FULL_RENDER - 1.0)));
+
+      ctx.save();
+      ctx.globalAlpha = opacity;
+
       // Draw the creature sprite identically to how drawEntityAtTile draws monsters
       let tintColor = null;
       if (creature.tint) {
@@ -392,6 +403,8 @@ function render(){
       if (creature.facing) {
         drawFacingIndicator(ctx, spx, spy, TILE, creature.facing);
       }
+
+      ctx.restore();
     }
   }
 
