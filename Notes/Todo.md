@@ -46,6 +46,7 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] First-pass player perception/transducer visibility (make the player's visual field at parity with an equivalent animal, no free lunch or plot armor for player perception)
 - [x] Second-pass over cognition/ganglia system
 - [x] Second-pass over perception/transducer system
+- [x] Significant optimization improvements 
 
 ## Up Next
 - [ ] Second-pass over AI drive system
@@ -60,6 +61,7 @@ Prompt queue and task tracker. Check things off as they're done.
 - [ ] Aquatic Ecosystems
 - [ ] Sub-terranian ecosystem
 - [ ] AI overhaul (complex creature behavior based on instincts, body plan and evolutionary principles)
+- [ ] Chunk-based loading (allows for vastly larger world sizes)
 
 ## Very Long-Term Plans
 - [ ] Lore overhaul (canon events across history, inventions, demigod interventions, factions, major events, wars, etc)
