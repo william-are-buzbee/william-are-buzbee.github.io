@@ -44,26 +44,26 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] First-pass perception/transducer system (transducers based sensing, no more abstract "perception" stat)
 - [x] First-pass cognitive/ganglia/nervous system (episodic memory, pattern library, sensory integration, cognitive "workspace", planning, reflexive behavior, compression of signals, etc)
 - [x] First-pass player perception/transducer visibility (make the player's visual field at parity with an equivalent animal, no free lunch or plot armor for player perception)
+- [x] Second-pass over cognition/ganglia system
+- [x] Second-pass over perception/transducer system
 
 ## Up Next
-- [ ] Second-pass over cognition/ganglia system 
+- [ ] Second-pass over AI drive system
 
 ## Near-Term Plans (no particular order at the moment)
 - [ ] Second-pass over bleed/metabolism/healing mechanic
-- [ ] Second-pass over footprint system
-- [ ] Second-pass over AI drive system
-- [ ] Second-pass over perception/transducer system
+- [ ] Third-pass over AI drive system
+- [ ] Third-pass over bleed/metabolism/healing
+- [ ] Third-pass over cognition/ganglia system
 
 ## Long-Term Plans
-- [ ] Underground ecosystem (massive ecology, design docs exist but need more work)
-- [ ] Aquatic ecosystem (also massive ecology, no design docs exist, kindof a head scratcher)
-- [ ] Historical record overhaul (canon events across history, inventions, demigod interventions, factions, major events, wars, etc)
-- [ ] "Modernity" as a concept (religion, trade, communication, animals with complex sapience or similar level of societal complexity)
-- [ ] Build functional underground ecosystem on parity with surface (in terms of complexity and thoroughness, not fully complete though)
+- [ ] Aquatic Ecosystems
+- [ ] Sub-terranian ecosystem
 - [ ] AI overhaul (complex creature behavior based on instincts, body plan and evolutionary principles)
 
 ## Very Long-Term Plans
-- [ ] Aquatic Ecosystem
+- [ ] Lore overhaul (canon events across history, inventions, demigod interventions, factions, major events, wars, etc)
+- [ ] "Modernity" as a concept (religion, trade, communication, animals with complex sapience or similar level of societal complexity)
 - [ ] World editing (base building, tree cutting, ore mining, wall destroying, village creating, etc)
 - [ ] Follower system (unclear if pet system, follower system or more of a niche possibility)
 - [ ] Online interactivity (ability to share worlds and upload them, spectate, view/enter leaderboards, chat with other players/spectators, shared saves, etc)
