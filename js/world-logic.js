@@ -1,6 +1,6 @@
 // ==================== WORLD LOGIC — placement, spawning, init ====================
 import { state, worlds, covers, features, monsters, activateLayer } from './state.js';
-import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, LAYER_META, getAtmosphere, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H } from './constants.js';
+import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, LAYER_META, getAtmosphere, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H, DORMANT_RADIUS } from './constants.js';
 import { T, isWalkable, isCover } from './terrain.js';
 import { rand, randi, choice } from './rng.js';
 // DISABLED — town removed (was used for initScholarInventory)
@@ -17,6 +17,29 @@ import {
   clearPlacementState, registerStructurePosition,
   runStructurePlacement,
 } from './structures.js';
+
+// ==================== DORMANCY INITIALIZATION (Prompt S) ====================
+// Creatures spawned far from the player start dormant to avoid wasted work.
+// Creatures on a different layer than the player are always dormant.
+function initDormancy(creature, spawnLayer) {
+  const p = state.player;
+  const layer = spawnLayer != null ? spawnLayer : (creature.layer != null ? creature.layer : p.layer);
+  // Different layer → always dormant (distance is effectively infinite)
+  if (layer !== p.layer) {
+    creature._dormant = true;
+    creature._dormantTurns = 0;
+    return;
+  }
+  const dx = creature.x - p.x;
+  const dy = creature.y - p.y;
+  if (dx * dx + dy * dy > DORMANT_RADIUS * DORMANT_RADIUS) {
+    creature._dormant = true;
+    creature._dormantTurns = 0;
+  } else {
+    creature._dormant = false;
+    creature._dormantTurns = 0;
+  }
+}
 
 // ==================== STRUCTURE PLACEMENT ====================
 /**
@@ -281,6 +304,7 @@ export function placeStructures(){
             m.x = nx; m.y = ny;
             m.homeX = nx; m.homeY = ny;
             m.hp = m.hpMax;
+            initDormancy(m);
             monsters[LAYER_SURFACE].push(m);
             }
           } else if (nt === T.BEACH && rand() < 0.15 * SPAWN_DENSITY_MULT){
@@ -290,6 +314,7 @@ export function placeStructures(){
             m.x = nx; m.y = ny;
             m.homeX = nx; m.homeY = ny;
             m.hp = m.hpMax;
+            initDormancy(m);
             monsters[LAYER_SURFACE].push(m);
             }
           }
@@ -453,6 +478,9 @@ export function spawnMonstersInWorld(){
           delete m._needsHomePosition;
         }
 
+        // Prompt S: initialize dormancy state based on distance to player
+        initDormancy(m);
+
         if (!monsters[LAYER_SURFACE]) monsters[LAYER_SURFACE] = [];
         monsters[LAYER_SURFACE].push(m);
         incCellCount(cellKey, key);
@@ -568,6 +596,8 @@ export function spawnMonstersInWorld(){
         m.wanderProfile.homePosition = { x: x, y: y };
         delete m._needsHomePosition;
       }
+      // Prompt S: initialize dormancy (underground creatures start dormant)
+      initDormancy(m, LAYER_UNDER);
       monsters[LAYER_UNDER].push(m);
     }
   }

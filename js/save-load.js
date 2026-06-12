@@ -68,6 +68,10 @@ const TRANSIENT_FIELDS = [
     '_cachedWater',         // cached nearest water tile position (periodically refreshed)
     '_cachedWaterAge',      // age counter for _cachedWater cache
     'bleedPenalty',         // recomputed each turn via computeBleedPenalty
+
+    // Prompt S: active simulation radius — dormancy state (runtime only)
+    '_dormant',             // boolean: true if creature is outside active radius
+    '_dormantTurns',        // number: how many turns the creature has been dormant
 ];
 
 /** Create a shallow copy with all transient per-turn fields removed. */
@@ -104,6 +108,8 @@ function initTransientFields(entity) {
     entity._cachedWater = null;        // Prompt Q: cached nearest water tile
     entity._cachedWaterAge = 0;        // Prompt Q: cache age counter
     entity.bleedPenalty = 0;           // Prompt Q: recomputed from computeBleedPenalty
+    entity._dormant = false;           // Prompt S: not dormant on load (activity check runs first turn)
+    entity._dormantTurns = 0;          // Prompt S: no dormant turns accumulated
 }
 
 // ==================== HELPERS ====================

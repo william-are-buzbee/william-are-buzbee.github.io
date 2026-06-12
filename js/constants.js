@@ -627,6 +627,11 @@ export const MAX_DETECTION_DISTANCE  = 40;    // absolute ceiling — nothing de
 export const SPATIAL_CELL_SIZE    = 16;   // tiles per cell side
 export const SPATIAL_QUERY_RADIUS = 1;    // cells beyond center to query (1 = 3×3 neighborhood)
 
+// --- Active Simulation Radius (Prompt S) ---
+export const ACTIVE_RADIUS  = 40;   // tiles — full simulation within this range
+export const DORMANT_RADIUS = 45;   // tiles — go dormant beyond this range (hysteresis)
+export const MAX_DRIFT      = 15;   // tiles — maximum position drift on catch-up
+
 // --- Safety Spikes (I-B) ---
 export const SAFETY_PROXIMITY_COEFF = 0.15;   // how much proximity-based detection spikes safety per turn
 export const SAFETY_DAMAGE_COEFF    = 3.0;    // how much taking damage spikes safety (multiplied by HP fraction)

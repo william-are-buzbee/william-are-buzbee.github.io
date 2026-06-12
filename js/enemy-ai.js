@@ -30,7 +30,8 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          MIN_SEEK, SEEK_SCALE, PERSISTENCE_SCALE,
          ASSESS_INTEGRATION_THRESHOLD,
          CHEM_MASS_COEFF,
-         SPATIAL_CELL_SIZE, SPATIAL_QUERY_RADIUS } from './constants.js';
+         SPATIAL_CELL_SIZE, SPATIAL_QUERY_RADIUS,
+         ACTIVE_RADIUS, DORMANT_RADIUS, MAX_DRIFT } from './constants.js';
 import { T, isWalkable, isFoodTile, terrainInfo, tileBlocksVision } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -62,10 +63,10 @@ function monstersHere(){ return monsters[state.player.layer] || []; }
 
 const _spatialGrid = new Map();   // "cellX,cellY" → creature[]
 
-/** Clear and rebuild the spatial grid from all living creatures on the active layer. */
-function rebuildSpatialGrid() {
+/** Clear and rebuild the spatial grid from the given creature list (or all living creatures on the active layer). */
+function rebuildSpatialGrid(creatureList) {
   _spatialGrid.clear();
-  const mons = monstersHere();
+  const mons = creatureList || monstersHere();
   for (let i = 0; i < mons.length; i++) {
     const creature = mons[i];
     if (creature.hp <= 0) continue;
@@ -239,6 +240,12 @@ function applyHealing(creature) {
 }
 
 let turnCount = 0;
+
+// ── Layer-transition tracking for dormancy catch-up (Prompt S) ──
+// When the player leaves a layer, we record the turn count.  When they return,
+// every creature on that layer gets catch-up for the intervening turns.
+let _prevLayer = null;
+const _layerLeftTurn = {};   // layerIndex → turnCount when the player left
 
 // ==================== AQUATIC MOVEMENT LOCK ====================
 const WATER_TILES = new Set([T.WATER, T.DEEP_WATER, T.UWATER]);
@@ -2853,6 +2860,200 @@ function performBonusMove(mon){
   }
 }
 
+// ==================== ACTIVE SIMULATION RADIUS (Prompt S) ====================
+// Creatures beyond DORMANT_RADIUS from the player are dormant — they skip
+// the expensive per-turn pipeline entirely.  When they re-enter ACTIVE_RADIUS
+// they run a lightweight catch-up that advances their state to be plausible.
+// Hysteresis between the two radii prevents flickering at the boundary.
+
+/**
+ * Classify a creature as active or dormant based on distance to the player.
+ * Returns true if the creature is active (should run full simulation).
+ */
+function updateCreatureActivity(creature, player) {
+  const dx = creature.x - player.x;
+  const dy = creature.y - player.y;
+  const distSq = dx * dx + dy * dy;
+
+  if (creature._dormant) {
+    // Wake up if within active radius
+    if (distSq <= ACTIVE_RADIUS * ACTIVE_RADIUS) {
+      if (creature._dormantTurns > 0) {
+        catchUpCreature(creature);
+      }
+      creature._dormant = false;
+      creature._dormantTurns = 0;
+      return true;  // active
+    }
+    // Stay dormant
+    creature._dormantTurns = (creature._dormantTurns || 0) + 1;
+    return false;
+  } else {
+    // Go dormant if beyond dormant radius
+    if (distSq > DORMANT_RADIUS * DORMANT_RADIUS) {
+      creature._dormant = true;
+      creature._dormantTurns = 0;
+      return false;  // dormant
+    }
+    // Stay active
+    return true;
+  }
+}
+
+/**
+ * Advance a dormant creature's state to be plausible when it wakes up.
+ * Uses the same rates as the real simulation — no separate hardcoded values.
+ * Never kills the creature — death events only happen during full simulation.
+ */
+function catchUpCreature(creature) {
+  const turns = creature._dormantTurns;
+  if (turns <= 0) return;
+
+  // 1. Advance hunger (same rate as updateDrives)
+  if (creature.drives) {
+    const bodyMap = getBodyMap(creature);
+    let totalMass = creature.totalMass || 0;
+    let totalNeural = 0;
+    if (bodyMap) {
+      totalMass = 0;
+      for (const zone of bodyMap) {
+        if (!zone.destroyed) {
+          totalMass += zone.mass || 0;
+          totalNeural += zone.neural || 0;
+        }
+      }
+    }
+    const hungerPerTurn = totalMass * MASS_HUNGER_COEFF + totalNeural * NEURAL_HUNGER_COEFF;
+    creature.drives.hunger = Math.min(1.0, creature.drives.hunger + hungerPerTurn * turns);
+  }
+
+  // 2. Heal wounds (if blood was sufficient — dormant creature was effectively resting)
+  if (creature.blood != null && creature.bloodMax != null && creature.bloodMax > 0) {
+    if (creature.blood > creature.bloodMax * 0.5) {
+      const bodyMap = getBodyMap(creature);
+      if (bodyMap) {
+        const bloodFraction = creature.blood / creature.bloodMax;
+        const bloodScalar = (bloodFraction - 0.50) / 0.50;
+        const healPerTurn = HEAL_BASE_RATE * bloodScalar * HEAL_REST_MULTIPLIER;
+        for (const zone of bodyMap) {
+          if (zone.destroyed) continue;
+          if (zone.hp != null && zone.maxHp != null && zone.hp < zone.maxHp) {
+            zone.hp = Math.min(zone.maxHp, zone.hp + healPerTurn * turns);
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Regenerate blood (same rate as processBleed regen)
+  if (creature.blood != null && creature.bloodMax != null && creature.bloodMax > 0) {
+    if (creature.blood < creature.bloodMax) {
+      const regenPerTurn = creature.bloodMax * REGEN_FRACTION;
+      creature.blood = Math.min(creature.bloodMax, creature.blood + regenPerTurn * turns);
+    }
+  }
+
+  // 4. Clot wounds — after enough turns, all wounds are fully clotted
+  if (turns > 20) {
+    const bodyMap = getBodyMap(creature);
+    if (bodyMap) {
+      for (const zone of bodyMap) {
+        if (zone.clotting !== undefined) {
+          zone.clotting = 1.0;
+        }
+      }
+    }
+  }
+
+  // 5. Drift position — dormant creatures weren't actually frozen, they were wandering
+  driftPosition(creature, turns);
+
+  // 6. Reset rest drive — if dormant long enough, the creature rested fully
+  if (creature.drives && turns > 10) {
+    creature.drives.rest = 0;
+  }
+
+  // 7. Reset safety drive — no threats while dormant
+  if (creature.drives) {
+    creature.drives.safety = 0;
+  }
+}
+
+/**
+ * Shift a creature's position based on dormancy duration to simulate wandering.
+ * Territorial creatures drift within home radius; wanderers drift freely (capped).
+ * Square root scaling: 10 turns → ~3 tiles, 100 → ~10, 400 → 15 (capped).
+ */
+function driftPosition(creature, dormantTurns) {
+  let maxDrift;
+  const layer = creature.layer != null ? creature.layer : state.player.layer;
+
+  if (creature.territoryRadius > 0) {
+    // Territorial creature: drift within territory, biased toward home
+    maxDrift = Math.min(creature.territoryRadius, Math.floor(Math.sqrt(dormantTurns)));
+  } else {
+    // Wandering creature: drift scales with time, capped
+    maxDrift = Math.min(MAX_DRIFT, Math.floor(Math.sqrt(dormantTurns)));
+  }
+
+  if (maxDrift <= 0) return;
+
+  // Try random offsets, accept the first valid position
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const dx = Math.floor(Math.random() * (maxDrift * 2 + 1)) - maxDrift;
+    const dy = Math.floor(Math.random() * (maxDrift * 2 + 1)) - maxDrift;
+
+    const newX = creature.x + dx;
+    const newY = creature.y + dy;
+
+    if (isDriftPositionValid(creature, newX, newY, layer)) {
+      creature.x = newX;
+      creature.y = newY;
+      // Update home if creature has wander home tracking but is non-territorial
+      return;
+    }
+  }
+  // If no valid position found in 10 attempts, stay put
+}
+
+/**
+ * Validate a drift target position — reuses the same constraints as normal movement.
+ * Checks: bounds, terrain walkability, water locks, no creature collision, territory.
+ */
+function isDriftPositionValid(creature, tx, ty, layer) {
+  if (!inBounds(layer, tx, ty)) return false;
+
+  const ground = worlds[layer][ty][tx];
+  const cover = getCover(layer, tx, ty);
+
+  // Water tile check (mirrors canMoveTo)
+  if (WATER_TILES.has(ground)) {
+    if (creature.canEnterWater !== true) return false;
+    // Water creature still needs cover to be walkable (if any)
+    if (cover) {
+      const ci = terrainInfo(cover);
+      if (!ci.walk) return false;
+    }
+  } else {
+    if (!isWalkable(ground, cover)) return false;
+  }
+
+  // Water-locked creatures can't leave water
+  if (isWaterLocked(creature) && !WATER_TILES.has(ground)) return false;
+
+  // No collision with another creature (skip self)
+  const occupant = monsterAt(tx, ty, layer);
+  if (occupant && occupant !== creature) return false;
+
+  // No collision with player
+  if (tx === state.player.x && ty === state.player.y) return false;
+
+  // Territory radius check
+  if (wouldExceedTerritory(creature, tx, ty)) return false;
+
+  return true;
+}
+
 // ==================== END PLAYER TURN ====================
 
 function endPlayerTurn(action){
@@ -2970,15 +3171,48 @@ function endPlayerTurn(action){
   state.player.movedThisTurn = false;
   state.player.inCombatThisTurn = false;
 
+  // ── Prompt S: layer-transition catch-up ──
+  // If the player changed layers since last turn, record departure from the old
+  // layer and catch up creatures on the new layer for the time the player was away.
+  const currentLayer = state.player.layer;
+  if (_prevLayer != null && _prevLayer !== currentLayer) {
+    // Record when we left the previous layer
+    _layerLeftTurn[_prevLayer] = turnCount;
+    // If returning to a layer we've visited before, catch up its creatures
+    if (_layerLeftTurn[currentLayer] != null) {
+      const turnsAway = turnCount - _layerLeftTurn[currentLayer];
+      if (turnsAway > 0) {
+        const layerMons = monsters[currentLayer] || [];
+        for (const m of layerMons) {
+          if (m.hp <= 0) continue;
+          // All creatures on a non-active layer are effectively dormant for the duration
+          m._dormant = true;
+          m._dormantTurns = (m._dormantTurns || 0) + turnsAway;
+        }
+      }
+      delete _layerLeftTurn[currentLayer];
+    }
+  }
+  _prevLayer = currentLayer;
+
   // Enemies act — only on current layer, town cells are safe
   if (!isTownCell(state.player.layer)){
     const mons = monstersHere();
 
-    // Prompt R: rebuild spatial hash grid before any detection runs
-    rebuildSpatialGrid();
+    // Prompt S: classify creatures as active or dormant
+    const activeCreatures = [];
+    for (const m of mons) {
+      if (m.hp <= 0) continue;
+      if (updateCreatureActivity(m, player)) {
+        activeCreatures.push(m);
+      }
+    }
 
-    // Phase 1: Each enemy takes its normal action (speed skip + AI)
-    for (const m of mons){
+    // Prompt R: rebuild spatial hash grid with active creatures only
+    rebuildSpatialGrid(activeCreatures);
+
+    // Phase 1: Each active enemy takes its normal action (speed skip + AI)
+    for (const m of activeCreatures){
       if (m.hp <= 0) continue;
       // Blood system — process monster bleed each turn
       if (processBleed(m, false)) {
@@ -3014,8 +3248,8 @@ function endPlayerTurn(action){
 
       if (state.player.hp <= 0){ _onPlayerDeathCallback && _onPlayerDeathCallback(); return; }
     }
-    // Phase 2: Each enemy that acted normally rolls for a bonus move (faster enemies only)
-    for (const m of mons){
+    // Phase 2: Each active enemy that acted normally rolls for a bonus move (faster enemies only)
+    for (const m of activeCreatures){
       if (m.hp <= 0) continue;
       if (!m._actedNormally) continue;
       const monPTW  = m.strength / m.siz;
