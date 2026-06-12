@@ -623,6 +623,10 @@ export const VIB_AIR_RANGE_COEFF     = 1.15;  // air vibration range coefficient
 export const VIS_RANGE_COEFF         = 1.9;   // visual range = cbrt(detectability × light) × sensitivity × coeff
 export const MAX_DETECTION_DISTANCE  = 40;    // absolute ceiling — nothing detected beyond this
 
+// --- Spatial Hash Grid (Prompt R) ---
+export const SPATIAL_CELL_SIZE    = 16;   // tiles per cell side
+export const SPATIAL_QUERY_RADIUS = 1;    // cells beyond center to query (1 = 3×3 neighborhood)
+
 // --- Safety Spikes (I-B) ---
 export const SAFETY_PROXIMITY_COEFF = 0.15;   // how much proximity-based detection spikes safety per turn
 export const SAFETY_DAMAGE_COEFF    = 3.0;    // how much taking damage spikes safety (multiplied by HP fraction)

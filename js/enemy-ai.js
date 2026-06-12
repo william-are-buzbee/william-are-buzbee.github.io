@@ -29,7 +29,8 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          OVERRIDE_SCALE, STIMULUS_RESISTANCE, CRITICAL_MAGNITUDE, REACTIVE_HUNGER_THRESHOLD,
          MIN_SEEK, SEEK_SCALE, PERSISTENCE_SCALE,
          ASSESS_INTEGRATION_THRESHOLD,
-         CHEM_MASS_COEFF } from './constants.js';
+         CHEM_MASS_COEFF,
+         SPATIAL_CELL_SIZE, SPATIAL_QUERY_RADIUS } from './constants.js';
 import { T, isWalkable, isFoodTile, terrainInfo, tileBlocksVision } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -52,6 +53,57 @@ let _useActionCallback = null;
 export function setUseActionCallback(fn){ _useActionCallback = fn; }
 
 function monstersHere(){ return monsters[state.player.layer] || []; }
+
+// ==================== SPATIAL HASH GRID (Prompt R) ====================
+// Eliminates N² creature-vs-creature detection cost.  The grid partitions
+// the map into SPATIAL_CELL_SIZE-wide cells.  Each detection query checks
+// only the (2·SPATIAL_QUERY_RADIUS+1)² cells around the observer.
+// Rebuilt once per turn before any detection runs.  Transient — never saved.
+
+const _spatialGrid = new Map();   // "cellX,cellY" → creature[]
+
+/** Clear and rebuild the spatial grid from all living creatures on the active layer. */
+function rebuildSpatialGrid() {
+  _spatialGrid.clear();
+  const mons = monstersHere();
+  for (let i = 0; i < mons.length; i++) {
+    const creature = mons[i];
+    if (creature.hp <= 0) continue;
+    const cx = Math.floor(creature.x / SPATIAL_CELL_SIZE);
+    const cy = Math.floor(creature.y / SPATIAL_CELL_SIZE);
+    const key = cx + ',' + cy;
+    let cell = _spatialGrid.get(key);
+    if (!cell) {
+      cell = [];
+      _spatialGrid.set(key, cell);
+    }
+    cell.push(creature);
+  }
+}
+
+/**
+ * Return all living creatures near (x, y) within SPATIAL_QUERY_RADIUS cells.
+ * The result is a superset of creatures within detection range — the actual
+ * per-zone detection still applies exact distance checks.
+ */
+function getNearbyCreatures(x, y) {
+  const results = [];
+  const centerCX = Math.floor(x / SPATIAL_CELL_SIZE);
+  const centerCY = Math.floor(y / SPATIAL_CELL_SIZE);
+  const r = SPATIAL_QUERY_RADIUS;
+  for (let dx = -r; dx <= r; dx++) {
+    for (let dy = -r; dy <= r; dy++) {
+      const key = (centerCX + dx) + ',' + (centerCY + dy);
+      const cell = _spatialGrid.get(key);
+      if (cell) {
+        for (let i = 0; i < cell.length; i++) {
+          results.push(cell[i]);
+        }
+      }
+    }
+  }
+  return results;
+}
 
 // ==================== WATER STATE HELPER (Prompt L-A) ====================
 // Update creature.inWater based on current tile. Called after movement.
@@ -872,9 +924,9 @@ function detectThreats(creature) {
     }
   }
 
-  // Check other creatures
-  const mons = monstersHere();
-  for (const other of mons) {
+  // Check other creatures (Prompt R: spatial grid narrows candidates)
+  const nearby = getNearbyCreatures(creature.x, creature.y);
+  for (const other of nearby) {
     if (other === creature) continue;
     if (other.hp <= 0) continue;
 
@@ -1207,9 +1259,9 @@ function detectPrey(creature) {
 
   creature.detectedPrey = [];
 
-  // Scan NPC creatures
-  const mons = monstersHere();
-  for (const other of mons) {
+  // Scan NPC creatures (Prompt R: spatial grid narrows candidates)
+  const nearby = getNearbyCreatures(creature.x, creature.y);
+  for (const other of nearby) {
     if (other === creature) continue;
     if (other.hp <= 0) continue;
     if (!isViablePrey(creature, other)) continue;
@@ -1424,9 +1476,9 @@ function getAdjacentPrey(creature) {
   let best = null;
   let bestMass = Infinity;
 
-  // Check NPC creatures
-  const mons = monstersHere();
-  for (const other of mons) {
+  // Check NPC creatures (Prompt R: spatial grid narrows candidates)
+  const nearby = getNearbyCreatures(creature.x, creature.y);
+  for (const other of nearby) {
     if (other === creature) continue;
     if (other.hp <= 0) continue;
     if (chebyshev(creature.x, creature.y, other.x, other.y) > 1) continue;
@@ -2134,12 +2186,14 @@ function assessFightOutcome(observer, target, info) {
 function buildAllDetectionInfo(creature) {
   creature.detectionInfo = [];
   const player = state.player;
-  const mons = monstersHere();
+
+  // Prompt R: spatial grid narrows candidate list
+  const nearby = getNearbyCreatures(creature.x, creature.y);
 
   // Build info for all entities in detection range
   const allTargets = [];
   if (player && player.hp > 0) allTargets.push(player);
-  for (const m of mons) {
+  for (const m of nearby) {
     if (m === creature || m.hp <= 0) continue;
     allTargets.push(m);
   }
@@ -2919,6 +2973,10 @@ function endPlayerTurn(action){
   // Enemies act — only on current layer, town cells are safe
   if (!isTownCell(state.player.layer)){
     const mons = monstersHere();
+
+    // Prompt R: rebuild spatial hash grid before any detection runs
+    rebuildSpatialGrid();
+
     // Phase 1: Each enemy takes its normal action (speed skip + AI)
     for (const m of mons){
       if (m.hp <= 0) continue;
@@ -3226,10 +3284,12 @@ function computePlayerPerception() {
   player.sensedCreatures = [];
 
   const fovSet = state.fovSet;
-  const mons = monstersHere();
-  if (!mons || mons.length === 0) return;
 
-  for (const creature of mons) {
+  // Prompt R: spatial grid narrows candidate list for player perception
+  const nearby = getNearbyCreatures(player.x, player.y);
+  if (!nearby || nearby.length === 0) return;
+
+  for (const creature of nearby) {
     if (creature.hp <= 0) continue;
 
     // Skip creatures already in visual FOV — they render normally
