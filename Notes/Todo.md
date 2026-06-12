@@ -50,7 +50,7 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Significant optimization improvements (indexDB, active simulation radius, spatial hash grid)
 
 ## Up Next
-- [ ] Second-pass over AI drive system
+- [ ] Second-pass over AI drive system (truly competetive behavior, not just plausible or believable behavior)
 
 ## Near-Term Plans (no particular order at the moment)
 - [ ] Second-pass over bleed/metabolism/healing mechanic
