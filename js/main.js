@@ -20,15 +20,15 @@ import { setOnVictoryCallback, toggleStealth } from './combat.js';
 import { useAction, showHelp, examineTile, readBook } from './interactions.js';
 import { log } from './log.js';
 import { openCharGen, renderCharGen, randomizeAttrs, beginGame, onPlayerDeath, onVictory } from './chargen.js';
-import { hasSave, tryResume, deleteSave } from './save-load.js';
+import { hasSave, tryResume, deleteSave, migrateFromLocalStorage } from './save-load.js';
 import { isMapOpen, toggleMap, closeMap, markCurrentCell } from './worldmap.js';
 import { isOverlayOpen, activePanel, togglePanel, closeOverlay, setInventoryActions } from './overlay.js';
 
 
 // ==================== WIRE CALLBACKS ====================
 setUpdateUICallback(updateUI);
-setOnPlayerDeathCallback(() => { deleteSave(); onPlayerDeath(); });
-setOnVictoryCallback(() => { deleteSave(); onVictory(); });
+setOnPlayerDeathCallback(() => { deleteSave().catch(e => console.error('[Save]', e)); onPlayerDeath(); });
+setOnVictoryCallback(() => { deleteSave().catch(e => console.error('[Save]', e)); onVictory(); });
 setGroundModalCallbacks(openModal, closeModal);
 setInventoryActions({
   eat:       (i) => eatItem(i),
@@ -383,7 +383,7 @@ function showScreen(id) {
     document.getElementById(s).style.display = s === id ? 'flex' : 'none';
   }
   state.gameState = id === 'title' ? 'title' : state.gameState;
-  if (id === 'title') { updateTitleButtons(); hideHud(); }
+  if (id === 'title') { updateTitleButtons().catch(e => console.error(e)); hideHud(); }
   if (id === 'death' || id === 'victory') hideHud();
 }
 
@@ -392,24 +392,25 @@ const titleEl = document.getElementById('title');
 const titleContinueBtn = document.getElementById('title-continue');
 const titleNewGameBtn  = document.getElementById('title-newgame');
 
-function updateTitleButtons() {
-  if (hasSave()) {
+async function updateTitleButtons() {
+  if (await hasSave()) {
     titleContinueBtn.style.display = '';
   } else {
     titleContinueBtn.style.display = 'none';
   }
 }
 
-titleContinueBtn.addEventListener('click', (ev) => {
+titleContinueBtn.addEventListener('click', async (ev) => {
   ev.stopPropagation();
-  if (hasSave()) {
-    if (tryResume()) {
+  if (await hasSave()) {
+    const resumed = await tryResume();
+    if (resumed) {
       titleEl.style.display = 'none';
       state.gameState = 'play';
       try { updateUI(); } catch(e) { console.error(e); }
     } else {
-      deleteSave();
-      updateTitleButtons();
+      deleteSave().catch(e => console.error('[Save]', e));
+      await updateTitleButtons();
       openCharGen();
     }
   }
@@ -417,7 +418,7 @@ titleContinueBtn.addEventListener('click', (ev) => {
 
 titleNewGameBtn.addEventListener('click', (ev) => {
   ev.stopPropagation();
-  deleteSave();
+  deleteSave().catch(e => console.error('[Save]', e));
   openCharGen();
 });
 
@@ -426,11 +427,11 @@ titleEl.addEventListener('click', (ev) => {
 });
 
 document.getElementById('death').addEventListener('click', () => {
-  deleteSave();
+  deleteSave().catch(e => console.error('[Save]', e));
   showScreen('title');
 });
 document.getElementById('victory').addEventListener('click', () => {
-  deleteSave();
+  deleteSave().catch(e => console.error('[Save]', e));
   showScreen('title');
 });
 
@@ -445,7 +446,7 @@ function hideRestartConfirm() {
 document.getElementById('restart-yes').addEventListener('click', (ev) => {
   ev.stopPropagation();
   hideRestartConfirm();
-  deleteSave();
+  deleteSave().catch(e => console.error('[Save]', e));
   showScreen('title');
 });
 
@@ -470,7 +471,16 @@ function drawTitleBackdrop() {
 drawTitleBackdrop();
 
 // ==================== STARTUP ====================
-updateTitleButtons();
+// Migration + async title-button check. Wrapped in async IIFE because
+// the save system now uses IndexedDB (async) instead of localStorage.
+(async () => {
+  try {
+    await migrateFromLocalStorage();
+  } catch (e) {
+    console.error('[Save] localStorage → IndexedDB migration failed:', e);
+  }
+  await updateTitleButtons();
+})();
 
 // ==================== DEBUG / ECOLOGY TESTING ====================
 // Console helpers — call from browser devtools:

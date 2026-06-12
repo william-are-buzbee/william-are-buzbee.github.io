@@ -3271,7 +3271,7 @@ function endPlayerTurn(action){
   updatePlayerFOV();  // recompute FOV before rendering
   computePlayerPerception();  // Prompt N: detect creatures through non-visual senses
   render();
-  saveGame();  // Auto-save after every player action
+  saveGame().catch(err => console.error('[Save] Auto-save failed:', err));  // Async fire-and-forget
 }
 
 // ==================== MONSTER MELEE ====================

@@ -1,6 +1,7 @@
 // ==================== SAVE / LOAD SYSTEM ====================
-// Serializes full game state to localStorage. Auto-saved after every turn.
+// Serializes full game state to IndexedDB. Auto-saved after every turn.
 // Handles circular references (bondPartner), Set objects, and item registry refs.
+// All public functions (saveGame, loadGame, hasSave, deleteSave, tryResume) are async.
 
 import { state, worlds, covers, monsters, features, groundItems } from './state.js';
 import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, SPECIES_TEMPLATES, initBodyMap, getBodyMap, computeBleedPenalty } from './constants.js';
@@ -12,6 +13,99 @@ import { updatePlayerFOV } from './fov.js';
 
 const SAVE_KEY = 'overworld_zero_save';
 const SAVE_VERSION = 4;
+
+// ==================== INDEXEDDB STORAGE BACKEND ====================
+// Replaces localStorage. No 5 MB cap — IndexedDB supports hundreds of MB to GB.
+// All public save/load functions are now async.
+
+const DB_NAME = 'overworld_zero';
+const DB_VERSION = 1;
+const STORE_NAME = 'saves';
+
+/** Open (or create) the IndexedDB database. */
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/** Store a value in IndexedDB. Stores structured data directly (no JSON.stringify needed). */
+async function saveToIDB(key, data) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.put(data, key);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/** Load a value from IndexedDB. Returns the stored object or null. */
+async function loadFromIDB(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.get(key);
+    request.onsuccess = () => resolve(request.result !== undefined ? request.result : null);
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/** Delete a value from IndexedDB. */
+async function deleteFromIDB(key) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.delete(key);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * One-time migration: move save data from localStorage to IndexedDB.
+ * Call at startup before the first load attempt. Clears localStorage after migration.
+ */
+export async function migrateFromLocalStorage() {
+  try {
+    // Check if IndexedDB already has data — skip if so
+    const existing = await loadFromIDB(SAVE_KEY);
+    if (existing) return;
+
+    // Check localStorage for old save
+    const json = localStorage.getItem(SAVE_KEY);
+    if (!json) return;
+
+    // Migrate: parse and store as structured object in IndexedDB
+    const data = JSON.parse(json);
+    await saveToIDB(SAVE_KEY, data);
+
+    // Clear localStorage to free the 5 MB space
+    localStorage.removeItem(SAVE_KEY);
+
+    console.log('[Save] Migrated save from localStorage to IndexedDB');
+  } catch (err) {
+    console.error('[Save] Migration from localStorage failed:', err);
+  }
+}
+
+// ==================== SAVE-IN-PROGRESS GUARD ====================
+// Prevents overlapping async saves if the player acts twice quickly.
+let _saveInProgress = false;
 
 // ==================== TRANSIENT FIELD MANAGEMENT ====================
 // Add any new per-turn recomputed fields here to prevent save bloat.
@@ -537,10 +631,12 @@ function serializeFeatures(allFeatures) {
 
 // ==================== SAVE ====================
 
-export function saveGame() {
-  try {
-    if (state.gameState !== 'play') return; // Only save during active play
+export async function saveGame() {
+  if (state.gameState !== 'play') return; // Only save during active play
+  if (_saveInProgress) return;            // Prevent overlapping async saves
+  _saveInProgress = true;
 
+  try {
     // Serialize worlds and covers as Objects keyed by layerIndex
     const serializedWorlds = {};
     for (const li of Object.keys(worlds)) {
@@ -594,70 +690,76 @@ export function saveGame() {
       exploredCells: state.exploredCells ? [...state.exploredCells] : [],
     };
 
-    const json = JSON.stringify(saveData);
-
-    // Prompt Q: save-size sanity check — catch bloat early
-    if (json.length > 2 * 1024 * 1024) {
-      console.warn(`[Save] Save data is ${(json.length / 1024).toFixed(0)} KB — unexpectedly large. ` +
-                   `Checking for entity reference leaks...`);
-      // Spot-check: player should be a few KB, not hundreds
-      const playerJson = JSON.stringify(saveData.state.player || {});
-      console.warn(`[Save]   player: ${(playerJson.length / 1024).toFixed(1)} KB`);
-      // Spot-check: each monster should be a few KB
-      for (const li of Object.keys(saveData.monsters || {})) {
-        const layerMons = saveData.monsters[li] || [];
-        const layerJson = JSON.stringify(layerMons);
-        if (layerJson.length > 500 * 1024) {
-          console.warn(`[Save]   monsters layer ${li}: ${(layerJson.length / 1024).toFixed(1)} KB (${layerMons.length} creatures)`);
+    // Size measurement for diagnostics only — not used for storage.
+    // IndexedDB stores the object directly via structured clone (faster, no stringify needed).
+    // Threshold raised to 100 MB: with IndexedDB the 5 MB ceiling is gone; this is now
+    // a "something went seriously wrong" detector, not a capacity warning.
+    try {
+      const json = JSON.stringify(saveData);
+      if (json.length > 100 * 1024 * 1024) {
+        console.warn(`[Save] Save data is ${(json.length / 1024).toFixed(0)} KB — extremely large! ` +
+                     `Checking for entity reference leaks...`);
+        const playerJson = JSON.stringify(saveData.state.player || {});
+        console.warn(`[Save]   player: ${(playerJson.length / 1024).toFixed(1)} KB`);
+        for (const li of Object.keys(saveData.monsters || {})) {
+          const layerMons = saveData.monsters[li] || [];
+          const layerJson = JSON.stringify(layerMons);
+          if (layerJson.length > 500 * 1024) {
+            console.warn(`[Save]   monsters layer ${li}: ${(layerJson.length / 1024).toFixed(1)} KB (${layerMons.length} creatures)`);
+          }
         }
       }
+    } catch (measureErr) {
+      // JSON.stringify failure means circular references leaked through — this is a bug.
+      console.error('[Save] JSON.stringify failed (likely circular reference leak):', measureErr);
+      return;
     }
 
-    localStorage.setItem(SAVE_KEY, json);
+    // Store structured object directly into IndexedDB
+    await saveToIDB(SAVE_KEY, saveData);
   } catch (err) {
     console.error('[Save] Failed to save game:', err);
+  } finally {
+    _saveInProgress = false;
   }
 }
 
 // ==================== LOAD ====================
 
-/** Check if a valid save exists. */
-export function hasSave() {
+/** Check if a valid save exists in IndexedDB. */
+export async function hasSave() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
-    const data = JSON.parse(raw);
+    const data = await loadFromIDB(SAVE_KEY);
+    if (!data) return false;
     // Accept current version AND previous versions (will be migrated on load)
-    return data && (data.version === SAVE_VERSION || data.version === 3 || data.version === 2 || data.version === 1) && data.state && data.state.player;
+    return !!(data && (data.version === SAVE_VERSION || data.version === 3 || data.version === 2 || data.version === 1) && data.state && data.state.player);
   } catch {
     return false;
   }
 }
 
-/** Delete saved game data. */
-export function deleteSave() {
+/** Delete saved game data from IndexedDB. */
+export async function deleteSave() {
   try {
-    localStorage.removeItem(SAVE_KEY);
+    await deleteFromIDB(SAVE_KEY);
   } catch (err) {
     console.error('[Save] Failed to delete save:', err);
   }
 }
 
 /**
- * Load a saved game. Restores all state, grids, monsters, features.
+ * Load a saved game from IndexedDB. Restores all state, grids, monsters, features.
  * Returns true on success, false on failure (caller should start fresh).
  */
-export function loadGame() {
+export async function loadGame() {
   try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
-
-    const data = JSON.parse(raw);
+    const data = await loadFromIDB(SAVE_KEY);
+    if (!data) return false;
 
     // Version check — accept v1, v2, v3 (will migrate) and current version
     if (!data || (data.version !== SAVE_VERSION && data.version !== 3 && data.version !== 2 && data.version !== 1)) {
       console.warn('[Save] Incompatible save version, discarding.');
-      deleteSave();
+      await deleteSave();
       return false;
     }
 
@@ -675,7 +777,7 @@ export function loadGame() {
     // Validate critical data
     if (!data.state || !data.state.player || !data.worlds) {
       console.warn('[Save] Corrupt save data, discarding.');
-      deleteSave();
+      await deleteSave();
       return false;
     }
 
@@ -793,7 +895,7 @@ export function loadGame() {
     return true;
   } catch (err) {
     console.error('[Save] Failed to load game:', err);
-    deleteSave();
+    await deleteSave();
     return false;
   }
 }
@@ -802,9 +904,9 @@ export function loadGame() {
  * Attempt to resume from save. Call from main.js after world-gen modules
  * are initialized. Returns true if a game was restored.
  */
-export function tryResume() {
-  if (!hasSave()) return false;
-  if (!loadGame()) return false;
+export async function tryResume() {
+  if (!(await hasSave())) return false;
+  if (!(await loadGame())) return false;
   try {
     updatePlayerFOV();  // compute FOV before first render
     render();
