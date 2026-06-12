@@ -45,19 +45,23 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] First-pass cognitive/ganglia/nervous system (episodic memory, pattern library, sensory integration, cognitive "workspace", planning, reflexive behavior, compression of signals, etc)
 - [x] First-pass player perception/transducer visibility (make the player's visual field at parity with an equivalent animal, no free lunch or plot armor for player perception)
 - [x] Second-pass over cognition/ganglia system
-- [x] Second-pass over perception/transducer system
-- [x] Significant optimization improvements 
+- [x] Second-pass over perception/transducer system (chemical transducer restructure to airborn, ground and water based vibration, plus contact vs air for chemical)
+- [x] Species-confidence gated rendering (shows blobs if you can't identify a creature but know something is there)
+- [x] Significant optimization improvements (indexDB, active simulation radius, spatial hash grid)
 
 ## Up Next
 - [ ] Second-pass over AI drive system
 
 ## Near-Term Plans (no particular order at the moment)
 - [ ] Second-pass over bleed/metabolism/healing mechanic
+- [ ] Third-pass over sensory system (sensitivity windows for transducers) 
 - [ ] Third-pass over AI drive system
 - [ ] Third-pass over bleed/metabolism/healing
-- [ ] Third-pass over cognition/ganglia system
+- [ ] Third-pass over cognition/ganglia system (actual pattern libraries/memory system) 
 
 ## Long-Term Plans
+- [ ] Immune/infection mechanics (needs metabolism first)
+- [ ] Gut/Digestion/gut microbiome (lower priority)
 - [ ] Aquatic Ecosystems
 - [ ] Sub-terranian ecosystem
 - [ ] AI overhaul (complex creature behavior based on instincts, body plan and evolutionary principles)
