@@ -4,13 +4,13 @@ A tile-based browser game about survival on a believably simulated alien world.
 
 ---------
 
-The environments, flora and fauna of this planet have evolved according to selective pressure. The dense atmosphere, dim sunlight and moist conditions have informed the surface of this planet for millions of years- swampy marshlands covered in mahogany-red flora. The strong presence of metals like manganese and copper in the planet's core provide a nearly inexhaustible supply of energy for chemosynthetic life, creating niches of flora that rival traditional photosynthesisers. 
+The environments, flora and fauna of this planet are alien. The dense atmosphere, dim sunlight and moist conditions of this planet have informed the characteristics of it's surface- swampy marshlands covered in mahogany-red flora. Metals like manganese and copper are abundant in the planetary core, providing a nearly inexhaustible supply of energy for chemosynthetic life. 
 
-This mixture of two distinct strategies is mirrored in the evolution of large fauna on this planet. All fauna can be traced back to two ancient lineages: one that uses scent, centralized intelligence and closed circulation, while another uses vibration, open circulation and an octopus-like nervous system. 
+These two distinct strategies are mirrored in the dual nature of native creatures. All fauna can be traced back to two ancient lineages: one that uses scent, a centralized brain and closed circulation, while another uses vibration, open circulation and a widely distributed brain. 
 
-Over millions of years, these two clades radiate into every possible niche. They come to occupy the roles of apex predators, tiny generalists, titanic herbivores and carrion eating scavengers. Their expanse touches every biome and corner of the planet, including aquatic and sub-terrestial ecosystems.
+Over millions of years, these two clades radiate into every possible niche. They come to occupy the roles of apex predators, tiny generalists, titanic herbivores and carrion eating scavengers. Their expanse touches every biome and corner of the planet, from the 
 
-This is when the game begins. You play as an alien creature trying to survive in this vast world. Learn the ecology of the planet and how its inhabitants operate. Navigate a web of ecological interaction. Use your animal weaponry, senses and cognition to survive. Learn how to fight, and especially, how to live another day. 
+This is when the game begins. You play as an alien creature trying to survive in this world. Learn the characteristics of the planet and how its inhabitants operate. Navigate a web of ecological interaction. Use your animal weaponry, senses and cognition to survive. Learn how to fight and how to live another day. 
 
 ---------
 
