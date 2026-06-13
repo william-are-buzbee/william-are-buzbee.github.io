@@ -12,8 +12,8 @@ Over millions of years, these two lineages evolve and radiate into every niche a
 
 They populate sub-terranian forests fueled by chemical energy from the planetary core. They claim the abyssal depths of the deep sea. They compete across the vast expanse of open ocean. They radiate across intricate archipelagos, speciating into diverse forms. 
 
-This is when the game begins- you are an alien creature trying to survive on this planet. Use your animal weaponry, senses and cognition to carve out a niche for yourself in this hostile, strange and alien world. 
+This is when the game begins- you are an alien creature trying to survive on this planet. Use your animal weaponry, senses and cognition to carve out a niche for yourself in this alien world. 
 
 ---------
 
-This game is inspired by Biblaridion's _Alien Biospheres_ series, an intelligent speculative evolution project. Other strong influences come from classic roguelikes like _Nethack_ and _Caves of Qud._
+This game is inspired by Biblaridion's _Alien Biospheres_ series, a uniquely believable speculative evolution project. Other strong influences come from classic roguelikes like _Nethack_ and _Caves of Qud._
