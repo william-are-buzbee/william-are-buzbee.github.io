@@ -79,16 +79,51 @@ Prompt queue and task tracker. Check things off as they're done.
 For new chats, include:
 - Only the files that touch the system being changed
 - The Project Handoff document (always)
-- Relevant design documents (Body-Sim-Design, Surface-Creatures, Stat-System-Design, Ecology-Foundations, Mutation-Design, Lore)
+- Relevant design documents:
+  - Body-Sim-Design — body map architecture, zone composition, tissue types
+  - Surface-Creatures — all five creature body maps with exact transducer values, mass breakdowns, neural allocations
+  - Stat-System-Design — legacy stat derivations, bridge values
+  - Ecology-Foundations — biome logic, ecological niches, food web
+  - Mutation-Design — mutation mechanics, consumption tracking, tissue deposition
+  - Lore — demigod phases, planet history, central narrative
+  - Cognition-Design — reactive-deliberative architecture, integration capacity, memory design, hormonal system (UPDATED: reflects the reactive/deliberative two-layer model, NOT the old tier-based system)
+  - Sensory-Design — per-zone detection, SNR-based information quality, continuous uncertainty ranges, sensitivity windows (future), signal-to-noise framework
+  - Circulatory-Immune-Design — circulatory diversity across clades, immune architecture, infection mechanics, microbial ecology, mutation as immune event (all future/design-phase, not yet implemented)
 - Key utility signatures (worldDims returns array, getFeature returns by reference, etc.)
 - Known bugs and what causes them
 - What NOT to change
 
 ### Known Gotchas
-- **Save bloat:** Any new per-turn transient fields on creatures must be added to the TRANSIENT_FIELDS array in save-load.js or saves will exceed localStorage quota
-- **Vibration transducers are objects:** `zone.transducers.vibration` is `{ ground, air, water }`, not a single number. Any code reading it as a number will break.
-- **Player must inherit template fields:** When new fields are added to creature templates (monsters.js), the species selection path (chargen.js) must copy them to the player or the AI will not evaluate the player correctly
-- **Integration capacity is recomputed each turn:** Don't persist it. Zone destruction changes tier in real time.
+
+- **Save system is async IndexedDB:** Saves use IndexedDB, not localStorage. `saveGame()` and `loadGame()` are async. Auto-save in `endPlayerTurn` is fire-and-forget (`saveGame().catch(...)`). Load on startup must be awaited. Old localStorage saves auto-migrate on first load.
+
+- **Save bloat — TRANSIENT_FIELDS:** Any new per-turn transient fields on creatures or the player must be added to the TRANSIENT_FIELDS array in save-load.js. Entity reference fields (sensedCreatures, detectionInfo, detectedThreats, detectedPrey, huntTarget, threatSource) are explicitly deleted in the serializers as belt-and-suspenders safety.
+
+- **Save bloat — reconstructable constants:** `pathways` and `clade` on creatures are stripped before save and reconstructed from `CREATURE_PATHWAYS[key]` and `CLADE_DATA[key]` on load. Do not store data on creatures that can be derived from their template key.
+
+- **Chemical transducers are objects:** `zone.transducers.chemical` is `{ contact, airborne, dissolved }`, not a single number. Any code reading it as a number will break. This mirrors vibration's `{ ground, air, water }` structure.
+
+- **Vibration transducers are objects:** `zone.transducers.vibration` is `{ ground, air, water }`, not a single number. Same principle as chemical.
+
+- **Detection is per-zone, not per-creature:** There is no creature-level aggregated sensitivity. Each zone independently computes detection range from its own transducer quality. `cacheEffectiveSenses` and `computePlayerSensoryProfile` no longer exist. Detection uses `detectTargetPerZone` which returns an array of `{zone, channel, quality, snr}` per detected target.
+
+- **Detection info uses uncertainty ranges:** `buildDetectionInfo` produces continuous uncertainty — `sizeEstimate: {lower, upper, estimated}`, `dietConfidence` (0-1), `speciesConfidence` (0-1). NOT binary flags. The reactive layer reads worst-case bounds via `relativeMagnitude()` which can return `'ambiguous'` when the size range spans the observer's own mass.
+
+- **Spatial grid must be rebuilt each turn:** `rebuildSpatialGrid` runs at the start of each AI turn with active creatures only. All detection loops use `getNearbyCreatures()` instead of iterating all creatures. Never iterate `state.creatures` directly for detection purposes.
+
+- **Active radius / dormancy:** Creatures beyond DORMANT_RADIUS (45 tiles) from the player are dormant — no emission, no detection, no AI. They wake up with catch-up state advancement when the player approaches within ACTIVE_RADIUS (40 tiles). Dormant creatures are NOT in the spatial grid. `_dormant` and `_dormantTurns` are transient fields.
+
+- **Player must inherit template fields:** When new fields are added to creature templates (monsters.js), the species selection path (chargen.js) must copy them to the player or the AI will not evaluate the player correctly.
+
+- **Integration capacity is recomputed each turn:** Don't persist it. Zone destruction changes override reliability and classification depth in real time.
+
+- **Species confidence gates rendering:** Non-visually sensed creatures render as size-scaled blobs below SPECIES_DISPLAY_CONFIDENCE (0.75), switching to actual sprites above it. The player perception pass stores `{creature, bestSNR, speciesConfidence, sizeEstimate}` on `player.sensedCreatures`.
+
+- **SNR = zoneRange / distance:** Signal-to-noise ratio is computed per zone per channel. At the edge of detection SNR = 1.0, close range produces high SNR. SNR drives both the AI uncertainty model and the player rendering opacity gradient.
+
+- **Reactive layer never reads target internals:** Reactive rule conditions check signal magnitude, distance, adjacency, and flags on self (tookDamageThisTurn, hunger, blood). They do NOT read target.diet, target.species, target.hp directly. Size comparison uses signal magnitude vs self-emission reference.
+
+- **No species-specific code in AI:** The reactive-deliberative architecture uses universal rules with body-map-derived queries (combatCapability, movementCompromisesSense, hasRefuge, dietResponse). Search for species names or speciesId checks in AI decision logic — there should be none.
 
 ### Typical File Sets
 - **Biome/terrain work:** surface-gen.js, constants.js, terrain.js
@@ -105,7 +140,11 @@ For new chats, include:
 - **NPCs/structures:** world-logic.js, surface-gen.js, constants.js, interactions.js, terrain.js, sprites.js
 - **Chargen/attributes:** chargen.js, player.js, constants.js, main.js, index.html, state.js
 - **UI/layout:** index.html, ui.js, main.js, rendering.js, constants.js
-- **Save/load:** save-load.js, state.js, chargen.js, interactions.js
+- **Save/load:** save-load.js, state.js, chargen.js, interactions.js, main.js (async IndexedDB — saveGame is fire-and-forget, loadGame must be awaited)
 - **Input/controls:** main.js, player-actions.js, constants.js
 - **Body map / creatures:** constants.js, monsters.js, combat.js, Body-Sim-Design.md, Surface-Creatures.md
 - **Signals / emission:** signals.js, enemy-ai.js, constants.js, terrain.js
+- **Spatial grid / optimization:** enemy-ai.js, constants.js, state.js
+- **Sensory / detection:** enemy-ai.js, signals.js, constants.js, rendering.js, Sensory-Design.md
+- **Cognition / AI behavior:** enemy-ai.js, monsters.js, constants.js, Cognition-Design.md
+- **Metabolism / immune (future):** Circulatory-Immune-Design.md, constants.js, monsters.js, combat.js
