@@ -623,7 +623,7 @@ const DEFAULT_WANDER_PROFILE = {
 const VISION_CONE_WIDTHS = {
   wolf:        120,   // forward-focused predator
   dire_wolf:   100,   // narrow, focused apex hunter
-  hare:        360,   // near-panoramic prey vision
+  hare:        350,   // near-panoramic prey vision
   cave_crab:   200,   // wide-field large herbivore
   ambush_pred: 240,   // multi-directional sensor coverage
   mushroom:    360,   // omnidirectional (blindsight)
