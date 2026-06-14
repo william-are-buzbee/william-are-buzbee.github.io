@@ -12,9 +12,10 @@ Over millions of years, these two lineages evolved and radiated into every niche
 
 They colonized sub-terranian forests fueled by chemical energy from the planetary core. They claimed the abyssal depths and the vast expanse of the open ocean. They spread across intricate archipelagos, speciating into diverse forms. 
 
-This is when the game begins. You play as an alien creature trying to survive in this world. Except, you're special- you have the ability to mutate and change your body plan with precision. Grow new limbs, alter your general size, change your cognitive architecture, produce any kind of new organ, reconfigure circulation, specify metabolism and change the material of various bodily regions. 
+This is when the game begins. You play as an alien creature trying to survive in this world. Except, you're special- you can change your body plan with precision. Sprout new limbs, change your size, grow new organs, reconfigure your metabolism and alter your neural architecture. 
 
-Climb the food chain and carve out your niche.
+Use the power of mutation to carve out a niche for yourself. Climb the food chain however you see fit. 
+
 ---------
 
-This game is inspired by Biblaridion's _Alien Biospheres_ series, a unique and believable speculative evolution project. Other strong influences come from classic roguelikes like _Nethack_ and _Caves of Qud._
+This game is inspired by Biblaridion's _Alien Biospheres_ series, a believable and cool speculative evolution project. Other strong influences come from classic roguelikes like _Nethack_ and _Caves of Qud._
