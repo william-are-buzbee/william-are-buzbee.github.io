@@ -45,8 +45,8 @@ Each zone is defined by its physical contents, measured in kg:
 
   // Transducer quality (what sensory organs are physically here)
   transducers: {
-    chemical: 1,
-    vibration: 4,
+    chemical: { contact: 1, airborne: 0, dissolved: 0 },
+    vibration: { ground: 4, air: 0, water: 0 },
     visual: 0,
   },
 
@@ -188,31 +188,15 @@ Not derived from muscle. Derived from the enzymatic secretion capability of the 
 
 ### Senses
 
-Each sense is computed from the body map: transducer quality (the hardware) plus neural processing allocation (the software).
+Each sense is computed from the body map: transducer quality (the hardware) plus neural processing allocation (the software). Detection is per-zone — there is no creature-level aggregated sensitivity.
 
-**Creature-level effective sense:**
+Each zone detects independently through its own transducers on specific coupling media. Chemical transducers operate through three media: contact (touch-range surface reading), airborne (volatile sampling at distance), and dissolved (aquatic, future). Vibration transducers operate through three media: ground (substrate contact), air (pressure waves), and water (future). Visual remains a single value per zone.
 
-```
-effectiveSense = max(zone.transducers[sense] for all surviving zones)
-```
+Detection range per zone: `zoneRange = cbrt(emission) × zoneQuality × channelCoefficient`. Information quality scales continuously with SNR (`zoneRange / distance`) — from bare detection at the edge of range to precise identification at close range with good sensors.
 
-The creature's effective value for a sense is the maximum transducer quality across all surviving zones. If the best eyes are in the head (visual 3), losing the head drops visual to whatever the next-best zone has (maybe visual 1 in a rear limb).
+**Processing quality:** A high transducer value in a zone with low neural processing for that sense means raw signal with poor interpretation. A zone with ground vibration 5 but only 0.02 kg of vibration processing neural tissue detects that vibration exists but can't discriminate between signatures well. A zone with ground vibration 5 and 0.15 kg of vibration processing discriminates precisely — it knows what made the vibration, how heavy it is, how fast it's moving, and whether it matches a stored pattern. This bottleneck is folded into how range and SNR produce information, not expressed as a separate derived value.
 
-Alternatively, for senses like vibration where spatial coverage matters:
-
-```
-effectiveVibration = sum(zone.transducers.vibration for all surviving zones), capped
-```
-
-The exact aggregation method per sense type is a tuning decision — max for vision (you see through your best eye), sum-with-cap for vibration (more sensors = wider coverage), max for chemical (your best nose dominates).
-
-**Processing quality:** A high transducer value in a zone with low neural processing for that sense means raw signal with poor interpretation. A zone with vibration 5 but only 0.02 kg of vibration processing neural tissue detects that vibration exists but can't discriminate between signatures well. A zone with vibration 5 and 0.15 kg of vibration processing discriminates precisely — it knows what made the vibration, how heavy it is, how fast it's moving, and whether it matches a stored pattern.
-
-```
-senseDiscrimination = min(transducerQuality, neuralProcessing * PROCESSING_SCALE)
-```
-
-The effective detection quality is bottlenecked by whichever is lower — the hardware or the software. This means you can't just grow better eyes without also investing neural tissue in visual processing. And if you lose the zone that held your visual processing neural mass, your remaining eyes still see but you can't interpret what they see as well.
+See Sensory-Design.md for the full detection and information quality framework.
 
 ### Cognition
 
@@ -228,16 +212,17 @@ The highest fraction of total neural mass concentrated in any single zone.
 
 **Cognitive tier thresholds:**
 
-| Tier | Centralization | Capabilities |
+| Tier | Centralization | Typical Characteristics |
 |---|---|---|
-| Tier 1 (< 0.20) | Fully distributed | Reflexive pattern matching only. No episodic memory. No integration. Pure stimulus-response. |
-| Tier 2 (0.20 — 0.40) | Partially centralized | Episodic memory available (limited). Basic two-modal integration where senses converge on the concentrated zone. Short-term individual recognition. |
-| Tier 3 (> 0.40) | Heavily centralized | Full episodic memory. Multi-modal integration. Generalization. Threat assessment. Targeted zone attacks. The creature is recognizably intelligent. |
+| Tier 1 (< 0.20) | Fully distributed | Reactive dominance. Deep pattern libraries per ganglion. No episodic memory. No integration. Excellent reflexive defense and knockout resistance. |
+| Tier 2 (0.20 — 0.40) | Partially centralized | Some deliberative override. Short-term episodic memory. Basic two-modal integration. Modest goal persistence. |
+| Tier 3 (> 0.40) | Heavily centralized | Reliable deliberative override. Full episodic memory. Multi-modal integration. Generalization. Threat assessment. Targeted zone attacks. The creature is recognizably intelligent. |
 
-These tiers determine:
-- AI behavior complexity (tier 1 = parallel weighted behaviors, tier 3 = state machine with memory)
+Tiers are derived display labels that correlate with integration capacity ranges, not behavioral gates. All creatures run the same universal reactive rules every turn; the deliberative layer fires when integration capacity is sufficient to override reactive stimulus magnitude. See Cognition-Design.md for the full reactive-deliberative architecture.
+
+These tiers correlate with:
 - Examine system depth (higher centralization = more detail when the player examines things, because the player's own centralization determines their anatomical reasoning)
-- Targeted attack capability (tier 3 required — you need concentrated processing to reason about where to aim)
+- Targeted attack capability (Tier 3 range required — concentrated processing to reason about where to aim)
 - Knockout vulnerability (zones with neural concentration > 0.30 can cause knockout when hit)
 
 **Distribution score:**
@@ -345,7 +330,7 @@ Armor derives from the structural mass in the zone. More integument/bone = more 
 **Zone destroyed (HP reaches 0):**
 - If vital: true → creature dies.
 - All neural mass in this zone is permanently lost. Recompute centralization and distribution scores.
-- All transducers in this zone are lost. Recompute creature-level effective senses.
+- All transducers in this zone are lost. Per-zone detection ranges update accordingly.
 - All attacks in this zone become unavailable.
 - All muscle in this zone is lost. Recompute locomotion speed (if locomotion zone) and potential strike damage for any attacks that were here.
 - All pathways through this zone are severed. Recompute connectivity.
@@ -398,7 +383,7 @@ Creature-level HP is the sum of all zone HPs. This is what the player sees in th
 - Primary senses concentrated in head
 - Limb ganglia vestigial (0.03-0.05 kg each, motor control only)
 - Star topology pathways (everything routes through torso)
-- Cognitive tier 3: full episodic memory, integration, generalization, threat assessment
+- Typically Tier 3 range: reliable deliberative override, full episodic memory, integration, threat assessment
 - High knockout vulnerability
 - Flanking effective (limbs can't independently detect or react)
 - Single point of failure (head destruction is cognitively catastrophic)
@@ -409,14 +394,14 @@ Creature-level HP is the sum of all zone HPs. This is what the player sees in th
 - Senses distributed across multiple zones (vibration especially)
 - Limb ganglia significant (0.10-0.28 kg each, full local processing)
 - Mesh topology pathways (redundant connections, limb-to-limb bypasses)
-- Cognitive tier 1-2: reflexive pattern matching, modest integration at best
+- Typically Tier 1-2 range: reactive dominance, deep pattern libraries, modest integration at best
 - Low knockout vulnerability
 - Flanking ineffective (limbs detect and react independently via reflexive defense)
 - No single point of failure (graceful degradation)
 
 ### The Player
 
-Starts with a Clade A body map. Through mutation from consuming Clade B creatures, neural mass redistributes — growing ganglia in limb zones, developing mechanoreceptors. The body map physically changes. A late-game mutated player's head might hold 0.30 neural mass instead of 0.55, with the difference grown into limbs. They gain reflexive defense but lose some cognitive tier 3 capabilities (reduced examine depth, reduced targeted attack accuracy). The mutation system modifies the body map directly.
+Starts with a Clade A body map. Through mutation from consuming Clade B creatures, neural mass redistributes — growing ganglia in limb zones, developing mechanoreceptors. The body map physically changes. A late-game mutated player's head might hold 0.30 neural mass instead of 0.55, with the difference grown into limbs. They gain reflexive defense but lose reliable deliberative override (reduced examine depth, reduced targeted attack accuracy). The mutation system modifies the body map directly.
 
 ---
 
@@ -431,15 +416,15 @@ HEAD — 3.5 kg                              targetWeight: 0.10
     chemicalProcessing:  0.25    visualProcessing: 0.10    episodicMemory: 0.18
     integration:         0.15    motorCoordination: 0.08   threatAssessment: 0.04
     patternLibrary:      0.05
-  Transducers: chemical 6, visual 3, vibration 0
+  Transducers: chemical { contact: 2, airborne: 6, dissolved: 0 }, visual 3, vibration { ground: 0, air: 2, water: 0 }
   Attacks: [{bite, puncture, canReflex: false}]
-  Locomotion: false    Vital: true
+  Locomotion: false    Vital: false
 
 TORSO — 7.5 kg                              targetWeight: 0.30
   muscle: 3.00    structural: 1.50    neural: 0.22    sensory: 0.08    connective: 2.70
   Neural allocation:
     motorRelay: 0.12    chemicalProcessing: 0.05    patternLibrary: 0.05
-  Transducers: chemical 1, vibration 0, visual 0
+  Transducers: chemical { contact: 1, airborne: 0, dissolved: 0 }, vibration { ground: 0, air: 0, water: 0 }, visual 0
   Attacks: []
   Locomotion: false    Vital: true (organs)
 
@@ -447,7 +432,7 @@ FRONT-L LIMB — 1.6 kg                      targetWeight: 0.08
   muscle: 0.85    structural: 0.35    neural: 0.05    sensory: 0.05    connective: 0.30
   Neural allocation:
     motorControl: 0.04    chemicalProcessing: 0.01
-  Transducers: chemical 1, vibration 0, visual 0
+  Transducers: chemical { contact: 1, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }, visual 0
   Attacks: [{claw, slashing, canReflex: false}]
   Locomotion: true    Vital: false
 
@@ -458,7 +443,7 @@ MID-L LIMB — 1.9 kg                        targetWeight: 0.09
   muscle: 1.10    structural: 0.40    neural: 0.04    sensory: 0.00    connective: 0.36
   Neural allocation:
     motorControl: 0.04
-  Transducers: none
+  Transducers: chemical { contact: 0, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }
   Attacks: []
   Locomotion: true    Vital: false
 
@@ -469,7 +454,7 @@ REAR-L LIMB — 2.1 kg                       targetWeight: 0.08
   muscle: 1.30    structural: 0.42    neural: 0.04    sensory: 0.00    connective: 0.34
   Neural allocation:
     motorControl: 0.04
-  Transducers: none
+  Transducers: chemical { contact: 0, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }
   Attacks: []
   Locomotion: true    Vital: false
 
@@ -506,7 +491,7 @@ HEAD — 2.2 kg                              targetWeight: 0.08
   Neural allocation:
     visualProcessing: 0.12    vibrationProcessing: 0.06    integration: 0.05
     motorControl: 0.03       patternLibrary: 0.02
-  Transducers: visual 5, vibration 2, chemical 0
+  Transducers: visual 3, vibration { ground: 0, air: 2, water: 0 }, chemical { contact: 0, airborne: 0, dissolved: 0 }
   Attacks: [{bite, puncture, canReflex: false}]
   Locomotion: false    Vital: false
 
@@ -514,7 +499,7 @@ TORSO — 6.0 kg                              targetWeight: 0.24
   muscle: 2.20    structural: 1.30    neural: 0.20    sensory: 0.15    connective: 2.15
   Neural allocation:
     motorRelay: 0.08    vibrationProcessing: 0.06    patternLibrary: 0.06
-  Transducers: vibration 2, chemical 0, visual 0
+  Transducers: vibration { ground: 1, air: 0, water: 0 }, chemical { contact: 0, airborne: 0, dissolved: 0 }, visual 0
   Attacks: []
   Locomotion: false    Vital: true (organs)
 
@@ -523,7 +508,7 @@ SENSOR-L LIMB — 1.8 kg                     targetWeight: 0.06
   Neural allocation:
     vibrationProcessing: 0.15    chemicalProcessing: 0.06
     patternLibrary: 0.05        motorControl: 0.02
-  Transducers: vibration 5, chemical 2, visual 0
+  Transducers: vibration { ground: 5, air: 2, water: 0 }, chemical { contact: 2, airborne: 0, dissolved: 0 }, visual 0
   Attacks: [{probe, puncture, canReflex: true}]
   Locomotion: false    Vital: false
 
@@ -535,7 +520,7 @@ FRONT-L LIMB — 2.2 kg                      targetWeight: 0.08
   Neural allocation:
     vibrationProcessing: 0.10    chemicalProcessing: 0.03
     motorControl: 0.05          patternLibrary: 0.04
-  Transducers: vibration 4, chemical 1, visual 0
+  Transducers: vibration { ground: 4, air: 1, water: 0 }, chemical { contact: 1, airborne: 0, dissolved: 0 }, visual 0
   Attacks: [{hook, puncture, canReflex: true}]
   Locomotion: true    Vital: false
 
@@ -547,7 +532,7 @@ REAR-L LIMB — 2.9 kg                       targetWeight: 0.09
   Neural allocation:
     vibrationProcessing: 0.06    visualProcessing: 0.04
     motorControl: 0.05          patternLibrary: 0.03
-  Transducers: vibration 2, visual 1, chemical 0
+  Transducers: vibration { ground: 2, air: 1, water: 0 }, visual 1, chemical { contact: 0, airborne: 0, dissolved: 0 }
   Attacks: [{kick, blunt, canReflex: true}]
   Locomotion: true    Vital: false
 
@@ -584,7 +569,7 @@ rear-L ──(0.2)──► rear-R          (rear pair coordination)
 
 | Action | Meso-Predator (Clade A) | Ambush Predator (Clade B) |
 |---|---|---|
-| Destroy head | 66% neural mass lost. Bite gone. Chemical 6, visual 3 gone. Creature wanders aimlessly — no tracking, no memory, no decisions. Functionally dead. | 15% neural mass lost. Bite gone. Visual 5 lost. Modest integration lost. Every limb still fully functional. Creature becomes pure reflex — less coordinated, still dangerous. |
+| Destroy head | 66% neural mass lost. Bite gone. Chemical 6, visual 3 gone. Creature wanders aimlessly — no tracking, no memory, no decisions. Functionally dead. | 15% neural mass lost. Bite gone. Visual 3 lost. Modest integration lost. Every limb still fully functional. Creature becomes pure reflex — less coordinated, still dangerous. |
 | Destroy torso | Dead (vital organs) + all limb pathways severed. Head intact but commands nothing. | Dead (vital organs). Sub-clusters briefly linked via direct limb pathways. |
 | Destroy one limb | ~3% neural loss. Negligible cognitive impact. Speed loss of ~1/6. | ~12% neural loss. One flank's detection and strike capability gone. Rest fully capable. |
 | Flanking | Free hit. Limb ganglia can't detect or react independently. | Rear limbs detect via vibration + visual 1 and kick reflexively. No free hits. |
@@ -634,7 +619,7 @@ Zone runtime state (current HP, destroyed flag) must be persisted per creature. 
 The player sees derived summary values on the status screen:
 - Total mass in kg
 - Effective speed (derived)
-- Primary senses with quality levels (derived from max transducer + processing across zones)
+- Primary senses with quality indicators (derived from per-zone transducer qualities — see Sensory-Design.md). The status display may summarize the best quality per sense type for readability, but the underlying detection system operates per-zone.
 - Cognitive tier description ("centralized" or "distributed" or "partially distributed")
 - Zone damage states when examining (gated by their own centralization score)
 
@@ -678,7 +663,7 @@ Replace abstract stat allocation with body type selection or physical attribute 
 
 ## What NOT to Change When Building This
 
-- Enemy AI behavior patterns (state machines, territory, sync) — these sit above the body sim and read its outputs
+- Enemy AI architecture (reactive-deliberative layers, universal rules, integration-based override) — sits above the body sim and reads its outputs
 - Spawn system, biome generation, terrain
 - Item system, ground items, corpse drops
 - FOV calculation internals, rendering pipeline

@@ -13,7 +13,7 @@ The original system had seven stats (Size, Strength, Chemical, Vibration, Visual
 - "Size" is total body mass in kg.
 - "Strength" is muscle mass distributed across zones.
 - "Chemical" is chemoreceptor transducer quality plus neural processing allocated to interpreting it.
-- "Vibration" is mechanoreceptor transducer quality (per medium — ground, air, water) plus neural processing allocated to interpreting it.
+- "Vibration" is mechanoreceptor transducer quality plus neural processing allocated to interpreting it.
 - "Visual" is eye quality plus neural processing allocated to interpreting it.
 - "Central" is the centralization score — the peak concentration of neural mass in any single zone.
 - "Distributed" is the distribution score — 1.0 minus the centralization score.
@@ -82,64 +82,53 @@ The player doesn't see "Strength 40." They might see "muscle: 48%" on the status
 
 ## Derived Senses
 
-Each sense is computed from the body map: transducer quality (the hardware) and neural processing allocation (the software).
+Each sense is computed from the body map: transducer quality (the hardware) and neural processing allocation (the software). Detection is per-zone — there is no creature-level aggregated sensitivity. Each zone independently determines its own detection range on each channel through its own transducers, and information quality scales continuously with signal-to-noise ratio. See Sensory-Design.md for the full detection and information quality framework.
 
 ### Chemical (Chemoreception)
 
-Smell, taste, reading dissolved compounds in air and water.
+Chemical sensing operates through three physically distinct coupling media, each a different instrument:
 
-```
-effectiveChemical = max(zone.transducers.chemical for all surviving zones)
-discrimination = min(transducerQuality, chemicalProcessing * PROCESSING_SCALE)
-```
+**Contact** — surface-level chemical reading through direct touch. Taste, essentially. Operates at touch range only. Reads molecular composition of whatever the zone is contacting. Quality determines resolution of the surface reading.
 
-The creature's effective Chemical is the best chemoreceptor array it still has. Discrimination — how much useful information is extracted — is bottlenecked by whichever is lower: the transducer quality or the neural tissue processing it.
+**Airborne** — volatile sampling at distance. Smell. Reads airborne chemical concentrations carried by atmosphere. This is the distance sense — creatures and the player leave chemical trails on tiles they've visited, and airborne chemoreception reads those trails. Only Clade A creatures carry meaningful airborne chemical values; Clade B's chemical world is entirely contact-based.
 
-Gameplay layer: a scent map. Creatures and the player leave chemical trails on tiles they've visited. Chemical sense reads those trails. Higher effective Chemical + higher processing = longer detection range, richer information (from "something was here" to identifying specific creatures and their state).
+**Dissolved** — aquatic chemical sensing. Reading dissolved compounds in water. Future implementation — reserved for aquatic and semi-aquatic niches.
 
-Clade A: primary sense. Dense chemoreceptors concentrated in the head zone, heavy neural investment in chemical processing. Losing the head is catastrophic for Chemical.
+Each zone that carries chemical transducers has independent quality values on each coupling medium. A zone with contact 2 and airborne 6 is a precise taster and an excellent nose — two different instruments in the same organ. Detection range per zone per medium follows the standard formula: range = cbrt(emission) × zoneQuality × channelCoefficient. Information quality scales with SNR (zoneRange / distance) — from "something is here" at the edge of range to precise species identification at close range with good sensors.
 
-Clade B: secondary sense for most. Chemoreceptors distributed across limb tips, modest processing in each local ganglion. Losing one limb reduces coverage on that flank but doesn't eliminate Chemical.
+The bottleneck between hardware and software still applies: a zone with excellent transducers but minimal chemicalProcessing neural allocation gets range but poor interpretation. A zone with dense chemoreceptors and heavy processing investment extracts rich information. This relationship is folded into how range and SNR produce information through the detection system, not expressed as a separate derived value.
+
+Clade A: primary sense. Dense chemoreceptors concentrated in the head zone with high airborne quality (the nose) and contact quality (the mouth). Heavy neural investment in chemical processing. Losing the head is catastrophic — the creature loses its primary distance sense entirely.
+
+Clade B: secondary sense for most. Chemoreceptors distributed across limb tips, contact-only — Clade B creatures taste what they touch but cannot smell at range. Modest processing in each local ganglion. Losing one limb reduces coverage on that flank but doesn't eliminate chemical sensing.
 
 ### Vibration (Mechanoreception)
 
-Reading ground vibration from footfalls and substrate contact, airborne sound from breathing, movement, and combat, and waterborne displacement from movement through water. Each medium is tracked independently because the physical coupling differs — a limb touching the ground senses substrate vibration but not airborne pressure, while an ear-flap structure senses airborne pressure but not ground tremors.
+Vibration sensing operates through three coupling media:
 
-```
-effectiveVibrationGround = sum(zone.transducers.vibration.ground for all surviving zones), capped
-effectiveVibrationAir = sum(zone.transducers.vibration.air for all surviving zones), capped
-effectiveVibrationWater = sum(zone.transducers.vibration.water for all surviving zones), capped
-discriminationGround = min(transducerQuality.ground, vibrationProcessing * PROCESSING_SCALE)
-discriminationAir = min(transducerQuality.air, vibrationProcessing * PROCESSING_SCALE)
-discriminationWater = min(transducerQuality.water, vibrationProcessing * PROCESSING_SCALE)
-```
+**Ground** — substrate-contact vibration. Reading tremors, footsteps, and pressure changes through physical contact with the ground. The primary vibration channel for terrestrial creatures. Still creatures emit zero ground vibration — a motionless target is invisible to this channel regardless of sensor quality.
 
-Each medium uses sum-with-cap rather than max because spatial coverage matters — more mechanoreceptor arrays across the body = wider detection area. A creature with ground vibration sensors on every limb detects from all directions. A creature with sensors only on its front limbs has a detection gap behind it. Discrimination is computed per-medium: when evaluating ground vibration discrimination, only ground transducer quality is compared against processing investment; same for air and water.
+**Air** — airborne pressure waves. Lower fidelity than ground, but detects signals without requiring substrate contact. The meso-predator's mobile ear-flaps pick up airborne vibration at low quality. The ambush predator's sensor limbs detect airborne vibration as a secondary confirmation channel.
 
-Gameplay layer: movement detection. Any moving creature generates vibration in media it contacts — footsteps generate ground vibration, breathing and vocalization generate airborne vibration, swimming generates waterborne displacement. Ground vibration propagates through substrate, potentially through walls. Air vibration propagates line-of-effect through open space. Water vibration propagates through connected water bodies. Higher effective Vibration per medium = wider range in that medium, better identification (from "something moved" to recognizing specific creatures by movement signature).
+**Water** — aquatic displacement waves. Future implementation — reserved for aquatic niches. The large herbivore's paddle-limbs carry water vibration transducers for detecting movement while submerged.
 
-Clade A: weak but present — low-quality air vibration from ear-flap structures (air quality 1-3 depending on species and ear-flap size), minimal ground vibration from limb contact with substrate (ground quality 1 on locomotion limbs). The large herbivore's paddle-limbs provide moderate water-vibration sensitivity (water quality 3). These are quality 1-3 values versus Clade B's 4-5 — present but not competitive. Clade A creatures don't drive behavior from vibration; it's background input that supplements their dominant chemical sense.
+Each zone detects independently through its own transducers on specific coupling media. A creature with vibration sensors on every limb detects from all directions — each limb's ganglion processes its own vibration input locally. A creature with sensors only on its front limbs has a detection gap behind it. There is no aggregation into a creature-level vibration value.
 
-Clade B: primary sense. Dense mechanoreceptor arrays on limb surfaces provide high-quality ground-coupled vibration sensing (ground quality 3-5), with heavy neural investment in vibration processing distributed across limb ganglia. Each limb processes its own vibration input locally — detection is fast, local, and independent. The dense mechanoreceptor arrays also provide secondary air-vibration sensitivity (air quality 1-2 on most limbs), picking up airborne pressure waves from nearby movement and combat sounds. Ground sensing drives behavior; air sensing supplements it.
+Clade A: weak or vestigial. Most Clade A descendants have minimal ground vibration sensitivity through locomotion limbs (quality 1) and low-fidelity airborne pickup through ear-flaps (quality 2-3 in the head). Neither channel is reliable enough to drive behavior.
+
+Clade B: primary sense. Dense mechanoreceptor arrays on limb surfaces with high ground vibration quality, heavy neural investment in vibration processing distributed across limb ganglia. Each limb processes its own vibration input locally — detection is fast, local, and independent.
 
 ### Visual (Eyesight)
 
-Light-based detection. Pattern recognition, motion detection, distance assessment.
+Light-based detection. Pattern recognition, motion detection, distance assessment. Visual uses the existing FOV cone system — visual determines cone depth and clarity.
 
-```
-effectiveVisual = max(zone.transducers.visual for all surviving zones)
-discrimination = min(transducerQuality, visualProcessing * PROCESSING_SCALE)
-```
+Visual remains a single transducer value per zone (no coupling media split). The creature's visual capability depends on which zones have eyes and how much visualProcessing neural allocation supports them. Losing a zone with eyes drops visual to whatever the next-best zone provides.
 
-Visual uses max — you see through your best eye.
-
-Gameplay layer: standard FOV (field of view). Visual determines cone depth and clarity. Higher effective Visual = longer sight range, better detail at distance.
-
-Both clades have eyes. Visual varies by creature and lifestyle, not by clade. The ambush predator has distributed eyes (including small rear-facing ones on the rear limbs). The meso-predator has all eyes concentrated in the head.
+Both clades have eyes. Visual varies by creature and lifestyle, not by clade. The ambush predator has distributed eyes (including small rear-facing ones on the rear limbs with visual quality 1). The meso-predator has all eyes concentrated in the head (visual quality 3).
 
 ### Future Senses
 
-The system accommodates new senses without restructuring. Each future sense follows the same pattern: transducer quality on zones, neural processing allocation in local ganglia, derived effective value.
+The system accommodates new senses without restructuring. Each future sense follows the same pattern: transducer quality on zones with coupling media where appropriate, neural processing allocation in local ganglia, per-zone detection with SNR-based information quality.
 
 - Thermal — heat signatures. Useful underground, at night, through cover.
 - Echolocation — active sonar. Reveals own position.
@@ -159,41 +148,45 @@ totalNeuralMass = sum of neural mass across all zones
 centralizationScore = max(zone.neural / totalNeuralMass for all zones)
 ```
 
-The highest fraction of total neural mass concentrated in any single zone. This determines what cognitive capabilities are available.
+The highest fraction of total neural mass concentrated in any single zone. This correlates with integration capacity — the creature's ability to override reactive behavior with contextual deliberation.
 
 ### Cognitive Tiers
 
-| Tier | Centralization Score | Capabilities |
+| Tier | Centralization Score | Typical Characteristics |
 |---|---|---|
-| Tier 1 (< 0.20) | Fully distributed | Reflexive pattern matching only. No episodic memory. No integration. Pure stimulus-response per ganglion. |
-| Tier 2 (0.20 — 0.40) | Partially centralized | Episodic memory available (limited, short-term). Basic two-modal integration where senses converge. Short-term individual recognition. |
-| Tier 3 (> 0.40) | Heavily centralized | Full episodic memory. Multi-modal integration (cross-referencing chemical, visual, vibration, spatial, and temporal data). Generalization. Threat assessment. Targeted zone attacks. The creature is recognizably intelligent. |
+| Tier 1 (< 0.20) | Fully distributed | Reactive dominance. Deep pattern libraries per ganglion. No episodic memory. No integration. Excellent reflexive defense and knockout resistance. |
+| Tier 2 (0.20 — 0.40) | Partially centralized | Some deliberative override capability. Short-term episodic memory. Basic two-modal integration where senses converge. Modest goal persistence. |
+| Tier 3 (> 0.40) | Heavily centralized | Reliable deliberative override. Full episodic memory. Multi-modal integration. Generalization. Threat assessment. Targeted zone attacks. The creature is recognizably intelligent. |
+
+Tiers are derived display labels that correlate with integration capacity ranges. They do not gate which behavioral system runs — all creatures run the same decision architecture. The tier label tells the player roughly what cognitive characteristics a creature exhibits, not which AI system is selected for it.
 
 ### What Each Tier Means in Gameplay
 
-**Tier 1 — Reflexive only:**
-- AI: parallel weighted behaviors, no readable state transitions
-- Detection: each zone detects independently using its local senses
-- Combat: reflexive strikes from zones with sufficient neural mass and local senses, no targeted attacks
-- Memory: pattern library only — trained stimulus-response associations local to each ganglion. No memory of specific events or individuals.
+All creatures run universal reactive rules every turn. Behavioral differences emerge because each rule's conditions query the body map, and different bodies produce different answers. The deliberative layer attempts override when integration capacity is sufficient — a continuous contest between stimulus magnitude and override capacity, not a tier gate. See Cognition-Design.md for the full reactive-deliberative architecture.
+
+**Tier 1 range — Reactive dominance:**
+- Reactive layer handles all behavior. Immediate stimulus-response: detect threat → flee or strike, detect prey → pursue briefly, detect nothing → hold or wander (depending on whether movement compromises the dominant sense)
+- No sustained pursuit — if the target leaves detection range, the creature drops the goal within a few turns
+- No contextual assessment — the creature cannot evaluate whether it's winning a fight or compare threat magnitude against its own capability
+- Each zone detects and reacts independently using its local senses. Territory-trained pattern libraries make each ganglion deeply competent within its home patch
 - Examine: minimal information extracted ("a creature is here")
-- Territory: strong — each ganglion builds deep local pattern library through experience
 
-**Tier 2 — Partial centralization:**
-- AI: rudimentary state machine with limited transitions
-- Detection: modest cross-referencing of two sensory modalities
-- Combat: deliberate attacks from the concentrated zone, reflexive strikes from distributed zones
-- Memory: short-term episodic memory. Remembers recent encounters but not in detail. Basic individual recognition.
+**Tier 2 range — Partial override:**
+- Deliberative layer fires on moderate stimuli but fails on strong ones. The creature can suppress reactive impulses when the situation isn't urgent — continuing to graze when a distant predator is detected, for example
+- Short goal persistence — can sustain a pursuit or investigation for several turns after the target leaves detection
+- Modest cross-referencing of two sensory modalities where they converge on the integration zone
+- Basic individual recognition through short-term episodic memory
 - Examine: moderate information ("a predator, six limbs, wounded")
-- Territory: moderate — episodic memory supplements pattern matching
 
-**Tier 3 — Full centralization:**
-- AI: complex state machine with readable transitions, personality, learning
-- Detection: full multi-modal integration. Cross-references scent trails with visual confirmation with vibration data with past experience.
-- Combat: targeted zone attacks (requires centralization + sensory acuity to perceive the target zone). Full-body committed strikes with coordinated gait.
-- Memory: rich episodic memory. Remembers specific encounters with the player, adjusts behavior based on personal history. Recognizes individuals. Remembers dangerous locations.
+**Tier 3 range — Reliable override:**
+- Deliberative layer reliably overrides reactive impulses in most situations. The creature evaluates context before committing — fight assessment, threat comparison, cost-benefit analysis
+- Full episodic memory. Remembers specific encounters with the player, adjusts behavior based on personal history. Recognizes individuals. Remembers dangerous locations
+- Multi-modal integration: cross-references scent trails with visual confirmation with vibration data with past experience
+- Sustained pursuit. Goal persistence extends well beyond detection range, scaled by integration capacity
+- Targeted zone attacks (requires centralization + sensory acuity to perceive the target zone)
 - Examine: detailed information gated by centralization score ("a meso-predator, left mid-limb destroyed, bleeding, favoring right side, likely to flee")
-- Territory: moderate — episodic memory of landmarks and routes, but less locally optimized than Tier 1 pattern matching
+
+Integration capacity is continuous — the tier boundaries are display thresholds, not behavioral switches. A creature at centralization 0.19 and one at 0.21 behave very similarly. The difference between Tier 1 and Tier 3 is dramatic in aggregate, but the transition is gradual.
 
 ### Distribution Score
 
@@ -212,7 +205,7 @@ Higher distribution provides:
 
 No native creature has both high centralization AND high distribution with sensory coverage to support both. A Clade A organism has centralization 0.50+ with vestigial limb ganglia. A Clade B organism has centralization below 0.20 with dense limb ganglia. The architectures are mutually exclusive because neural mass is a finite resource — concentrating it in the head means it's not in the limbs, and vice versa.
 
-A player who mutates through consuming Clade B creatures develops neural mass in limb zones. Their head's concentration fraction drops as limb ganglia grow. They're physically restructuring their neural architecture from centralized toward distributed. At some point their centralization score drops below 0.40 and they begin losing Tier 3 capabilities while gaining reflexive defense. The stat display reflects this — the player can see their cognitive tier shifting as they mutate.
+A player who mutates through consuming Clade B creatures develops neural mass in limb zones. Their head's concentration fraction drops as limb ganglia grow. They're physically restructuring their neural architecture from centralized toward distributed. At some point their centralization score drops below 0.40 and they begin losing reliable deliberative override while gaining reflexive defense. The stat display reflects this — the player can see their cognitive tier shifting as they mutate.
 
 This is the biologically impossible signal. No native organism transitions between architectures. The player doing so hints at the demigod's nature.
 
@@ -257,10 +250,10 @@ Each attack derives damage from the zone housing it. Muscle provides force, zone
 ### Accuracy
 
 ```
-accuracy = BASE_ACCURACY + (effectiveSense * SENSE_ACCURACY_COEFF)
+accuracy = BASE_ACCURACY + (zoneDetectionQuality * SENSE_ACCURACY_COEFF)
 ```
 
-Where effectiveSense is whichever sense the creature is using to detect the target (Chemical for scent-tracking Clade A, the relevant Vibration medium for ground-sensing or air-sensing Clade B, Visual for sight-based attacks). The attacker uses the sense that led to detection. For vibration-dominant creatures, the medium that triggered detection determines which effectiveVibration value is used. This is a placeholder until full sense-specific accuracy is implemented.
+Bridge formula — reads the detecting zone's transducer quality or best SNR for the channel that led to detection, not a creature-level aggregated sense value. The attacker uses the sense that led to detection (airborne chemical for scent-tracking Clade A, ground vibration for ground-sensing Clade B, visual for sight-based attacks). Exact implementation deferred — the correct input is the SNR or zone quality from the specific detection event that initiated engagement.
 
 ### Stealth
 
@@ -268,7 +261,7 @@ Where effectiveSense is whichever sense the creature is using to detect the targ
 stealthProfile = totalMass * STEALTH_MASS_COEFF
 ```
 
-Stealth is primarily about being physically small enough to not be noticed. Future expansion: stealth effectiveness against specific senses depends on understanding what the detector can perceive. Sneaking past a Chemical-dominant creature means staying downwind. Sneaking past a Vibration-dominant creature means moving slowly. The player's knowledge of enemy sense profiles (from the examine system, gated by their own centralization score) feeds into stealth strategy.
+Stealth is primarily about being physically small enough to not be noticed. Future expansion: stealth effectiveness against specific senses depends on understanding what the detector can perceive. Sneaking past a Chemical-dominant creature means staying downwind. Sneaking past a Vibration-dominant creature means moving slowly. The player's knowledge of enemy sensory capabilities (from the examine system, gated by their own centralization score) feeds into stealth strategy.
 
 ### Turn Agility
 
@@ -282,63 +275,57 @@ Smaller creatures change facing direction almost for free. Larger creatures comm
 
 ## Creature Sense Profiles
 
-These are not assigned stats — they're the effective sense values derived from each creature's body map. Listed here for reference:
+These are not assigned stats — they're the per-zone transducer values from each creature's body map, summarized here for reference. Detection operates per-zone, not per-creature — these summaries show the best values across all zones. See Surface-Creatures.md for the full zone-by-zone body maps and Sensory-Design.md for how these values produce detection ranges.
 
 **Clade A Meso-Predator (22 kg):**
-- Chemical: 6 (head transducers, 0.25 kg processing) — primary sense
-- Visual: 3 (head transducers, 0.10 kg processing) — secondary
-- Vibration: ground 1, air 2 — weak (air from ear-flaps, ground from limb contact)
+- Chemical: airborne 6 (head), contact 2 (head), contact 1 (torso, front limbs) — airborne is the primary distance sense
+- Vibration: air 2 (head ear-flaps), ground 1 (front, mid, rear limbs) — weak, not behavior-driving
+- Visual: 3 (head)
 - Centralization: 0.66 — Tier 3
-- Cognitive: full episodic memory, integration, threat assessment, targeted attacks
+- Integration capacity 0.128 — reliable deliberative override, sustained pursuit, fight assessment
 
 **Clade A Apex Predator (~90 kg):**
-- Chemical: 7 — primary, extended range
-- Visual: 4 — better developed than meso-predator
-- Vibration: ground 1, air 3 — weak (larger ear-flaps provide slightly better air pickup than meso-predator, same minimal ground coupling)
-- Centralization: ~0.60 — Tier 3
-- Cognitive: same as meso-predator with more experience accumulation (longer-lived)
+- Chemical: airborne 7 (head), contact 2 (head), contact 1 (torso, front limbs) — extended range over meso-predator
+- Vibration: air 3 (head), ground 1 (front, mid, rear limbs) — slightly better than meso-predator, still weak
+- Visual: 4 (head) — better developed than meso-predator
+- Centralization: 0.61 — Tier 3
+- Integration capacity 0.252 — reliable deliberative override with more experience accumulation (longer-lived). Sustained pursuit over long distances.
 
 **Clade A Large Herbivore (~200 kg):**
-- Chemical: 5 — dominant sense, adapted for evaluating flora quality and detecting submerged vegetation
-- Visual: 5 — better distance vision than predators (open terrain)
-- Vibration: ground 1, air 2, water 3 — weak on land (ear-flaps and walking limbs), moderate in water (paddle-limb mechanoreception)
-- Centralization: ~0.50 — Tier 3
-- Cognitive: episodic memory, spatial mapping, threat avoidance. Less threat assessment than predators.
+- Chemical: airborne 5 (head), contact 4 (head), contact 3 (front limbs, with dissolved 3 for aquatic foraging), contact 1 (torso) — adapted for evaluating flora quality and detecting submerged vegetation
+- Vibration: air 2 (head), ground 1 (mid, rear limbs), water 3 (front paddle-limbs) — the only Clade A creature with meaningful aquatic mechanoreception
+- Visual: 5 (head) — better distance vision than predators (open terrain)
+- Centralization: 0.509 — Tier 3
+- Integration capacity 0.154 — reliable deliberative override. Strong spatial memory, threat avoidance. Evaluates before fleeing — calm until the stimulus overwhelms override.
 
 **Clade B Small Herbivore (~5 kg):**
-- Chemical: 2 — minor
-- Vibration: ground 5, air 1 — primary (ground), distributed across all limbs; secondary air pickup on grazing limbs and head
-- Visual: 4 — good motion detection
-- Centralization: ~0.15 — Tier 1
-- Cognitive: reflexive only. No memory of specific encounters. Deep territory-trained pattern libraries.
-
-**Clade B Colonial Chemotroph node (~5 kg):**
-- Chemical: 1 — minimal
-- Vibration: 6 — primary, communication + detection
-- Centralization: ~0.12 — Tier 1
-- Cognitive: reflexive only. Colony-level behavior emerges from inter-node chemical signaling, not individual intelligence.
+- Chemical: contact 2 (fore limbs), contact 1 (mid-graze limbs) — contact only, no airborne
+- Vibration: ground 5 (fore limbs), ground 4 (mid-graze limbs), ground 3 (mid-loco, rear limbs), ground 1 (torso), air 1 (head, fore limbs, mid-graze limbs) — dense distributed coverage
+- Visual: 4 (head)
+- Centralization: 0.146 — Tier 1
+- Integration capacity 0.000 — reactive dominance. No memory of specific encounters. Deep territory-trained pattern libraries across all ganglia.
 
 **Clade B Ambush Predator (~24 kg):**
-- Chemical: 2 — minor, limb-tip chemoreceptors
-- Vibration: ground 5, air 2 — primary (ground), dense arrays on sensor limbs and all other limbs; secondary air pickup from sensor limbs and head
-- Visual: 5 — good motion detection, including rear-facing eyes
-- Centralization: 0.15 — Tier 1 with modest Tier 2 integration in head
-- Cognitive: reflexive pattern matching with deep territory familiarity. Modest visual+vibration cross-referencing in head. No episodic memory.
+- Chemical: contact 2 (sensor limbs), contact 1 (front limbs) — contact only, no airborne
+- Vibration: ground 5 (sensor limbs), ground 4 (front limbs), ground 2 (rear limbs), ground 1 (torso), air 2 (head, sensor limbs), air 1 (front, rear limbs) — dense distributed coverage with sensor limbs as primary arrays
+- Visual: 3 (head), visual 1 (rear limbs) — includes rear-facing eyes for motion detection
+- Centralization: 0.15 — Tier 1 with modest integration in head
+- Integration capacity 0.014 — reactive dominance with minimal deliberative capability. Pattern matching with deep territory familiarity. No episodic memory.
 
 **Player (starting Clade A body, ~24 kg):**
-- Chemical: 5 — Clade A default
-- Vibration: ground 1, air 2 — weak (Clade A body has minimal mechanoreceptors — air vibration from ear-flaps, ground vibration from limb contact)
-- Visual: 4 — moderate
+- Chemical: airborne 5 (head), contact 2 (head) — Clade A default sensory profile
+- Vibration: ground 1 (limbs) — minimal, Clade A body has no significant mechanoreceptors
+- Visual: 4 (head)
 - Centralization: ~0.55 — Tier 3
-- Cognitive: full episodic memory, integration, targeted attacks, examine depth
+- Integration capacity ~0.13 — reliable deliberative override, full episodic memory, examine depth
 
 **Player (late game, heavily mutated, ~30 kg):**
-- Chemical: 6 — enhanced from Clade A consumption
-- Vibration: ground 4, air 2 — ground vibration grown through Clade B consumption (mechanoreceptors developed in limb zones), air vibration retained from Clade A ear-flap structures
-- Visual: 5 — enhanced
-- Centralization: ~0.30 — dropped from 0.55 as neural mass redistributed to limbs. Tier 2 — reduced episodic memory, reduced examine depth, but gained reflexive defense and knockout resistance.
+- Chemical: airborne 6, contact 3 (head, enhanced from Clade A consumption)
+- Vibration: ground 4 (limb zones, grown through Clade B consumption — mechanoreceptors developed), air 2
+- Visual: 5 (enhanced)
+- Centralization: ~0.30 — dropped from 0.55 as neural mass redistributed to limbs. Tier 2 — reduced integration capacity, less reliable deliberative override, reduced examine depth, but gained reflexive defense and knockout resistance.
 
-This profile is biologically impossible for any native organism. Both Chemical 6 (Clade A signature) and ground Vibration 4 (Clade B signature) on the same body, with a centralization score that's neither Clade A-high nor Clade B-low but somewhere in between.
+This profile is biologically impossible for any native organism. Both airborne chemical 6 (Clade A signature) and ground vibration 4 (Clade B signature) on the same body, with a centralization score that's neither Clade A-high nor Clade B-low but somewhere in between.
 
 ---
 
@@ -370,18 +357,13 @@ Mutations physically modify the body map. Eating Clade A creatures grows neural 
 The relative speed system reads effectiveSpeed (derived from the body map) instead of the old Strength/Size ratio. Turn agility reads totalMass. All inputs from the body map.
 
 ### AI
-Detection reads the creature's effective senses (derived from surviving zone transducers and processing). AI behavioral complexity reads the creature's cognitive tier (derived from centralization score). Chemical-dominant creatures track by scent trail. Vibration-dominant creatures detect by movement proximity. Visual-dominant creatures use line-of-sight.
+Detection is per-zone — each zone's transducers independently determine detection range on each coupling medium. AI behavior uses a universal reactive layer with integration-capacity-based deliberative override. All creatures run the same decision architecture. Chemical-dominant creatures track by scent trail (airborne chemoreception). Vibration-dominant creatures detect by movement proximity (ground mechanoreception). Visual-dominant creatures use line-of-sight.
 
 ### Combat
-Accuracy uses the attacking creature's relevant effective sense. Damage uses the striking zone's muscle and mass. Dodge uses the defender's total mass. Armor uses the target zone's structural mass. Everything from the body map.
+Accuracy uses the detecting zone's quality or SNR for the channel that led to engagement. Damage uses the striking zone's muscle and mass. Dodge uses the defender's total mass. Armor uses the target zone's structural mass. Everything from the body map.
 
 ### Chargen
-Character creation will need to move from abstract point allocation to body configuration. Options under consideration:
-- Choose a body type template ("lean and fast" vs "heavy and powerful") that sets the body map, then fine-tune specific zones
-- Allocate mass between categories (muscle, neural, structural) and let the body map compute from those inputs
-- Simplified allocation that maps to body map parameters behind the scenes
-
-Decision deferred to implementation. The current abstract stat allocation works as a temporary bridge — the allocated values map to body map parameters during creature initialization.
+The player selects a species at game start and inherits that creature's complete body map. No stats are allocated. The body map IS the character sheet.
 
 ### Save System
 Derived values are not saved — they're recomputed from the body map at load time. Only zone damage states (current HP, destroyed flag) need persisting per creature.
