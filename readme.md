@@ -4,16 +4,17 @@ A tile-based browser game about survival on a believably simulated alien world.
 
 ---------
 
-The environments, flora and fauna of this planet are informed by evolutionary pressures over the course of millions of years. The dense atmosphere, dim sunlight and high moisture content have created a wet and rich surface habitat- swampy marshlands covered in mahogany-red flora. Metals like manganese and copper are abundant in terrestrial and sub-terrainian environments, providing a nearly inexhaustible supply of energy for chemosynthetic life. 
+The environments, flora and fauna of this planet are millions of years old. The dense atmosphere, dim sunlight and high moisture content on the surface have created a wet and rich surface habitat- swampy marshlands covered in mahogany-red flora. Metals like manganese and copper are abundant in terrestrial and sub-terrainian environments, providing a nearly inexhaustible supply of energy for chemosynthetic life. 
 
 All alien fauna originates from two ancient genetic lineages. One lineage has a centralized brain, a closed circulatory system and an emphasis on smell as a primary sense. Another clade has a decentralized brain, an open circulatory system and a strong ability to detect ground vibration. 
 
-Over millions of years, these two lineages evolve and radiate into every niche available to them. They come to occupy the roles of apex predators, tiny generalists, titanic herbivores and carrion eating scavengers. 
+Over millions of years, these two lineages evolved and radiated into every niche available to them. They became apex predators and tiny generalists, titanic herbivores and carrion eating scavengers. 
 
-They populate sub-terranian forests fueled by chemical energy from the planetary core. They claim the abyssal depths of the deep sea. They compete across the vast expanse of open ocean. They radiate across intricate archipelagos, speciating into diverse forms. 
+They colonized sub-terranian forests fueled by chemical energy from the planetary core. They claimed the abyssal depths and the vast expanse of the open ocean. They spread across intricate archipelagos, speciating into diverse forms. 
 
-This is when the game begins- you are an alien creature trying to survive on this planet. Use your animal weaponry, senses and cognition to carve out a niche for yourself in this alien world. 
+This is when the game begins. You play as an alien creature trying to survive in this world. Except, you're special- you have the ability to mutate and change your body plan with precision. Grow new limbs, alter your general size, change your cognitive architecture, produce any kind of new organ, reconfigure circulation, specify metabolism and change the material of various bodily regions. 
 
+Climb the food chain and carve out your niche.
 ---------
 
-This game is inspired by Biblaridion's _Alien Biospheres_ series, a uniquely believable speculative evolution project. Other strong influences come from classic roguelikes like _Nethack_ and _Caves of Qud._
+This game is inspired by Biblaridion's _Alien Biospheres_ series, a unique and believable speculative evolution project. Other strong influences come from classic roguelikes like _Nethack_ and _Caves of Qud._
