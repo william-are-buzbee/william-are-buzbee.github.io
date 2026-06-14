@@ -10,7 +10,7 @@ Include this alongside Ecology-Foundations.md and Spawn-Design.md when implement
 
 **Both clades are present in every biome.** No biome belongs to one clade. The player encounters Clade A and Clade B descendants side by side, filling similar roles through different means.
 
-**Clade determines the feel, not the role.** Two herbivores from different clades are both herbivores — but one is readable, personality-driven, and navigates by chemical sense. The other is parallel-processing, vibration-sensing, and territory-efficient. The player learns the difference through experience, not labels.
+**Clade determines the feel, not the role.** Two herbivores from different clades are both herbivores — but one is readable, personality-driven, and navigates by chemical sense. The other is parallel-processing, vibration-sensing, and territory-efficient. The player learns the difference through experience, not labels. At the transducer level, this shows as a clean split: only Clade A creatures carry nonzero airborne chemical values (distance olfaction). Clade B's chemical world is entirely contact-based — they taste what they touch but cannot smell at range.
 
 **Each creature has a "ship today" AI path and a "build toward" AI vision.** The current AI column describes which existing behavior pattern the creature uses right now. The future AI column describes what it should eventually become. Nothing blocks on future work — every creature is playable with current tools.
 
@@ -58,7 +58,7 @@ HEAD — 3.5 kg                              targetWeight: 0.10
     chemicalProcessing:  0.25    visualProcessing: 0.10    episodicMemory: 0.18
     integration:         0.15    motorCoordination: 0.08   threatAssessment: 0.04
     patternLibrary:      0.05
-  Transducers: chemical 6, visual 3, vibration { ground: 0, air: 2, water: 0 }
+  Transducers: chemical { contact: 2, airborne: 6, dissolved: 0 }, visual 3, vibration { ground: 0, air: 2, water: 0 }
   Attacks: [{bite, puncture, canReflex: false}]
   Locomotion: false    Vital: false
 
@@ -66,7 +66,7 @@ TORSO — 7.5 kg                              targetWeight: 0.30
   muscle: 3.00    structural: 1.50    neural: 0.22    sensory: 0.08    connective: 2.70
   Neural allocation:
     motorRelay: 0.12    chemicalProcessing: 0.05    patternLibrary: 0.05
-  Transducers: chemical 1, vibration { ground: 0, air: 0, water: 0 }, visual 0
+  Transducers: chemical { contact: 1, airborne: 0, dissolved: 0 }, vibration { ground: 0, air: 0, water: 0 }, visual 0
   Attacks: []
   Locomotion: false    Vital: true (organs)
 
@@ -74,7 +74,7 @@ FRONT-L LIMB — 1.6 kg                      targetWeight: 0.08
   muscle: 0.85    structural: 0.35    neural: 0.05    sensory: 0.05    connective: 0.30
   Neural allocation:
     motorControl: 0.04    chemicalProcessing: 0.01
-  Transducers: chemical 1, vibration { ground: 1, air: 0, water: 0 }, visual 0
+  Transducers: chemical { contact: 1, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }, visual 0
   Attacks: [{claw, slashing, canReflex: false}]
   Locomotion: true    Vital: false
 
@@ -85,7 +85,7 @@ MID-L LIMB — 1.9 kg                        targetWeight: 0.09
   muscle: 1.10    structural: 0.40    neural: 0.04    sensory: 0.00    connective: 0.36
   Neural allocation:
     motorControl: 0.04
-  Transducers: vibration { ground: 1, air: 0, water: 0 }
+  Transducers: chemical { contact: 0, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }
   Attacks: []
   Locomotion: true    Vital: false
 
@@ -96,7 +96,7 @@ REAR-L LIMB — 2.1 kg                       targetWeight: 0.08
   muscle: 1.30    structural: 0.42    neural: 0.04    sensory: 0.00    connective: 0.34
   Neural allocation:
     motorControl: 0.04
-  Transducers: vibration { ground: 1, air: 0, water: 0 }
+  Transducers: chemical { contact: 0, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }
   Attacks: []
   Locomotion: true    Vital: false
 
@@ -160,7 +160,7 @@ HEAD — 8.0 kg                              targetWeight: 0.08
     chemicalProcessing:  0.38    visualProcessing: 0.20    episodicMemory: 0.26
     integration:         0.20    motorCoordination: 0.10   threatAssessment: 0.06
     patternLibrary:      0.06
-  Transducers: chemical 7, visual 4, vibration { ground: 0, air: 3, water: 0 }
+  Transducers: chemical { contact: 2, airborne: 7, dissolved: 0 }, visual 4, vibration { ground: 0, air: 3, water: 0 }
   Attacks: [{bite, puncture, canReflex: false}]
   Locomotion: false    Vital: false
 
@@ -168,7 +168,7 @@ TORSO — 30.0 kg                             targetWeight: 0.30
   muscle: 10.50    structural: 5.50    neural: 0.42    sensory: 0.10    connective: 13.48
   Neural allocation:
     motorRelay: 0.26    chemicalProcessing: 0.08    patternLibrary: 0.08
-  Transducers: chemical 1, vibration { ground: 0, air: 0, water: 0 }, visual 0
+  Transducers: chemical { contact: 1, airborne: 0, dissolved: 0 }, vibration { ground: 0, air: 0, water: 0 }, visual 0
   Attacks: []
   Locomotion: false    Vital: true (organs)
 
@@ -176,7 +176,7 @@ FRONT-L LIMB — 8.0 kg                     targetWeight: 0.10
   muscle: 3.80    structural: 1.60    neural: 0.08    sensory: 0.12    connective: 2.40
   Neural allocation:
     motorControl: 0.06    chemicalProcessing: 0.02
-  Transducers: chemical 1, vibration { ground: 1, air: 0, water: 0 }, visual 0
+  Transducers: chemical { contact: 1, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }, visual 0
   Attacks: [{claw, slashing, canReflex: false}]
   Locomotion: true    Vital: false
 
@@ -187,7 +187,7 @@ MID-L LIMB — 8.5 kg                       targetWeight: 0.10
   muscle: 4.20    structural: 1.60    neural: 0.06    sensory: 0.00    connective: 2.64
   Neural allocation:
     motorControl: 0.06
-  Transducers: vibration { ground: 1, air: 0, water: 0 }
+  Transducers: chemical { contact: 0, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }
   Attacks: []
   Locomotion: true    Vital: false
 
@@ -198,7 +198,7 @@ REAR-L LIMB — 9.5 kg                      targetWeight: 0.11
   muscle: 4.80    structural: 1.80    neural: 0.06    sensory: 0.00    connective: 2.84
   Neural allocation:
     motorControl: 0.06
-  Transducers: vibration { ground: 1, air: 0, water: 0 }
+  Transducers: chemical { contact: 0, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }
   Attacks: []
   Locomotion: true    Vital: false
 
@@ -265,7 +265,7 @@ HEAD — 0.28 kg                             targetWeight: 0.06
   Neural allocation:
     visualProcessing:    0.020    vibrationProcessing: 0.010
     patternLibrary:      0.008    motorControl:        0.004
-  Transducers: visual 4, vibration { ground: 0, air: 1, water: 0 }, chemical 0
+  Transducers: visual 4, vibration { ground: 0, air: 1, water: 0 }, chemical { contact: 0, airborne: 0, dissolved: 0 }
   Attacks: []
   Locomotion: false    Vital: false
 
@@ -274,7 +274,7 @@ TORSO — 1.00 kg                             targetWeight: 0.24
   Neural allocation:
     motorRelay:          0.010    vibrationProcessing: 0.006
     patternLibrary:      0.006
-  Transducers: vibration { ground: 1, air: 0, water: 0 }, chemical 0, visual 0
+  Transducers: vibration { ground: 1, air: 0, water: 0 }, chemical { contact: 0, airborne: 0, dissolved: 0 }, visual 0
   Attacks: []
   Locomotion: false    Vital: true (organs)
 
@@ -283,7 +283,7 @@ FORE-L LIMB — 0.22 kg                      targetWeight: 0.05
   Neural allocation:
     vibrationProcessing: 0.010    motorControl: 0.008
     patternLibrary:      0.006    chemicalProcessing: 0.004
-  Transducers: vibration { ground: 5, air: 1, water: 0 }, chemical 2, visual 0
+  Transducers: vibration { ground: 5, air: 1, water: 0 }, chemical { contact: 2, airborne: 0, dissolved: 0 }, visual 0
   Attacks: []
   Locomotion: false    Vital: false
 
@@ -295,7 +295,7 @@ MID-GRAZE-L LIMB — 0.22 kg                 targetWeight: 0.05
   Neural allocation:
     vibrationProcessing: 0.010    motorControl: 0.008
     patternLibrary:      0.006    chemicalProcessing: 0.002
-  Transducers: vibration { ground: 4, air: 1, water: 0 }, chemical 1, visual 0
+  Transducers: vibration { ground: 4, air: 1, water: 0 }, chemical { contact: 1, airborne: 0, dissolved: 0 }, visual 0
   Attacks: []
   Locomotion: false    Vital: false
 
@@ -307,7 +307,7 @@ MID-LOCO-L LIMB — 0.58 kg                  targetWeight: 0.10
   Neural allocation:
     motorControl:        0.012    vibrationProcessing: 0.008
     patternLibrary:      0.008
-  Transducers: vibration { ground: 3, air: 0, water: 0 }, chemical 0, visual 0
+  Transducers: vibration { ground: 3, air: 0, water: 0 }, chemical { contact: 0, airborne: 0, dissolved: 0 }, visual 0
   Attacks: []
   Locomotion: true    Vital: false
 
@@ -319,7 +319,7 @@ REAR-L LIMB — 0.84 kg                      targetWeight: 0.15
   Neural allocation:
     motorControl:        0.014    vibrationProcessing: 0.008
     patternLibrary:      0.008
-  Transducers: vibration { ground: 3, air: 0, water: 0 }, chemical 0, visual 0
+  Transducers: vibration { ground: 3, air: 0, water: 0 }, chemical { contact: 0, airborne: 0, dissolved: 0 }, visual 0
   Attacks: []
   Locomotion: true    Vital: false
 
@@ -397,7 +397,7 @@ HEAD — 12.0 kg                             targetWeight: 0.06
     chemicalProcessing:  0.28    visualProcessing: 0.26    episodicMemory: 0.22
     integration:         0.14    motorCoordination: 0.10   patternLibrary: 0.08
     threatAssessment:    0.02
-  Transducers: chemical 5, visual 5, vibration { ground: 0, air: 2, water: 0 }
+  Transducers: chemical { contact: 4, airborne: 5, dissolved: 0 }, visual 5, vibration { ground: 0, air: 2, water: 0 }
   Attacks: []
   Locomotion: false    Vital: false
 
@@ -405,7 +405,7 @@ TORSO — 80.0 kg                             targetWeight: 0.34
   muscle: 26.00    structural: 20.00    neural: 0.54    sensory: 0.10    connective: 33.36
   Neural allocation:
     motorRelay: 0.38    chemicalProcessing: 0.08    patternLibrary: 0.08
-  Transducers: chemical 1, vibration { ground: 0, air: 0, water: 0 }, visual 0
+  Transducers: chemical { contact: 1, airborne: 0, dissolved: 0 }, vibration { ground: 0, air: 0, water: 0 }, visual 0
   Attacks: []
   Locomotion: false    Vital: true (organs)
 
@@ -413,7 +413,7 @@ FRONT-L LIMB — 15.0 kg                    targetWeight: 0.08
   muscle: 5.00    structural: 4.20    neural: 0.10    sensory: 0.15    connective: 5.55
   Neural allocation:
     motorControl: 0.08    chemicalProcessing: 0.02
-  Transducers: chemical 1, vibration { ground: 0, air: 0, water: 3 }, visual 0
+  Transducers: chemical { contact: 3, airborne: 0, dissolved: 3 }, vibration { ground: 0, air: 0, water: 3 }, visual 0
   Attacks: [{shove, blunt, canReflex: false}]
   Locomotion: true    Vital: false
 
@@ -424,7 +424,7 @@ MID-L LIMB — 18.0 kg                      targetWeight: 0.10
   muscle: 9.00    structural: 3.80    neural: 0.08    sensory: 0.00    connective: 5.12
   Neural allocation:
     motorControl: 0.08
-  Transducers: vibration { ground: 1, air: 0, water: 0 }
+  Transducers: chemical { contact: 0, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }
   Attacks: []
   Locomotion: true    Vital: false
 
@@ -435,7 +435,7 @@ REAR-L LIMB — 21.0 kg                     targetWeight: 0.12
   muscle: 11.00    structural: 4.40    neural: 0.08    sensory: 0.00    connective: 5.52
   Neural allocation:
     motorControl: 0.08
-  Transducers: vibration { ground: 1, air: 0, water: 0 }
+  Transducers: chemical { contact: 0, airborne: 0, dissolved: 0 }, vibration { ground: 1, air: 0, water: 0 }
   Attacks: [{kick, blunt, canReflex: false}]
   Locomotion: true    Vital: false
 
@@ -548,7 +548,7 @@ HEAD — 2.2 kg                              targetWeight: 0.08
   Neural allocation:
     visualProcessing: 0.12    vibrationProcessing: 0.06    integration: 0.05
     motorControl: 0.03       patternLibrary: 0.02
-  Transducers: visual 3, vibration { ground: 0, air: 2, water: 0 }, chemical 0
+  Transducers: visual 3, vibration { ground: 0, air: 2, water: 0 }, chemical { contact: 0, airborne: 0, dissolved: 0 }
   Attacks: [{bite, puncture, canReflex: false}]
   Locomotion: false    Vital: false
 
@@ -556,7 +556,7 @@ TORSO — 6.0 kg                              targetWeight: 0.24
   muscle: 2.20    structural: 1.30    neural: 0.20    sensory: 0.15    connective: 2.15
   Neural allocation:
     motorRelay: 0.08    vibrationProcessing: 0.06    patternLibrary: 0.06
-  Transducers: vibration { ground: 1, air: 0, water: 0 }, chemical 0, visual 0
+  Transducers: vibration { ground: 1, air: 0, water: 0 }, chemical { contact: 0, airborne: 0, dissolved: 0 }, visual 0
   Attacks: []
   Locomotion: false    Vital: true (organs)
 
@@ -565,7 +565,7 @@ SENSOR-L LIMB — 1.8 kg                     targetWeight: 0.06
   Neural allocation:
     vibrationProcessing: 0.15    chemicalProcessing: 0.06
     patternLibrary: 0.05        motorControl: 0.02
-  Transducers: vibration { ground: 5, air: 2, water: 0 }, chemical 2, visual 0
+  Transducers: vibration { ground: 5, air: 2, water: 0 }, chemical { contact: 2, airborne: 0, dissolved: 0 }, visual 0
   Attacks: [{probe, puncture, canReflex: true}]
   Locomotion: false    Vital: false
 
@@ -577,7 +577,7 @@ FRONT-L LIMB — 2.2 kg                      targetWeight: 0.08
   Neural allocation:
     vibrationProcessing: 0.10    chemicalProcessing: 0.03
     motorControl: 0.05          patternLibrary: 0.04
-  Transducers: vibration { ground: 4, air: 1, water: 0 }, chemical 1, visual 0
+  Transducers: vibration { ground: 4, air: 1, water: 0 }, chemical { contact: 1, airborne: 0, dissolved: 0 }, visual 0
   Attacks: [{hook, puncture, canReflex: true}]
   Locomotion: true    Vital: false
 
@@ -589,7 +589,7 @@ REAR-L LIMB — 2.9 kg                       targetWeight: 0.09
   Neural allocation:
     vibrationProcessing: 0.06    visualProcessing: 0.04
     motorControl: 0.05          patternLibrary: 0.03
-  Transducers: vibration { ground: 2, air: 1, water: 0 }, visual 1, chemical 0
+  Transducers: vibration { ground: 2, air: 1, water: 0 }, visual 1, chemical { contact: 0, airborne: 0, dissolved: 0 }
   Attacks: [{kick, blunt, canReflex: true}]
   Locomotion: true    Vital: false
 
