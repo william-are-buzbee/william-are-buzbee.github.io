@@ -12,9 +12,9 @@ Over millions of years, these two lineages evolved and radiated into every niche
 
 They colonized sub-terranian forests fueled by chemical energy from the planetary core. They claimed the abyssal depths and the vast expanse of the open ocean. They spread across intricate archipelagos, speciating into diverse forms. 
 
-This is when the game begins. You play as an alien creature trying to survive in this world. Except, you're special- you can change your body plan with precision. Sprout new limbs, change your size, grow new organs, reconfigure your metabolism and alter your neural architecture. 
+This is when the game begins. You play as an alien creature trying to survive in this world. Except, you're different- you can change your body plan by mutating. Sprout new limbs, change your size, grow new organs or sensory structures, reconfigure your metabolism and even alter your cognitive architecture. 
 
-Use the power of mutation to carve out a niche for yourself. Climb the food chain however you see fit. 
+Use this power of mutation to carve out a niche for yourself. Climb the food chain however you see fit. 
 
 ---------
 
