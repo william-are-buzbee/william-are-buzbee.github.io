@@ -252,7 +252,8 @@ function evaluateReactiveRules(creature) {
       }
     }
     // Similar size — orient toward (face potential threat)
-    if (size === 'similar' && cc.canFight) {
+    // Predators: fall through to Rule 4B for competitor spacing
+    if (size === 'similar' && cc.canFight && diet !== 'predator') {
       return { behavior: 'orient', magnitude: 0.6, target: det.entity };
     }
   }
@@ -277,6 +278,35 @@ function evaluateReactiveRules(creature) {
         }
         // Ambiguous or larger: orient cautiously, don't commit
         return { behavior: 'orient', magnitude: 0.5, target: det.entity };
+      }
+    }
+  }
+
+  // RULE 4B — COMPETITOR SPACING
+  // Predators maintain distance from similar-sized detected entities.
+  // Not flee — spatial caution. Deliberative layer overrides when hungry.
+  if (diet === 'predator' && cc.canFight) {
+    // Check adjacent first (slightly higher magnitude)
+    for (const det of adjacentDetections) {
+      const size = det.sizeRelative || 'unknown';
+      if (size === 'similar') {
+        const knownHerbivore = det.dietConfidence > DIET_DECISION_THRESHOLD
+                               && det.dietType === 'herbivore';
+        if (!knownHerbivore) {
+          return { behavior: 'maintain_distance', magnitude: 0.4, target: det.entity };
+        }
+      }
+    }
+    // Check nearby (3-5 tiles)
+    for (const det of nearbyDetections) {
+      if (det.distance <= 1.5) continue;
+      const size = det.sizeRelative || 'unknown';
+      if (size === 'similar') {
+        const knownHerbivore = det.dietConfidence > DIET_DECISION_THRESHOLD
+                               && det.dietType === 'herbivore';
+        if (!knownHerbivore) {
+          return { behavior: 'maintain_distance', magnitude: 0.35, target: det.entity };
+        }
       }
     }
   }
@@ -491,6 +521,9 @@ const _RULE_LABELS = {
   'flee:0.5': 'R4 NEARBY_STRONG flee',
   'hold:0.5': 'R4 NEARBY_STRONG hold',
   'orient:0.5': 'R4 NEARBY_STRONG orient',
+  // magnitude 0.35/0.4 — Rule 4B
+  'maintain_distance:0.35': 'R4B COMPETITOR space',
+  'maintain_distance:0.4': 'R4B COMPETITOR space_adj',
   // magnitude 0.3 — Rule 5
   'attack_adjacent:0.3': 'R5 ADJ_FOOD attack',
   'eat_corpse:0.3': 'R5 ADJ_FOOD eat_corpse',

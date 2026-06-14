@@ -76,6 +76,42 @@ function executeAction(creature, action) {
       creature.currentBehavior = 'rest';
       break;
     }
+    case 'maintain_distance': {
+      // Move perpendicular to or slightly away from the target.
+      // Face the competitor while spacing — posturing, not fleeing.
+      if (action.target) {
+        const awayDir = directionAwayFrom(creature.x, creature.y,
+                                          action.target.x, action.target.y);
+        // Prefer perpendicular (90°), then angled away, then directly away
+        const candidates = [
+          (awayDir + 2) % 8,  // perpendicular right
+          (awayDir + 6) % 8,  // perpendicular left
+          (awayDir + 1) % 8,  // angled away right
+          (awayDir + 7) % 8,  // angled away left
+          awayDir,            // directly away (last resort)
+        ];
+        for (const dir of candidates) {
+          const dx = DIRECTION_DELTAS[dir].x;
+          const dy = DIRECTION_DELTAS[dir].y;
+          const tx = creature.x + dx;
+          const ty = creature.y + dy;
+          if (canMoveTo(creature, tx, ty)) {
+            creature.x = tx;
+            creature.y = ty;
+            creature.movedThisTurn = true;
+            if (creature.facing) {
+              // Face the competitor, not the movement direction
+              creature.facing.dx = Math.sign(action.target.x - creature.x);
+              creature.facing.dy = Math.sign(action.target.y - creature.y);
+            }
+            moved = true;
+            break;
+          }
+        }
+      }
+      creature.currentBehavior = 'wander';
+      break;
+    }
     case 'attack_adjacent': {
       const target = action.target;
       if (target) {

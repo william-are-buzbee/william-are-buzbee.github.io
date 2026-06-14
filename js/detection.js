@@ -230,6 +230,19 @@ function isInVisionCone(detector, target) {
   return diff <= halfCone;
 }
 
+/**
+ * True if the creature is actively fleeing and tracking this specific target
+ * as its threat source. Represents head/eye rotation to maintain visual
+ * contact with the threat during flight. Only applies to the tracked threat —
+ * other entities still use the normal cone check.
+ */
+function _isActivelyTracking(detector, target) {
+    if (!detector.threatSource) return false;
+    const behavior = detector.currentBehavior;
+    if (behavior !== 'flee' && behavior !== 'flee_refuge') return false;
+    return detector.threatSource === target;
+}
+
 // --- Line of Sight ---
 // Uses hasLOS from fov.js. Forests do NOT block NPC LOS in this pass
 // (no per parameter → tree transparency is skipped, only walls block).
@@ -267,12 +280,16 @@ function canDetect(detector, target) {
     if (channelsSeen.has('vibrationAir')) senses.push('vibration_air');
   }
 
-  // Visual — cone + line of sight + light (unchanged, max-based)
+  // Visual — cone + line of sight + light
   const visRange = getVisualRange(detector, target);
-  if (d <= visRange && isInVisionCone(detector, target) && hasLineOfSight(detector, target)) {
-    senses.push('visual');
-    const visSNR = d > 0 ? visRange / d : visRange * 10;
-    if (visSNR > bestSNR) bestSNR = visSNR;
+  if (d <= visRange && hasLineOfSight(detector, target)) {
+    const inCone = isInVisionCone(detector, target);
+    const isTrackedThreat = _isActivelyTracking(detector, target);
+    if (inCone || isTrackedThreat) {
+        senses.push('visual');
+        const visSNR = d > 0 ? visRange / d : visRange * 10;
+        if (visSNR > bestSNR) bestSNR = visSNR;
+    }
   }
 
   return {
@@ -590,35 +607,50 @@ function buildAllDetectionInfo(creature) {
 }
 
 /** Assess how threatening a target is to the creature. Returns 0 if not threatening. */
-function assessThreatLevel(creature, target) {
+function assessThreatLevel(creature, target, detInfo) {
   const creatureMass = creature.totalMass || 1;
-  const targetBodyMap = getBodyMap(target);
-  let targetMass = creatureMass; // default to same size
-  if (targetBodyMap) {
-    targetMass = 0;
-    for (const zone of targetBodyMap) {
-      if (!zone.destroyed) targetMass += zone.mass || 0;
+
+  // Use detection-derived size if available, otherwise direct read
+  let targetMass = creatureMass;
+  if (detInfo && detInfo.sizeEstimate) {
+    targetMass = detInfo.sizeEstimate.upper; // worst-case for threat assessment
+  } else {
+    const targetBodyMap = getBodyMap(target);
+    if (targetBodyMap) {
+      targetMass = 0;
+      for (const zone of targetBodyMap) {
+        if (!zone.destroyed) targetMass += zone.mass || 0;
+      }
+    } else if (target.totalMass) {
+      targetMass = target.totalMass;
     }
-  } else if (target.totalMass) {
-    targetMass = target.totalMass;
   }
   const massRatio = targetMass / creatureMass;
 
+  // Use detection-derived diet if available, otherwise direct read
+  let targetDiet = null;
+  if (detInfo && detInfo.dietConfidence > DIET_DECISION_THRESHOLD) {
+    targetDiet = detInfo.dietType;
+  } else if (!detInfo) {
+    // No detection info passed — legacy fallback (direct read)
+    targetDiet = target.diet || (target.isPlayer ? getPlayerDiet() : null);
+  }
+  // If detInfo exists but diet confidence is too low, targetDiet stays null (unknown)
+
   // Herbivores: fear predators and large unknowns
   if (creature.diet === 'herbivore') {
-    const targetDiet = target.diet || (target.isPlayer ? getPlayerDiet() : null);
-    // Any predator is threatening — a 200 kg herbivore still notices a 22 kg predator.
-    // Threat level scales with mass ratio but has a floor so small predators aren't ignored.
     if (targetDiet === 'predator') return Math.max(0.4, massRatio);
-    // Large unknowns are threatening
+    // Unknown diet + large = cautious threat (can't determine what it eats)
+    if (targetDiet === null && massRatio > 0.8) return Math.max(0.3, massRatio * 0.6);
     if (massRatio > 1.5) return massRatio * 0.5;
     return 0;
   }
 
   // Predators: fear significantly larger predators
   if (creature.diet === 'predator') {
-    const targetDiet = target.diet || (target.isPlayer ? getPlayerDiet() : null);
     if (targetDiet === 'predator' && massRatio > 1.5) return massRatio;
+    // Unknown diet + much larger = cautious
+    if (targetDiet === null && massRatio > 2.0) return massRatio * 0.3;
     return 0;
   }
 
@@ -634,7 +666,8 @@ function detectThreats(creature) {
   if (player && player.hp > 0) {
     const result = canDetect(creature, player);
     if (result.detected) {
-      const threatLevel = assessThreatLevel(creature, player);
+      const detInfo = (creature.detectionInfo || []).find(d => d.entity === player);
+      const threatLevel = assessThreatLevel(creature, player, detInfo || null);
       if (threatLevel > 0) {
         threats.push({
           source: player,
@@ -655,7 +688,8 @@ function detectThreats(creature) {
 
     const result = canDetect(creature, other);
     if (result.detected) {
-      const threatLevel = assessThreatLevel(creature, other);
+      const detInfo = (creature.detectionInfo || []).find(d => d.entity === other);
+      const threatLevel = assessThreatLevel(creature, other, detInfo || null);
       if (threatLevel > 0) {
         threats.push({
           source: other,

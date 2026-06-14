@@ -492,11 +492,11 @@ function runCreatureAI(creature) {
     updateDrives(creature);
     creature.integrationCapacity = computeIntegrationCapacity(creature);
     creature.tier = getTier(creature.integrationCapacity);
+    buildAllDetectionInfo(creature);
     detectThreats(creature);
     applySafetyFromThreats(creature);
     detectPrey(creature);
     detectCorpses(creature);
-    buildAllDetectionInfo(creature);
     adjacencyCombatCheck(creature);
     _updateInWater(creature);
     computeSignals(creature);
@@ -510,16 +510,17 @@ function runCreatureAI(creature) {
   creature.integrationCapacity = computeIntegrationCapacity(creature);
   creature.tier = getTier(creature.integrationCapacity);
 
-  // Threat detection (Prompt P — per-zone) — used for safety drive spikes
+  // ── Build continuous-uncertainty detection info (Prompt P) ──
+  // Must run before detectThreats so threat assessment can use detection-derived info
+  buildAllDetectionInfo(creature);
+
+  // Threat detection — uses detection info for honest threat assessment
   detectThreats(creature);
   applySafetyFromThreats(creature);
 
   // Prey and corpse detection (I-C) — still used by deliberative layer
   detectPrey(creature);
   detectCorpses(creature);
-
-  // ── Build continuous-uncertainty detection info (Prompt P) ──
-  buildAllDetectionInfo(creature);
 
   // ── Goal persistence check ──
   updateGoalPersistence(creature);
