@@ -163,7 +163,8 @@ function canMoveTo(mon, tx, ty) {
   // Can't step on the player
   if (tx === state.player.x && ty === state.player.y) return false;
   // Territory radius check (clade-based)
-  if (wouldExceedTerritory(mon, tx, ty)) return false;
+  if (wouldExceedTerritory(mon, tx, ty) && !mon.threatSource) return false;
+
   return true;
 }
 
