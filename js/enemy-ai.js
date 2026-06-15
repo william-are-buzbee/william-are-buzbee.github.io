@@ -66,6 +66,28 @@ import { dist, isWaterTile, isWaterLocked, hasCladeTerritory, wouldExceedTerrito
          getCreatureMass, canMoveTo, WATER_TILES,
          rebuildSpatialGrid, getNearbyCreatures } from './ai-utils.js';
 
+/** Locomotion muscle / total mass — physics-derived power-to-weight ratio.
+ *  Used by the speed system so player and NPCs of the same species are at parity.
+ *  Only locomotion-tagged zones contribute muscle — head and torso muscle
+ *  generates force for biting and twisting, not running. */
+function getBodyPTW(entity) {
+  const bodyMap = getBodyMap(entity);
+  if (!bodyMap) {
+    // Legacy fallback for creatures without body maps
+    return (entity.strength || 1) / (entity.siz || 1);
+  }
+  let totalMass = 0, locoMuscle = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    totalMass += zone.mass || 0;
+    if (zone.locomotion) {
+      locoMuscle += zone.muscle || 0;
+    }
+  }
+  if (totalMass <= 0) return 1;
+  return locoMuscle / totalMass;
+}
+
 // Forward references — set by main.js
 let _onPlayerDeathCallback = null;
 export function setOnPlayerDeathCallback(fn){ _onPlayerDeathCallback = fn; }
@@ -751,9 +773,9 @@ function endPlayerTurn(action){
       // Zone healing (Prompt J) — monsters heal wounded zones after bleed
       applyHealing(m);
 
-      // ---- Relative speed system (PTW-based) ----
-      const monPTW  = m.strength / m.siz;
-      const plrPTW  = player.strength / player.siz;
+      // ---- Relative speed system (body-map PTW) ----
+      const monPTW  = getBodyPTW(m);
+      const plrPTW  = getBodyPTW(player);
       const spdRatio = monPTW / plrPTW;
 
       m._actedNormally = false;
@@ -780,8 +802,8 @@ function endPlayerTurn(action){
     for (const m of activeCreatures){
       if (m.hp <= 0) continue;
       if (!m._actedNormally) continue;
-      const monPTW  = m.strength / m.siz;
-      const plrPTW  = player.strength / player.siz;
+      const monPTW  = getBodyPTW(m);
+      const plrPTW  = getBodyPTW(player);
       const ratio   = monPTW / plrPTW;
       if (ratio >= 1) {
         const bleedMul = 1 - (m.bleedPenalty || 0);
