@@ -601,6 +601,13 @@ export function computeBleedPenalty(entity) {
 // Zone HP derived from zone mass. Each kg of zone tissue = this many HP.
 export const HP_PER_KG = 5;
 
+// ==================== SUBSTRATE SYSTEM ====================
+// Substrate represents locally stored metabolic fuel in muscle tissue.
+// Fast-contracting fibers deplete substrate rapidly during high-intensity output;
+// slow-contracting fibers use aerobic pathways and deplete more slowly.
+// Units are abstract (tuned so locomotion zones deplete in ~8-10 turns at max).
+export const SUBSTRATE_PER_KG_MUSCLE = 5.0;
+
 // ==================== DRIVE SYSTEM ====================
 export const MASS_HUNGER_COEFF   = 0.000015;  // hunger per turn per kg of total mass
 export const NEURAL_HUNGER_COEFF = 0.0003;    // hunger per turn per kg of neural mass
@@ -953,6 +960,7 @@ export const BODY_MAPS = {
     { key: 'head', name: 'Head', targetWeight: 0.06,
       exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.04, structural: 0.06, neural: 0.042, sensory: 0.08, connective: 0.058, mass: 0.28,
+      fiberRatio: 0.15, substrate: 0.20, substrateMax: 0.20,
       neuralAllocation: { visualProcessing: 0.020, vibrationProcessing: 0.010, patternLibrary: 0.008, motorControl: 0.004 },
       transducers: { visual: 4, vibration: { ground: 0, air: 1, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 } },
       locomotion: false, vital: false,
@@ -961,6 +969,7 @@ export const BODY_MAPS = {
     { key: 'torso', name: 'Torso', targetWeight: 0.24,
       exposure: ['front', 'front_right', 'right', 'rear_right', 'rear', 'rear_left', 'left', 'front_left'],
       muscle: 0.25, structural: 0.22, neural: 0.022, sensory: 0.02, connective: 0.488, mass: 1.00,
+      fiberRatio: 0.40, substrate: 1.25, substrateMax: 1.25,
       neuralAllocation: { motorRelay: 0.010, vibrationProcessing: 0.006, patternLibrary: 0.006 },
       transducers: { vibration: { ground: 1, air: 0, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: false, vital: true,
@@ -969,6 +978,7 @@ export const BODY_MAPS = {
     { key: 'fore_l', name: 'Fore-Left Limb', targetWeight: 0.05,
       exposure: ['front', 'front_left', 'left'],
       muscle: 0.03, structural: 0.03, neural: 0.028, sensory: 0.05, connective: 0.082, mass: 0.22,
+      fiberRatio: 0.10, substrate: 0.15, substrateMax: 0.15,
       neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.004 },
       transducers: { vibration: { ground: 5, air: 1, water: 0 }, chemical: { contact: 2, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: false, vital: false,
@@ -977,6 +987,7 @@ export const BODY_MAPS = {
     { key: 'fore_r', name: 'Fore-Right Limb', targetWeight: 0.05,
       exposure: ['front', 'front_right', 'right'],
       muscle: 0.03, structural: 0.03, neural: 0.028, sensory: 0.05, connective: 0.082, mass: 0.22,
+      fiberRatio: 0.10, substrate: 0.15, substrateMax: 0.15,
       neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.004 },
       transducers: { vibration: { ground: 5, air: 1, water: 0 }, chemical: { contact: 2, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: false, vital: false,
@@ -985,6 +996,7 @@ export const BODY_MAPS = {
     { key: 'mid_graze_l', name: 'Mid-Graze-Left Limb', targetWeight: 0.05,
       exposure: ['front', 'front_left', 'left'],
       muscle: 0.04, structural: 0.03, neural: 0.026, sensory: 0.035, connective: 0.089, mass: 0.22,
+      fiberRatio: 0.15, substrate: 0.20, substrateMax: 0.20,
       neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.002 },
       transducers: { vibration: { ground: 4, air: 1, water: 0 }, chemical: { contact: 1, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: false, vital: false,
@@ -993,6 +1005,7 @@ export const BODY_MAPS = {
     { key: 'mid_graze_r', name: 'Mid-Graze-Right Limb', targetWeight: 0.05,
       exposure: ['front', 'front_right', 'right'],
       muscle: 0.04, structural: 0.03, neural: 0.026, sensory: 0.035, connective: 0.089, mass: 0.22,
+      fiberRatio: 0.15, substrate: 0.20, substrateMax: 0.20,
       neuralAllocation: { vibrationProcessing: 0.010, motorControl: 0.008, patternLibrary: 0.006, chemicalProcessing: 0.002 },
       transducers: { vibration: { ground: 4, air: 1, water: 0 }, chemical: { contact: 1, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: false, vital: false,
@@ -1001,6 +1014,7 @@ export const BODY_MAPS = {
     { key: 'mid_loco_l', name: 'Mid-Loco-Left Limb', targetWeight: 0.10,
       exposure: ['left', 'rear_left', 'rear'],
       muscle: 0.5, structural: 0.08, neural: 0.028, sensory: 0.02, connective: 0.102, mass: 0.73,
+      fiberRatio: 0.70, substrate: 2.50, substrateMax: 2.50,
       neuralAllocation: { motorControl: 0.012, vibrationProcessing: 0.008, patternLibrary: 0.008 },
       transducers: { vibration: { ground: 3, air: 0, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: true, vital: false,
@@ -1009,6 +1023,7 @@ export const BODY_MAPS = {
     { key: 'mid_loco_r', name: 'Mid-Loco-Right Limb', targetWeight: 0.10,
       exposure: ['right', 'rear_right', 'rear'],
       muscle: 0.5, structural: 0.08, neural: 0.028, sensory: 0.02, connective: 0.102, mass: 0.73,
+      fiberRatio: 0.70, substrate: 2.50, substrateMax: 2.50,
       neuralAllocation: { motorControl: 0.012, vibrationProcessing: 0.008, patternLibrary: 0.008 },
       transducers: { vibration: { ground: 3, air: 0, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: true, vital: false,
@@ -1016,7 +1031,8 @@ export const BODY_MAPS = {
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_l', name: 'Rear-Left Limb', targetWeight: 0.15,
       exposure: ['rear', 'rear_left', 'left'],
-      muscle: 0.75, structural: 0.10, neural: 0.030, sensory: 0.02, connective: 0.140, mass: 1.24,
+      muscle: 0.75, structural: 0.10, neural: 0.030, sensory: 0.02, connective: 0.140, mass: 1.04,
+      fiberRatio: 0.80, substrate: 3.75, substrateMax: 3.75,
       neuralAllocation: { motorControl: 0.014, vibrationProcessing: 0.008, patternLibrary: 0.008 },
       transducers: { vibration: { ground: 3, air: 0, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: true, vital: false,
@@ -1024,7 +1040,8 @@ export const BODY_MAPS = {
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
     { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.15,
       exposure: ['rear', 'rear_right', 'right'],
-      muscle: 0.75, structural: 0.10, neural: 0.030, sensory: 0.02, connective: 0.140, mass: 1.24,
+      muscle: 0.55, structural: 0.10, neural: 0.030, sensory: 0.02, connective: 0.140, mass: 1.04,
+      fiberRatio: 0.80, substrate: 2.75, substrateMax: 2.75,
       neuralAllocation: { motorControl: 0.014, vibrationProcessing: 0.008, patternLibrary: 0.008 },
       transducers: { vibration: { ground: 3, air: 0, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: true, vital: false,
@@ -1480,6 +1497,161 @@ export const CREATURE_PATHWAYS = {
   // Dread King — no pathways (undead, not biological)
   dread_king: [],
 };
+
+// ==================== NEURAL ARCHITECTURE ====================
+// Per-creature neural architecture: named ganglion structures, their sensory
+// inputs, motor outputs, reflex arcs, pattern templates, and suppression/
+// modulation connections.  Queryable: "what pathways connect center X to
+// zone Y?", "what templates does this creature have?", "what is this
+// creature's coordination capacity?"
+//
+// Nothing reads this data yet.  It exists so future systems (ganglion
+// template matching, motor execution, dynamic speed) can consume it.
+export const CREATURE_NEURAL = {
+  hare: {
+    structures: [
+      // ── Fore-Limb Local Ganglia ──
+      // Hair-trigger vibration sensors.  Shortest motor-activation path in the body:
+      // vibration spike → local ganglion → central_loco bolt.  Fires before any
+      // other neural structure has processed the signal.
+      {
+        id: 'fore_ganglion_l',
+        type: 'local_ganglion',
+        zone: 'fore_l',
+        neuralMass: 0.005,
+        sensoryInputs: ['fore_l.vibration.ground'],
+        reflexArcs: [
+          { trigger: 'vibration_magnitude_spike', output: 'central_loco', intensity: 'max' }
+        ],
+        forwardsTo: ['threat_classification']
+      },
+      {
+        id: 'fore_ganglion_r',
+        type: 'local_ganglion',
+        zone: 'fore_r',
+        neuralMass: 0.005,
+        sensoryInputs: ['fore_r.vibration.ground'],
+        reflexArcs: [
+          { trigger: 'vibration_magnitude_spike', output: 'central_loco', intensity: 'max' }
+        ],
+        forwardsTo: ['threat_classification']
+      },
+
+      // ── Central Locomotion Ganglion ──
+      // Hub for all locomotion motor output.  Two patterns only:
+      //   simultaneous_max  — the bolt.  Every locomotion zone at peak.  No nuance.
+      //   alternating_variable — normal gait.  Wandering, foraging, sustained flee.
+      // Cannot produce per-limb independent timing or asymmetric recruitment.
+      // 0.01kg coordination budget limits it to these two basic patterns.
+      {
+        id: 'central_loco',
+        type: 'coordination_center',
+        zone: 'torso',
+        neuralMass: 0.01,
+        motorOutputs: ['mid_loco_l', 'mid_loco_r', 'rear_l', 'rear_r'],
+        patterns: ['simultaneous_max', 'alternating_variable'],
+        receivesFrom: ['fore_ganglion_l', 'fore_ganglion_r', 'threat_classification', 'food_identification']
+      },
+
+      // ── Threat-Classification Region ──
+      // Integrated threat detection.  Receives processed vibration from fore-limb
+      // ganglia AND head visual.  Houses wired (non-plastic) threat templates:
+      //   heavy_rhythmic_vibration + large_moving_visual → high-confidence predator → flee
+      //   heavy_single_impact + no_visual → ambiguous → moderate alert
+      //   light_rapid_vibration + small_visual → low-threat → no motor activation
+      // Can suppress fore-limb bolt reflexes when template returns low-threat.
+      {
+        id: 'threat_classification',
+        type: 'pattern_region',
+        zone: 'torso',
+        neuralMass: 0.01,
+        sensoryInputs: ['fore_ganglion_l.processed', 'fore_ganglion_r.processed', 'head.visual'],
+        templates: 'threat',
+        output: 'central_loco',
+        canSuppress: ['fore_ganglion_l.reflexArcs', 'fore_ganglion_r.reflexArcs']
+      },
+
+      // ── Food-Identification Region ──
+      // Visual-only food detection.  Completely separate from threat pathway —
+      // no shared neural tissue, no shared templates.  The only interaction point
+      // is the central locomotion ganglion, where threat signal wins conflicts
+      // (higher intensity + shorter reflex connection).
+      {
+        id: 'food_identification',
+        type: 'pattern_region',
+        zone: 'head',
+        neuralMass: 0.01,
+        sensoryInputs: ['head.visual'],
+        templates: 'food_visual',
+        output: 'central_loco'
+      },
+
+      // ── Mid-Graze Local Ganglia ──
+      // Contact-triggered feeding reflex only.  Chemical contact → edible match →
+      // local slow sustained motor pattern (grab, manipulate, chew).  Cannot seek
+      // food — only processes what the limb is already touching.
+      // Vibration from ground transducers (quality 4) forwards upstream to
+      // threat_classification but does NOT integrate locally with feeding.
+      {
+        id: 'graze_ganglion_l',
+        type: 'local_ganglion',
+        zone: 'mid_graze_l',
+        neuralMass: 0.003,
+        sensoryInputs: ['mid_graze_l.chemical.contact'],
+        reflexArcs: [
+          { trigger: 'edible_contact', output: 'mid_graze_l', intensity: 'low_sustained' }
+        ],
+        forwardsTo: ['threat_classification']
+      },
+      {
+        id: 'graze_ganglion_r',
+        type: 'local_ganglion',
+        zone: 'mid_graze_r',
+        neuralMass: 0.003,
+        sensoryInputs: ['mid_graze_r.chemical.contact'],
+        reflexArcs: [
+          { trigger: 'edible_contact', output: 'mid_graze_r', intensity: 'low_sustained' }
+        ],
+        forwardsTo: ['threat_classification']
+      },
+
+      // ── Integration Workspace ──
+      // Minimal deliberative capacity (0.01kg).  Can compare current situation
+      // against very short-term memory (last few encounters), modestly update
+      // template confidence, resolve ambiguous matches, and suppress bolt reflex
+      // when template match is uncertain.
+      // Cannot: sustain representations beyond a few turns, learn complex new
+      // templates, plan multi-step actions, or override strong ganglion-level signals.
+      {
+        id: 'integration_workspace',
+        type: 'integration',
+        zone: 'torso',
+        neuralMass: 0.01,
+        receivesFrom: ['threat_classification', 'food_identification'],
+        capacity: 0.01,
+        canSuppress: ['fore_ganglion_l.reflexArcs', 'fore_ganglion_r.reflexArcs', 'threat_classification.output'],
+        canModulate: ['central_loco.intensity']
+      }
+    ],
+    totalNeuralMass: 0.08
+  }
+};
+
+// Look up neural architecture for any combatant.
+// Returns the neural architecture object or null.
+export function getNeuralArchitecture(entity) {
+  if (entity.isPlayer) {
+    if (entity.species && SPECIES_TEMPLATES[entity.species]) {
+      const creatureKey = SPECIES_TEMPLATES[entity.species].creatureKey;
+      return CREATURE_NEURAL[creatureKey] || null;
+    }
+    return null;
+  }
+  if (entity.key) {
+    return CREATURE_NEURAL[entity.key] || null;
+  }
+  return null;
+}
 
 // Look up a body map for any combatant (player or monster).
 // Returns the entity's per-instance body map if it exists (with zone HP state),
