@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hare Body Map Validation</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a1a; color: #ccc; font: 14px/1.6 'Consolas', 'Monaco', monospace; padding: 20px; }
+  h1 { color: #e8e8e8; font-size: 18px; margin-bottom: 12px; }
+  .section { color: #7aa2f7; margin-top: 14px; font-weight: bold; }
+  .pass { color: #9ece6a; }
+  .fail { color: #f7768e; font-weight: bold; }
+  .info { color: #e0af68; margin-left: 20px; }
+  .line { margin-left: 20px; white-space: pre; }
+  #summary { margin-top: 20px; padding: 10px; font-size: 16px; font-weight: bold; border-top: 1px solid #333; }
+  .summary-pass { color: #9ece6a; }
+  .summary-fail { color: #f7768e; }
+</style>
+</head>
+<body>
+<h1>Hare Body Map — Data Validation</h1>
+<div id="log"></div>
+<div id="summary"></div>
+
+<script type="module">
+import * as m from './js/constants.js';
+
+const log = document.getElementById('log');
+const summaryEl = document.getElementById('summary');
+let passed = 0, failed = 0;
+
+function emit(cls, text) {
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = text;
+  log.appendChild(d);
+}
+
+function section(name) { emit('section', `── ${name} ──`); }
+function info(text) { emit('info', text); }
+
+function assert(condition, label) {
+  if (condition) { passed++; emit('line pass', `✓ ${label}`); }
+  else           { failed++; emit('line fail', `✗ ${label}`); }
+}
+
+function approx(a, b, tol = 0.001) { return Math.abs(a - b) < tol; }
+
+const hare = m.BODY_MAPS.hare;
+const neural = m.CREATURE_NEURAL.hare;
+const SPK = m.SUBSTRATE_PER_KG_MUSCLE;
+
+// 1
+section('SUBSTRATE_PER_KG_MUSCLE');
+assert(SPK === 5.0, `value is 5.0 (got ${SPK})`);
+
+// 2
+section('Per-zone fields present');
+for (const z of hare) {
+  assert(typeof z.fiberRatio === 'number', `${z.key} has fiberRatio`);
+  assert(z.fiberRatio >= 0 && z.fiberRatio <= 1, `${z.key} fiberRatio in [0,1] (${z.fiberRatio})`);
+  if (z.muscle > 0) {
+    assert(typeof z.substrate === 'number', `${z.key} has substrate`);
+    assert(typeof z.substrateMax === 'number', `${z.key} has substrateMax`);
+  }
+}
+
+// 3
+section('Substrate derivation');
+for (const z of hare) {
+  if (z.muscle > 0) {
+    const expected = z.muscle * SPK;
+    assert(approx(z.substrateMax, expected), `${z.key} substrateMax = ${z.substrateMax} (expected ${expected.toFixed(2)})`);
+    assert(z.substrate === z.substrateMax, `${z.key} substrate starts full`);
+  }
+}
+
+// 4
+section('Fiber ratio values');
+const expectedFR = {
+  head: 0.15, torso: 0.40, fore_l: 0.10, fore_r: 0.10,
+  mid_graze_l: 0.15, mid_graze_r: 0.15, mid_loco_l: 0.70, mid_loco_r: 0.70,
+  rear_l: 0.80, rear_r: 0.80,
+};
+for (const z of hare) {
+  assert(z.fiberRatio === expectedFR[z.key], `${z.key} fiberRatio = ${z.fiberRatio} (expected ${expectedFR[z.key]})`);
+}
+
+// 5
+section('Locomotion power budget');
+const locoZones = hare.filter(z => z.locomotion);
+assert(locoZones.length === 4, `4 locomotion zones (got ${locoZones.length})`);
+const totalFast = locoZones.reduce((s, z) => s + z.muscle * z.fiberRatio, 0);
+const totalSlow = locoZones.reduce((s, z) => s + z.muscle * (1 - z.fiberRatio), 0);
+const totalLocoSub = locoZones.reduce((s, z) => s + z.substrate, 0);
+const powerFull = totalFast + totalSlow * 0.65;
+const powerEmpty = totalSlow * 0.65;
+const cliff = powerFull / powerEmpty;
+info(`fast-contracting loco muscle: ${totalFast.toFixed(3)} kg`);
+info(`slow-contracting loco muscle: ${totalSlow.toFixed(3)} kg`);
+info(`total loco substrate pool:    ${totalLocoSub.toFixed(2)}`);
+info(`power at full substrate:      ${powerFull.toFixed(2)} (open-circ)`);
+info(`power at empty substrate:     ${powerEmpty.toFixed(2)}`);
+info(`power cliff ratio:            ${cliff.toFixed(1)}×`);
+assert(totalFast > 1.5, `fast-contracting mass > 1.5kg (${totalFast.toFixed(3)})`);
+assert(cliff > 4.0, `power cliff > 4× (${cliff.toFixed(1)})`);
+
+// 6
+section('Sensory-zone fiber ratio sanity');
+for (const key of ['fore_l', 'fore_r']) {
+  const z = hare.find(z => z.key === key);
+  assert(z.fiberRatio <= 0.15, `${key} (primary sensor) has low fiberRatio (${z.fiberRatio})`);
+}
+
+// 7
+section('Other creatures uncontaminated');
+for (const ck of ['wolf', 'dire_wolf', 'cave_crab', 'mushroom', 'ambush_pred']) {
+  const bm = m.BODY_MAPS[ck];
+  if (!bm) continue;
+  const hasNew = bm.some(z => z.fiberRatio !== undefined || z.substrate !== undefined);
+  assert(!hasNew, `${ck} has no fiberRatio/substrate`);
+}
+
+// 8
+section('Neural architecture structure');
+assert(neural != null, 'CREATURE_NEURAL.hare exists');
+assert(neural.totalNeuralMass === 0.08, `totalNeuralMass = 0.08 (got ${neural.totalNeuralMass})`);
+assert(Array.isArray(neural.structures), 'structures is array');
+assert(neural.structures.length === 8, `8 structures (got ${neural.structures.length})`);
+
+const byId = {};
+for (const s of neural.structures) byId[s.id] = s;
+
+const requiredIds = [
+  'fore_ganglion_l', 'fore_ganglion_r', 'central_loco',
+  'threat_classification', 'food_identification',
+  'graze_ganglion_l', 'graze_ganglion_r', 'integration_workspace'
+];
+for (const id of requiredIds) assert(byId[id] != null, `structure '${id}' exists`);
+
+// 9
+section('Neural connectivity');
+const cl = byId.central_loco;
+assert(cl.receivesFrom.includes('fore_ganglion_l'), 'central_loco ← fore_ganglion_l');
+assert(cl.receivesFrom.includes('fore_ganglion_r'), 'central_loco ← fore_ganglion_r');
+assert(cl.receivesFrom.includes('threat_classification'), 'central_loco ← threat_classification');
+assert(cl.receivesFrom.includes('food_identification'), 'central_loco ← food_identification');
+for (const zk of ['mid_loco_l', 'mid_loco_r', 'rear_l', 'rear_r'])
+  assert(cl.motorOutputs.includes(zk), `central_loco → ${zk}`);
+assert(byId.fore_ganglion_l.forwardsTo.includes('threat_classification'), 'fore_l forwards to threat');
+assert(byId.fore_ganglion_r.forwardsTo.includes('threat_classification'), 'fore_r forwards to threat');
+assert(byId.fore_ganglion_l.reflexArcs.some(r => r.output === 'central_loco' && r.intensity === 'max'), 'fore_l has bolt reflex');
+const tc = byId.threat_classification;
+assert(tc.canSuppress.includes('fore_ganglion_l.reflexArcs'), 'threat suppresses fore_l bolt');
+assert(tc.canSuppress.includes('fore_ganglion_r.reflexArcs'), 'threat suppresses fore_r bolt');
+const fi = byId.food_identification;
+assert(fi.sensoryInputs.length === 1 && fi.sensoryInputs[0] === 'head.visual', 'food_identification is visual-only');
+const iw = byId.integration_workspace;
+assert(iw.canModulate.includes('central_loco.intensity'), 'integration modulates loco intensity');
+assert(iw.receivesFrom.includes('threat_classification'), 'integration ← threat');
+assert(iw.receivesFrom.includes('food_identification'), 'integration ← food');
+const gl = byId.graze_ganglion_l;
+assert(gl.reflexArcs[0].output === 'mid_graze_l', 'graze_l reflex is local');
+assert(gl.reflexArcs[0].intensity === 'low_sustained', 'graze_l reflex is low_sustained');
+
+// 10
+section('initBodyMap propagation');
+const fakeHare = { key: 'hare' };
+const bm = m.initBodyMap(fakeHare);
+for (const z of bm) {
+  assert(typeof z.fiberRatio === 'number', `instance ${z.key} has fiberRatio`);
+  if (z.muscle > 0) {
+    assert(typeof z.substrate === 'number', `instance ${z.key} has substrate`);
+    assert(z.substrate === z.substrateMax, `instance ${z.key} substrate full`);
+  }
+  assert(z.maxHp > 0, `instance ${z.key} has HP (${z.maxHp})`);
+}
+
+// 11
+section('getNeuralArchitecture helper');
+assert(m.getNeuralArchitecture({ key: 'hare' }) != null, 'returns architecture for hare');
+assert(m.getNeuralArchitecture({ key: 'wolf' }) == null, 'returns null for wolf');
+assert(m.getNeuralArchitecture({}) == null, 'returns null for empty entity');
+
+// 12
+section('Existing systems undamaged');
+assert(m.CREATURE_PATHWAYS.hare.length === 19, `hare pathways: 19`);
+assert(m.CREATURE_PATHWAYS.wolf.length === 7, `wolf pathways: 7`);
+assert(typeof m.computeStrikeDamage === 'function', 'computeStrikeDamage exists');
+assert(typeof m.selectHitZone === 'function', 'selectHitZone exists');
+assert(typeof m.getPathways === 'function', 'getPathways exists');
+
+// Summary
+summaryEl.textContent = `${passed} passed, ${failed} failed`;
+summaryEl.className = failed > 0 ? 'summary-fail' : 'summary-pass';
+</script>
+</body>
+</html>
