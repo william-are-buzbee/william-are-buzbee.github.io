@@ -1041,7 +1041,7 @@ export const BODY_MAPS = {
     { key: 'rear_r', name: 'Rear-Right Limb', targetWeight: 0.15,
       exposure: ['rear', 'rear_right', 'right'],
       muscle: 0.75, structural: 0.10, neural: 0.030, sensory: 0.02, connective: 0.140, mass: 1.04,
-      fiberRatio: 0.80, substrate: 2.75, substrateMax: 2.75,
+      fiberRatio: 0.80, substrate: 3.75, substrateMax: 3.75,
       neuralAllocation: { motorControl: 0.014, vibrationProcessing: 0.008, patternLibrary: 0.008 },
       transducers: { vibration: { ground: 3, air: 0, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 }, visual: 0 },
       locomotion: true, vital: false,
