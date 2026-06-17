@@ -607,6 +607,12 @@ export const HP_PER_KG = 5;
 // slow-contracting fibers use aerobic pathways and deplete more slowly.
 // Units are abstract (tuned so locomotion zones deplete in ~8-10 turns at max).
 export const SUBSTRATE_PER_KG_MUSCLE = 5.0;
+export const SUBSTRATE_DEPLETION_HIGH = 0.12;   // fraction of zone's fast-contracting mass consumed per turn at max intensity
+export const SUBSTRATE_DEPLETION_MOD  = 0.03;   // fraction consumed per turn at moderate intensity (wander, forage)
+export const SUBSTRATE_REGEN_RATE     = 0.04;   // fraction of zone's slow-contracting mass regenerated per turn at rest
+export const CIRC_EFFICIENCY_CLOSED   = 1.0;    // circulatory efficiency for closed systems
+export const CIRC_EFFICIENCY_OPEN     = 0.65;   // circulatory efficiency for open systems
+export const CIRC_EFFICIENCY_HYBRID   = 0.85;   // circulatory efficiency for hybrid systems
 
 // ==================== DRIVE SYSTEM ====================
 export const MASS_HUNGER_COEFF   = 0.000015;  // hunger per turn per kg of total mass

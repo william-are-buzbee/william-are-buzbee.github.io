@@ -302,6 +302,8 @@ function restoreZoneState(bodyMap, savedState) {
       zone.destroyed = saved.destroyed || false;
       if (saved.maxHp != null) zone.maxHp = saved.maxHp;
       zone.clotting = saved.clotting != null ? saved.clotting : 0;
+      if (saved.substrate != null) zone.substrate = saved.substrate;
+      if (saved.substrateMax != null) zone.substrateMax = saved.substrateMax;
     }
   }
 }
@@ -315,6 +317,8 @@ function extractZoneState(bodyMap) {
     maxHp: z.maxHp,
     destroyed: z.destroyed,
     clotting: z.clotting || 0,
+    substrate: z.substrate,
+    substrateMax: z.substrateMax,
   }));
 }
 

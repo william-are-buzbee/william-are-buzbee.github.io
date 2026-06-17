@@ -34,6 +34,9 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          MIN_SEEK, SEEK_SCALE, PERSISTENCE_SCALE,
          ASSESS_INTEGRATION_THRESHOLD,
          CHEM_MASS_COEFF,
+         SUBSTRATE_DEPLETION_HIGH, SUBSTRATE_DEPLETION_MOD, SUBSTRATE_REGEN_RATE,
+         CIRC_EFFICIENCY_CLOSED, CIRC_EFFICIENCY_OPEN, CIRC_EFFICIENCY_HYBRID,
+         SPECIES_TEMPLATES,
          SPATIAL_CELL_SIZE, SPATIAL_QUERY_RADIUS,
          ACTIVE_RADIUS, DORMANT_RADIUS, MAX_DRIFT } from './constants.js';
 import { T, isWalkable, isFoodTile, terrainInfo, tileBlocksVision } from './terrain.js';
@@ -70,22 +73,141 @@ import { dist, isWaterTile, isWaterLocked, hasCladeTerritory, wouldExceedTerrito
  *  Used by the speed system so player and NPCs of the same species are at parity.
  *  Only locomotion-tagged zones contribute muscle — head and torso muscle
  *  generates force for biting and twisting, not running. */
+/**
+ * Compute locomotion power-to-weight ratio from tissue state.
+ * Each locomotion zone contributes force based on its fiber composition
+ * and current substrate level. Speed is total locomotion force / total mass.
+ *
+ * If the creature has no fiberRatio data (not yet annotated), falls back
+ * to static locomotion muscle / total mass.
+ */
 function getBodyPTW(entity) {
   const bodyMap = getBodyMap(entity);
-  if (!bodyMap) {
-    // Legacy fallback for creatures without body maps
-    return (entity.strength || 1) / (entity.siz || 1);
-  }
-  let totalMass = 0, locoMuscle = 0;
+  if (!bodyMap) return (entity.strength || 1) / (entity.siz || 1);
+
+  let totalMass = 0;
+  let totalLocoForce = 0;
+  let hasFiberData = false;
+
+  // Determine circulatory efficiency
+  const circEff = _getCirculatoryEfficiency(entity);
+
   for (const zone of bodyMap) {
     if (zone.destroyed) continue;
     totalMass += zone.mass || 0;
-    if (zone.locomotion) {
-      locoMuscle += zone.muscle || 0;
+
+    if (zone.locomotion && zone.muscle > 0) {
+      if (zone.fiberRatio != null) {
+        hasFiberData = true;
+        const fastMass = zone.muscle * zone.fiberRatio;
+        const slowMass = zone.muscle * (1 - zone.fiberRatio);
+        const substrateFraction = (zone.substrateMax > 0)
+          ? (zone.substrate || 0) / zone.substrateMax
+          : 0;
+
+        // Fast-contracting force scales with available substrate
+        const fastForce = fastMass * substrateFraction;
+        // Slow-contracting force scales with circulatory efficiency
+        const slowForce = slowMass * circEff;
+
+        totalLocoForce += fastForce + slowForce;
+      } else {
+        // No fiber data — static fallback (locomotion muscle as-is)
+        totalLocoForce += zone.muscle;
+      }
     }
   }
+
   if (totalMass <= 0) return 1;
-  return locoMuscle / totalMass;
+
+  // If no zones had fiber data, fall back to static ratio
+  if (!hasFiberData) return totalLocoForce / totalMass;
+
+  return totalLocoForce / totalMass;
+}
+
+/** Get circulatory efficiency for an entity based on its circulationType. */
+function _getCirculatoryEfficiency(entity) {
+  const circType = entity.circulationType;
+  if (circType === 'closed') return CIRC_EFFICIENCY_CLOSED;
+  if (circType === 'open') return CIRC_EFFICIENCY_OPEN;
+  if (circType === 'hybrid') return CIRC_EFFICIENCY_HYBRID;
+  // Default: check species template
+  if (entity.species) {
+    const template = SPECIES_TEMPLATES[entity.species];
+    if (template && template.circulationType) {
+      return _getCirculatoryEfficiency({ circulationType: template.circulationType });
+    }
+  }
+  return CIRC_EFFICIENCY_CLOSED; // safe default
+}
+
+/**
+ * Deplete substrate from locomotion zones based on movement intensity.
+ * High intensity (flee, chase): fast-contracting fibers fully recruited.
+ * Moderate intensity (wander, forage, maintain_distance): partial recruitment.
+ * No depletion for hold, rest, orient, or if creature didn't move.
+ */
+function _depleteLocomotionSubstrate(creature) {
+  if (!creature.movedThisTurn) return;
+
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return;
+
+  const behavior = creature.currentBehavior;
+
+  // Determine depletion rate from behavior
+  let depletionRate = 0;
+  if (behavior === 'flee' || behavior === 'flee_refuge' || behavior === 'hunt') {
+    depletionRate = SUBSTRATE_DEPLETION_HIGH;
+  } else if (behavior === 'wander' || behavior === 'forage' || behavior === 'maintain_distance') {
+    depletionRate = SUBSTRATE_DEPLETION_MOD;
+  } else {
+    // orient, hold, rest, or unknown — no significant locomotion substrate cost
+    return;
+  }
+
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    if (!zone.locomotion) continue;
+    if (zone.fiberRatio == null) continue; // no fiber data, skip
+
+    const fastMass = zone.muscle * zone.fiberRatio;
+    const cost = fastMass * depletionRate;
+    zone.substrate = Math.max(0, (zone.substrate || 0) - cost);
+  }
+}
+
+/**
+ * Regenerate substrate on all zones that are at low activity.
+ * Regen rate is proportional to the zone's slow-contracting mass
+ * (which houses the aerobic regeneration machinery) and circulatory efficiency.
+ *
+ * Locomotion zones that were used at high intensity this turn do NOT regenerate.
+ * All other zones with substrate below max regenerate.
+ */
+function _regenerateSubstrate(creature) {
+  const bodyMap = getBodyMap(creature);
+  if (!bodyMap) return;
+
+  const circEff = _getCirculatoryEfficiency(creature);
+  const behavior = creature.currentBehavior;
+  const isHighIntensityLoco = creature.movedThisTurn &&
+    (behavior === 'flee' || behavior === 'flee_refuge' || behavior === 'hunt');
+
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    if (zone.fiberRatio == null) continue;
+    if (zone.substrateMax == null || zone.substrateMax <= 0) continue;
+    if (zone.substrate >= zone.substrateMax) continue; // already full
+
+    // Locomotion zones that just fired at high intensity don't regenerate this turn
+    if (zone.locomotion && isHighIntensityLoco) continue;
+
+    const slowMass = zone.muscle * (1 - zone.fiberRatio);
+    const regen = slowMass * SUBSTRATE_REGEN_RATE * circEff;
+    zone.substrate = Math.min(zone.substrateMax, (zone.substrate || 0) + regen);
+  }
 }
 
 // Forward references — set by main.js
@@ -527,6 +649,7 @@ function runCreatureAI(creature) {
 
   // Update drives
   updateDrives(creature);
+  _regenerateSubstrate(creature);
 
   // ── Cognitive tier (Prompt M-A1) ──
   creature.integrationCapacity = computeIntegrationCapacity(creature);
@@ -585,6 +708,7 @@ function runCreatureAI(creature) {
   // Step 3: Execute the selected action
   creature.currentBehavior = action.behavior;
   let moved = executeAction(creature, action);
+  _depleteLocomotionSubstrate(creature);
   // ══════════════════════════════════════════════════════════════
 
   // Adjacency combat: skip if fleeing cleanly or if action already attacked
@@ -715,6 +839,39 @@ function endPlayerTurn(action){
   // so NPCs see current player emission values.
   _updateInWater(state.player);
   computeSignals(state.player);
+
+  // ── Player substrate depletion ──
+  if (state.player.movedThisTurn) {
+    const playerBodyMap = getBodyMap(state.player);
+    if (playerBodyMap) {
+      for (const zone of playerBodyMap) {
+        if (zone.destroyed || !zone.locomotion || zone.fiberRatio == null) continue;
+        const fastMass = zone.muscle * zone.fiberRatio;
+        // Player moves at moderate intensity by default
+        // Future: sprint action could use SUBSTRATE_DEPLETION_HIGH
+        const cost = fastMass * SUBSTRATE_DEPLETION_MOD;
+        zone.substrate = Math.max(0, (zone.substrate || 0) - cost);
+      }
+    }
+  }
+
+  // ── Player substrate regeneration (all non-depleted zones) ──
+  {
+    const playerBodyMap = getBodyMap(state.player);
+    if (playerBodyMap) {
+      const circEff = _getCirculatoryEfficiency(state.player);
+      for (const zone of playerBodyMap) {
+        if (zone.destroyed || zone.fiberRatio == null) continue;
+        if (zone.substrateMax == null || zone.substrateMax <= 0) continue;
+        if (zone.substrate >= zone.substrateMax) continue;
+        // Locomotion zones that just moved skip regen this turn
+        if (zone.locomotion && state.player.movedThisTurn) continue;
+        const slowMass = zone.muscle * (1 - zone.fiberRatio);
+        const regen = slowMass * SUBSTRATE_REGEN_RATE * circEff;
+        zone.substrate = Math.min(zone.substrateMax, (zone.substrate || 0) + regen);
+      }
+    }
+  }
 
   // Reset player per-turn flags AFTER signals are computed (Prompt L-A).
   // They'll be set again during the player's next action.
