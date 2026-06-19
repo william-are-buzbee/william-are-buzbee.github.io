@@ -599,13 +599,18 @@ function buildAllDetectionInfo(creature) {
     const result = canDetect(creature, target);
     if (!result.detected) continue;
 
-    // Gather per-zone detections (non-visual). If only visual detected, create minimal info.
+    // Gather per-zone detections (non-visual). If visual detected, ensure a visual
+    // entry exists so buildDetectionInfo can compute per-channel SNR for all channels.
     let detections = result.detections || [];
-    // If visual detected but no per-zone non-visual detections, create a synthetic entry
-    // so buildDetectionInfo has something to work with (visual SNR)
-    if (detections.length === 0 && result.senses.includes('visual')) {
-      const visSNR = result.bestSNR || 1;
-      detections = [{ zone: null, channel: 'visual', quality: getEffectiveVisual(creature), snr: visSNR }];
+    if (result.senses.includes('visual')) {
+      // Compute visual SNR the same way canDetect does
+      const d = dist(creature.x, creature.y, target.x, target.y);
+      const visRange = getVisualRange(creature, target);
+      const visSNR = d > 0 ? visRange / d : visRange * 10;
+      detections = detections.concat([{
+        zone: null, channel: 'visual',
+        quality: getEffectiveVisual(creature), snr: visSNR
+      }]);
     }
 
     const info = buildDetectionInfo(creature, target, detections);

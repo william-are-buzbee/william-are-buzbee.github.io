@@ -58,7 +58,14 @@ function executeAction(creature, action) {
       break;
     }
     case 'flee': {
-      moved = executeFlee(creature);
+      // Ganglion direction fallback: if the ganglion system computed a flee
+      // bearing but no threatSource entity is available (e.g. bolt reflex
+      // from ambiguous signal), use moveInDirection with the ganglion bearing
+      if (!creature.threatSource && action.direction != null) {
+        moved = moveInDirection(creature, action.direction);
+      } else {
+        moved = executeFlee(creature);
+      }
       creature.currentBehavior = 'flee';
       break;
     }

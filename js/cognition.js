@@ -422,7 +422,9 @@ function processGanglionSystem(creature) {
     return {
       intensity: 1.0,
       direction: boltResult.direction, // crude bearing or random
+      source: boltResult.source,       // entity that triggered the bolt
       isBolt: true,
+      type: 'bolt',
     };
   }
 
@@ -510,7 +512,7 @@ function _checkBoltReflex(creature, neural, detectionInfo, thresholds) {
     direction = randi(8); // random bolt — no bearing information
   }
 
-  return { direction, magnitude: strongestMagnitude };
+  return { direction, magnitude: strongestMagnitude, source: strongestSource };
 }
 
 /**

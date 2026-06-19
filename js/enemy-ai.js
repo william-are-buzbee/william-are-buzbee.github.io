@@ -704,6 +704,7 @@ function _ganglionOutputToAction(output, creature) {
     return {
       behavior: 'flee',
       magnitude: output.intensity,
+      direction: output.direction,    // bolt/flee bearing for fallback
       _ganglionIntensity: output.intensity,
     };
   } else if (output.intensity >= 0.3) {
