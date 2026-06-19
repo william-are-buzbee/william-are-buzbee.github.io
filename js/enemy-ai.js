@@ -9,7 +9,8 @@
 
 import { state, worlds, covers, monsters, groundItems } from './state.js';
 import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, getNeuralArchitecture, selectHitZone,
-         BASE_AP_COST, MAX_ACTIONS_PER_INPUT, STAT_MAX, TURN_AGILITY_COEFF,
+         BASE_AP_COST, MAX_ACTIONS_PER_INPUT, REFERENCE_SPEED, BASE_TICKS_PER_ACTION,
+         STAT_MAX, TURN_AGILITY_COEFF,
          facingSteps, checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
          getPathways, computeBleedPenalty, computeStrikeDamage, SEEP_COEFF, CLOT_RATE, REGEN_FRACTION,
          BLOOD_DEATH_THRESHOLD, BURST_COEFF, BLOOD_CRITICAL_THRESHOLD,
@@ -902,17 +903,21 @@ function endPlayerTurn(action){
 
   turnCount++;
 
-  // ── Compute world-time elapsed (AP system) ──
-  // The player always takes exactly one action.  How much world-time that
-  // represents depends on the player's current speed (locomotion power output).
+  // ── AP and world-time calculations ──
+  // These are SEPARATE systems that both read the player's speed.
+  //   AP accumulation:  ratio-based (creaturePTW / playerPTW) — determines
+  //                     how often creatures act relative to the player.
+  //   World-time:       reference-speed-based — determines how fast the
+  //                     day/night cycle and time-scaled effects advance.
   const playerAPRate = getBodyPTW(player);
-  const effectivePlayerRate = Math.max(playerAPRate, 0.01);  // guard against zero/tiny
-  const ticksElapsed = BASE_AP_COST / effectivePlayerRate;
+  const effectivePlayerRate = Math.max(playerAPRate, 0.001);  // guard against zero/tiny
 
-  // Advance day/night cycle by variable ticks.
-  // advanceTick must accept a tick amount and use DAY_CYCLE_TICKS internally
-  // (see time-cycle.js — update divisor from old cycle length to DAY_CYCLE_TICKS).
-  advanceTick(ticksElapsed);
+  // World-time: how many day-cycle ticks pass per player action.
+  // At REFERENCE_SPEED → 1 tick/action → 1200 actions per full day.
+  // Faster player → fewer ticks/action → more actions per day.
+  // Slower player → more ticks/action → fewer actions per day.
+  const worldTicksElapsed = BASE_TICKS_PER_ACTION * (REFERENCE_SPEED / effectivePlayerRate);
+  advanceTick(worldTicksElapsed);
   // Drain FED based on action (scaled; 1 FED per accumulated 100)
   state.player.fedProgress = (state.player.fedProgress||0) + fedDrainFor(action||'move');
   while (state.player.fedProgress >= 10 && state.player.fed > 0){
@@ -1085,9 +1090,10 @@ function endPlayerTurn(action){
     rebuildSpatialGrid(activeCreatures);
 
     // ── AP-based creature action loop ──
-    // Each creature accumulates AP proportional to its speed × time elapsed.
+    // Each creature accumulates AP proportional to its speed ratio vs the player.
     // When accumulated AP >= BASE_AP_COST, the creature acts.  Fast creatures
     // act multiple times per player input; slow creatures act less than once.
+    // AP is pure ratio math — no world-ticks involved.
     for (const m of activeCreatures){
       if (m.hp <= 0) continue;
 
@@ -1105,9 +1111,9 @@ function endPlayerTurn(action){
         m.facing = { dx: 0, dy: 1 };
       }
 
-      // Accumulate AP based on creature speed and world-time elapsed
-      const creatureAPRate = getBodyPTW(m);
-      m._accumulatedAP = (m._accumulatedAP || 0) + creatureAPRate * ticksElapsed;
+      // Accumulate AP based on speed ratio (pure ratio math, no world-ticks)
+      const speedRatio = getBodyPTW(m) / effectivePlayerRate;
+      m._accumulatedAP = (m._accumulatedAP || 0) + speedRatio * BASE_AP_COST;
 
       // Act while enough AP is accumulated (up to cap)
       let actionsThisTurn = 0;
@@ -1136,10 +1142,10 @@ function endPlayerTurn(action){
       m._actionsThisTurn = actionsThisTurn;
 
       // ── Time-scaled substrate regeneration (runs once per player input) ──
-      _regenerateSubstrate(m, ticksElapsed);
+      _regenerateSubstrate(m, worldTicksElapsed);
 
       // ── Time-scaled stress clearance (runs once per player input) ──
-      _clearStressChemistry(m, ticksElapsed);
+      _clearStressChemistry(m, worldTicksElapsed);
     }
   }
   for (const layer of Object.keys(monsters)){

@@ -767,12 +767,15 @@ export const ACC_PER_VISUAL        = 0.3;   // accuracy = BASE_ACCURACY + floor(
 export const STEALTH_SIZE_COEFF    = 0.4;   // stealthEffectiveness = floor((STAT_MAX+1-Size)*STEALTH_SIZE_COEFF)
 
 // ── Action Point system ──
-// Replaces the probabilistic bonus-move speed system with deterministic AP accumulation.
-// The player is the clock: each player input advances world-time proportional to the
-// player's speed.  Creatures accumulate AP during that time and act when they have enough.
+// Deterministic AP accumulation replaces probabilistic bonus-move speed.
+// AP and world-time are SEPARATE calculations that both read player speed:
+//   AP accumulation:  ratio-based (creaturePTW / playerPTW) — no world-ticks involved.
+//   World-time:       BASE_TICKS_PER_ACTION × (REFERENCE_SPEED / playerPTW) per player input.
 export const BASE_AP_COST          = 1000;  // AP required to take one action
 export const MAX_ACTIONS_PER_INPUT = 3;     // cap on creature actions per player input
-export const DAY_CYCLE_TICKS       = 1200;  // ticks per full day/night cycle (was 200)
+export const DAY_CYCLE_TICKS       = 1200;  // ticks per full day/night cycle (was 600)
+export const REFERENCE_SPEED       = 0.26;  // baseline PTW for "normal" walking speed (prowler at full substrate)
+export const BASE_TICKS_PER_ACTION = 1.0;   // world-ticks per player action at REFERENCE_SPEED
 
 // DEPRECATED — retained for any external references; no longer used by the AP system.
 // Relative speed system — power-to-weight ratio governs enemy action frequency.
