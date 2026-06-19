@@ -1058,9 +1058,10 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
   }
 }
 
-// ==================== BONUS MOVE ====================
-// Called after all normal enemy actions for enemies with PTW ratio > player's.
-// Movement only — no attacks. Uses current behavior's movement logic.
+// ==================== BONUS MOVE (DEPRECATED) ====================
+// DEPRECATED: replaced by the AP action-point system in endPlayerTurn.
+// No longer called by enemy-ai.js. Retained for backward compatibility with
+// any external callers; safe to remove once all references are confirmed dead.
 function performBonusMove(mon){
   if (mon.immobilized) return;
   if (mon.currentBehavior === 'rest') return; // resting creatures don't move

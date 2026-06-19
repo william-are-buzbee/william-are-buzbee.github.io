@@ -158,7 +158,7 @@ const TRANSIENT_FIELDS = [
     '_lastTrace',
 
     // Prompt Q: per-turn fields that were missing from stripping
-    '_actedNormally',       // NPC speed system flag (set/reset in endPlayerTurn loop)
+    '_actedNormally',       // DEPRECATED: old speed system flag (replaced by AP system)
     '_cachedWater',         // cached nearest water tile position (periodically refreshed)
     '_cachedWaterAge',      // age counter for _cachedWater cache
     'bleedPenalty',         // recomputed each turn via computeBleedPenalty
@@ -170,6 +170,10 @@ const TRANSIENT_FIELDS = [
     // Ganglion system: per-turn flags (not persistent)
     '_ganglionTriggeredStress',  // flag: stress release trigger this turn
     '_lastGanglionIntensity',    // float: ganglion motor output intensity this turn
+
+    // AP system: accumulated action points and per-input action count (runtime only)
+    '_accumulatedAP',            // float: AP carryover between player inputs
+    '_actionsThisTurn',          // int: how many actions creature took this player input
 ];
 
 /** Create a shallow copy with all transient per-turn fields removed. */
@@ -202,7 +206,7 @@ function initTransientFields(entity) {
     entity.detectionInfo = [];         // Prompt P
     entity._goalLostTurns = 0;         // Prompt O/P
     entity._lastTrace = null;          // Prompt O/P: debugCognition trace
-    entity._actedNormally = false;     // Prompt Q: NPC speed system flag
+    entity._actedNormally = false;     // DEPRECATED: old speed system flag (kept for save compat)
     entity._cachedWater = null;        // Prompt Q: cached nearest water tile
     entity._cachedWaterAge = 0;        // Prompt Q: cache age counter
     entity.bleedPenalty = 0;           // Prompt Q: recomputed from computeBleedPenalty
@@ -210,6 +214,8 @@ function initTransientFields(entity) {
     entity._dormantTurns = 0;          // Prompt S: no dormant turns accumulated
     entity._ganglionTriggeredStress = false;  // Ganglion: no stress trigger pending
     entity._lastGanglionIntensity = null;     // Ganglion: no intensity from last turn
+    entity._accumulatedAP = 0;                // AP system: no carryover on load
+    entity._actionsThisTurn = 0;              // AP system: no actions taken yet
 }
 
 // ==================== HELPERS ====================

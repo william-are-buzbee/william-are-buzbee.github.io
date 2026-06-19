@@ -9,7 +9,7 @@
 
 import { state, worlds, covers, monsters, groundItems } from './state.js';
 import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, getNeuralArchitecture, selectHitZone,
-         MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, STAT_MAX, TURN_AGILITY_COEFF,
+         BASE_AP_COST, MAX_ACTIONS_PER_INPUT, STAT_MAX, TURN_AGILITY_COEFF,
          facingSteps, checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
          getPathways, computeBleedPenalty, computeStrikeDamage, SEEP_COEFF, CLOT_RATE, REGEN_FRACTION,
          BLOOD_DEATH_THRESHOLD, BURST_COEFF, BLOOD_CRITICAL_THRESHOLD,
@@ -67,7 +67,7 @@ import { buildAllDetectionInfo, detectThreats, applySafetyFromThreats,
          getDetectionRange, getDominantSenseChannel, getBestChemicalAirborne,
          getEffectiveVisual, applySafetyFromDamage } from './detection.js';
 import { executeAction, adjacencyCombatCheck, monsterMelee, executeWander,
-         performBonusMove, executeFlee } from './behaviors.js';
+         executeFlee } from './behaviors.js';
 import { dist, isWaterTile, isWaterLocked, hasCladeTerritory, wouldExceedTerritory,
          getCreatureMass, canMoveTo, WATER_TILES,
          rebuildSpatialGrid, getNearbyCreatures, getCorpseAt } from './ai-utils.js';
@@ -190,15 +190,16 @@ function _depleteLocomotionSubstrate(creature) {
  *
  * Locomotion zones that were used at high intensity this turn do NOT regenerate.
  * All other zones with substrate below max regenerate.
+ *
+ * @param {object} creature
+ * @param {number} [ticks=1] — world-time elapsed; scales regen proportionally.
  */
-function _regenerateSubstrate(creature) {
+function _regenerateSubstrate(creature, ticks) {
   const bodyMap = getBodyMap(creature);
   if (!bodyMap) return;
 
   const circEff = _getCirculatoryEfficiency(creature);
-  const behavior = creature.currentBehavior;
-  const isHighIntensityLoco = creature.movedThisTurn &&
-    (behavior === 'flee' || behavior === 'flee_refuge' || behavior === 'hunt');
+  const timeScale = ticks || 1.0;
 
   for (const zone of bodyMap) {
     if (zone.destroyed) continue;
@@ -206,11 +207,13 @@ function _regenerateSubstrate(creature) {
     if (zone.substrateMax == null || zone.substrateMax <= 0) continue;
     if (zone.substrate >= zone.substrateMax) continue; // already full
 
-    // Locomotion zones that just fired at high intensity don't regenerate this turn
-    if (zone.locomotion && isHighIntensityLoco) continue;
+    // Don't regenerate locomotion zones that were active this turn.
+    // (If creature acted multiple times, locomotion zones that fired on
+    //  ANY action skip regen.)
+    if (zone.locomotion && creature.movedThisTurn) continue;
 
     const slowMass = zone.muscle * (1 - zone.fiberRatio);
-    const regen = slowMass * SUBSTRATE_REGEN_RATE * circEff;
+    const regen = slowMass * SUBSTRATE_REGEN_RATE * circEff * timeScale;
     zone.substrate = Math.min(zone.substrateMax, (zone.substrate || 0) + regen);
   }
 }
@@ -629,12 +632,11 @@ function isDriftPositionValid(creature, tx, ty, layer) {
 // ==================== STRESS CHEMISTRY (Hare Vertical Slice) ====================
 
 /**
- * Update stress chemical level.
+ * Update stress chemical level — RELEASE portion only.
+ * Called per creature action (inside runCreatureAI).
  * Release: triggered by ganglion threat detection (flagged during processing).
- * Clearance: each turn, gated by circulatory efficiency.
  */
-function _updateStressChemistry(creature) {
-  // Release (if the ganglion system flagged a trigger this turn)
+function _releaseStressChemistry(creature) {
   if (creature._ganglionTriggeredStress === true) {
     creature.stressLevel = Math.min(
       STRESS_MAX,
@@ -648,12 +650,19 @@ function _updateStressChemistry(creature) {
   }
   // Clear the trigger flag
   creature._ganglionTriggeredStress = false;
+}
 
-  // Clearance — gated by circulatory efficiency
+/**
+ * Clear stress chemicals — time-scaled, called once per player input.
+ * Clearance is gated by circulatory efficiency and scales with world-time elapsed.
+ * @param {object} creature
+ * @param {number} ticksElapsed — world-time that passed this player input.
+ */
+function _clearStressChemistry(creature, ticksElapsed) {
   const circEff = _getCirculatoryEfficiency(creature);
   creature.stressLevel = Math.max(
     0,
-    (creature.stressLevel || 0) - STRESS_CLEARANCE_BASE * circEff
+    (creature.stressLevel || 0) - STRESS_CLEARANCE_BASE * circEff * (ticksElapsed || 1.0)
   );
 }
 
@@ -757,7 +766,7 @@ function runCreatureAI(creature) {
 
   // Update drives
   updateDrives(creature);
-  _regenerateSubstrate(creature);
+  // NOTE: _regenerateSubstrate is now called from endPlayerTurn, scaled by ticksElapsed
 
   // ── Cognitive tier (Prompt M-A1) ──
   creature.integrationCapacity = computeIntegrationCapacity(creature);
@@ -799,8 +808,8 @@ function runCreatureAI(creature) {
     const ganglionOutput = processGanglionSystem(creature);
     action = _ganglionOutputToAction(ganglionOutput, creature);
 
-    // ── Stress chemistry update ──
-    _updateStressChemistry(creature);
+    // ── Stress chemistry release (per-action; clearance runs in endPlayerTurn) ──
+    _releaseStressChemistry(creature);
 
     // ── Store decision trace for debugCognition() ──
     creature._lastTrace = {
@@ -892,7 +901,18 @@ function endPlayerTurn(action){
   player.tier = getTier(player.integrationCapacity);
 
   turnCount++;
-  advanceTick();  // advance day/night cycle
+
+  // ── Compute world-time elapsed (AP system) ──
+  // The player always takes exactly one action.  How much world-time that
+  // represents depends on the player's current speed (locomotion power output).
+  const playerAPRate = getBodyPTW(player);
+  const effectivePlayerRate = Math.max(playerAPRate, 0.01);  // guard against zero/tiny
+  const ticksElapsed = BASE_AP_COST / effectivePlayerRate;
+
+  // Advance day/night cycle by variable ticks.
+  // advanceTick must accept a tick amount and use DAY_CYCLE_TICKS internally
+  // (see time-cycle.js — update divisor from old cycle length to DAY_CYCLE_TICKS).
+  advanceTick(ticksElapsed);
   // Drain FED based on action (scaled; 1 FED per accumulated 100)
   state.player.fedProgress = (state.player.fedProgress||0) + fedDrainFor(action||'move');
   while (state.player.fedProgress >= 10 && state.player.fed > 0){
@@ -1064,9 +1084,13 @@ function endPlayerTurn(action){
     // Prompt R: rebuild spatial hash grid with active creatures only
     rebuildSpatialGrid(activeCreatures);
 
-    // Phase 1: Each active enemy takes its normal action (speed skip + AI)
+    // ── AP-based creature action loop ──
+    // Each creature accumulates AP proportional to its speed × time elapsed.
+    // When accumulated AP >= BASE_AP_COST, the creature acts.  Fast creatures
+    // act multiple times per player input; slow creatures act less than once.
     for (const m of activeCreatures){
       if (m.hp <= 0) continue;
+
       // Blood system — process monster bleed each turn
       if (processBleed(m, false)) {
         m.hp = 0;  // blood loss death
@@ -1076,46 +1100,46 @@ function endPlayerTurn(action){
       // Zone healing (Prompt J) — monsters heal wounded zones after bleed
       applyHealing(m);
 
-      // ---- Relative speed system (body-map PTW) ----
-      const monPTW  = getBodyPTW(m);
-      const plrPTW  = getBodyPTW(player);
-      const spdRatio = monPTW / plrPTW;
-
-      m._actedNormally = false;
-
-      if (spdRatio < 1) {
-        const actionChance = Math.max(spdRatio, MIN_ACTION_CHANCE);
-        if (Math.random() >= actionChance) {
-          continue;  // skipped — no action this turn
-        }
-      }
-
-      m._actedNormally = true;
-
       // Facing initialization for creatures that need it
       if (!m.facing && (m.key === 'cave_crab')) {
         m.facing = { dx: 0, dy: 1 };
       }
 
-      runCreatureAI(m);
+      // Accumulate AP based on creature speed and world-time elapsed
+      const creatureAPRate = getBodyPTW(m);
+      m._accumulatedAP = (m._accumulatedAP || 0) + creatureAPRate * ticksElapsed;
 
-      if (state.player.hp <= 0){ _onPlayerDeathCallback && _onPlayerDeathCallback(); return; }
-    }
-    // Phase 2: Each active enemy that acted normally rolls for a bonus move (faster enemies only)
-    for (const m of activeCreatures){
-      if (m.hp <= 0) continue;
-      if (!m._actedNormally) continue;
-      const monPTW  = getBodyPTW(m);
-      const plrPTW  = getBodyPTW(player);
-      const ratio   = monPTW / plrPTW;
-      if (ratio >= 1) {
-        const bleedMul = 1 - (m.bleedPenalty || 0);
-        const bonusChance = Math.min((ratio - 1) * bleedMul, MAX_BONUS_MOVE_CHANCE);
-        if (Math.random() < bonusChance) {
-          performBonusMove(m);
-        }
+      // Act while enough AP is accumulated (up to cap)
+      let actionsThisTurn = 0;
+      while (m._accumulatedAP >= BASE_AP_COST && actionsThisTurn < MAX_ACTIONS_PER_INPUT) {
+        m._accumulatedAP -= BASE_AP_COST;
+        actionsThisTurn++;
+
+        // Reset per-action transient flags
+        m.movedThisTurn = false;
+        m.inCombatThisTurn = false;
+        m._lastGanglionIntensity = null;
+        m._ganglionTriggeredStress = false;
+
+        // Run the creature's full AI cycle
+        runCreatureAI(m);
+
+        if (state.player.hp <= 0){ _onPlayerDeathCallback && _onPlayerDeathCallback(); return; }
+        if (m.hp <= 0) break;  // creature died during its action
       }
-      m._actedNormally = false;
+
+      // Cap accumulated AP to prevent runaway accumulation on dormant-then-active creatures.
+      // At most ~1.5 actions worth — enough for carryover, never a huge burst.
+      m._accumulatedAP = Math.min(m._accumulatedAP, BASE_AP_COST * 1.5);
+
+      // Store action count for debugCognition
+      m._actionsThisTurn = actionsThisTurn;
+
+      // ── Time-scaled substrate regeneration (runs once per player input) ──
+      _regenerateSubstrate(m, ticksElapsed);
+
+      // ── Time-scaled stress clearance (runs once per player input) ──
+      _clearStressChemistry(m, ticksElapsed);
     }
   }
   for (const layer of Object.keys(monsters)){
@@ -1258,6 +1282,9 @@ function debugCognition() {
       system: getNeuralArchitecture(m) ? 'GANGLION' : 'REACTIVE',
       IC: ic,
       domSense: dom.type,
+      apRate: getBodyPTW(m).toFixed(4),
+      accAP: (m._accumulatedAP || 0).toFixed(0),
+      actions: m._actionsThisTurn != null ? m._actionsThisTurn : '—',
       rule: t.reactiveRule || '—',
       mag: t.reactiveMagnitude != null ? t.reactiveMagnitude.toFixed(1) : '—',
       'P(ovr)': t.overrideProbability != null ? (t.overrideProbability * 100).toFixed(0) + '%' : '—',

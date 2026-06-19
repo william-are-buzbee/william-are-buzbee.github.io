@@ -766,9 +766,18 @@ export const ACC_PER_VISUAL        = 0.3;   // accuracy = BASE_ACCURACY + floor(
 // Stealth
 export const STEALTH_SIZE_COEFF    = 0.4;   // stealthEffectiveness = floor((STAT_MAX+1-Size)*STEALTH_SIZE_COEFF)
 
+// ── Action Point system ──
+// Replaces the probabilistic bonus-move speed system with deterministic AP accumulation.
+// The player is the clock: each player input advances world-time proportional to the
+// player's speed.  Creatures accumulate AP during that time and act when they have enough.
+export const BASE_AP_COST          = 1000;  // AP required to take one action
+export const MAX_ACTIONS_PER_INPUT = 3;     // cap on creature actions per player input
+export const DAY_CYCLE_TICKS       = 1200;  // ticks per full day/night cycle (was 200)
+
+// DEPRECATED — retained for any external references; no longer used by the AP system.
 // Relative speed system — power-to-weight ratio governs enemy action frequency.
-export const MAX_BONUS_MOVE_CHANCE = 0.50;  // cap on bonus move probability (50%)
-export const MIN_ACTION_CHANCE     = 0.25;  // floor — even the slowest enemy acts at least 25% of turns
+export const MAX_BONUS_MOVE_CHANCE = 0.50;  // DEPRECATED (no bonus moves in AP system)
+export const MIN_ACTION_CHANCE     = 0.25;  // DEPRECATED (no action skipping in AP system)
 
 // Instant turn agility — smaller creatures change facing for free more often.
 export const TURN_AGILITY_COEFF    = 1.0;   // instantTurnChance = (STAT_MAX+1-Size)*TURN_AGILITY_COEFF/100

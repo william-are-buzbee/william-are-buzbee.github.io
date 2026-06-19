@@ -1,21 +1,31 @@
 // ==================== DAY / NIGHT CYCLE ====================
 // Pure functions for time-of-day phase calculation and visual tinting.
 //
-// Cycle length: 600 ticks (one full day).
-//   Dawn  :   0 – 89   (90 ticks, 15%)
-//   Day   :  90 – 359  (270 ticks, 45%)
-//   Dusk  : 360 – 449  (90 ticks, 15%)
-//   Night : 450 – 599  (150 ticks, 25%)
+// Cycle length: DAY_CYCLE_TICKS (defined in constants.js, currently 1200).
+// Phase proportions are constant — absolute lengths scale with cycle length.
+//   Dawn  : 15%
+//   Day   : 45%
+//   Dusk  : 15%
+//   Night : 25%
 
 import { state } from './state.js';
+import { DAY_CYCLE_TICKS } from './constants.js';
 
-export const CYCLE_LENGTH = 600;
+export const CYCLE_LENGTH = DAY_CYCLE_TICKS;
+
+// Phase lengths derived from CYCLE_LENGTH so they stay proportional if the
+// constant changes.  Rounding uses floor to avoid overlaps; any remainder
+// ticks are absorbed into the final phase (night).
+const _dawnLen  = Math.floor(CYCLE_LENGTH * 0.15);
+const _dayLen   = Math.floor(CYCLE_LENGTH * 0.45);
+const _duskLen  = Math.floor(CYCLE_LENGTH * 0.15);
+const _nightLen = CYCLE_LENGTH - _dawnLen - _dayLen - _duskLen;  // absorbs rounding remainder
 
 const PHASES = [
-  { name: 'dawn',  start: 0,   len: 90  },
-  { name: 'day',   start: 90,  len: 270 },
-  { name: 'dusk',  start: 360, len: 90  },
-  { name: 'night', start: 450, len: 150 },
+  { name: 'dawn',  start: 0,                             len: _dawnLen  },
+  { name: 'day',   start: _dawnLen,                      len: _dayLen   },
+  { name: 'dusk',  start: _dawnLen + _dayLen,            len: _duskLen  },
+  { name: 'night', start: _dawnLen + _dayLen + _duskLen, len: _nightLen },
 ];
 
 /**
@@ -39,9 +49,13 @@ export function currentTimePhase() {
   return getTimePhase(state.worldTick);
 }
 
-/** Advance the world clock by 1 tick. Called from endPlayerTurn. */
-export function advanceTick() {
-  state.worldTick++;
+/**
+ * Advance the world clock. Called from endPlayerTurn.
+ * @param {number} [ticks=1] — world-time to advance (fractional values are fine;
+ *   worldTick is stored as a float under the AP system).
+ */
+export function advanceTick(ticks) {
+  state.worldTick += (ticks != null ? ticks : 1);
 }
 
 // ==================== VISUAL TINT ====================
