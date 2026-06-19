@@ -67,6 +67,13 @@ function executeAction(creature, action) {
       if (action.target && creature.facing) {
         creature.facing.dx = Math.sign(action.target.x - creature.x);
         creature.facing.dy = Math.sign(action.target.y - creature.y);
+      } else if (action.direction != null && creature.facing) {
+        // Ganglion system passes direction index — convert to facing vector
+        const delta = DIRECTION_DELTAS[action.direction];
+        if (delta) {
+          creature.facing.dx = delta.x;
+          creature.facing.dy = delta.y;
+        }
       }
       creature.currentBehavior = 'wander'; // cosmetically wander
       break;
@@ -161,6 +168,14 @@ function executeAction(creature, action) {
       creature.currentBehavior = 'forage';
       break;
     }
+    case 'forage_approach': {
+      // Walk toward food at moderate speed (ganglion system output)
+      if (action.direction != null) {
+        moved = moveInDirection(creature, action.direction);
+      }
+      creature.currentBehavior = 'forage';
+      break;
+    }
     case 'return_home': {
       if (action.target) {
         const dir = directionToward(creature.x, creature.y, action.target.x, action.target.y);
@@ -193,7 +208,13 @@ function executeAction(creature, action) {
     }
     case 'wander':
     default: {
-      executeWander(creature);
+      // If ganglion system provided a specific direction, use it
+      if (action.direction != null) {
+        moved = moveInDirection(creature, action.direction);
+        if (!moved) executeWander(creature); // fallback if blocked
+      } else {
+        executeWander(creature);
+      }
       creature.currentBehavior = 'wander';
       break;
     }

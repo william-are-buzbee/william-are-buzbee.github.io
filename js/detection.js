@@ -445,6 +445,7 @@ function buildDetectionInfo(observer, target, detections) {
   let bestSNR = 0;
   let bestChemSNR = 0;
   let bestVibSNR = 0;
+  let bestVisSNR = 0;
 
   for (const det of detections) {
     if (det.snr > bestSNR) bestSNR = det.snr;
@@ -456,6 +457,9 @@ function buildDetectionInfo(observer, target, detections) {
         && det.snr > bestVibSNR) {
       bestVibSNR = det.snr;
     }
+    if (det.channel === 'visual' && det.snr > bestVisSNR) {
+      bestVisSNR = det.snr;
+    }
 
     // Movement is inherent in vibration detection — if vibration detected, target was moving
     if (det.channel === 'vibrationGround' || det.channel === 'vibrationAir') {
@@ -464,6 +468,11 @@ function buildDetectionInfo(observer, target, detections) {
   }
 
   info.bestSNR = bestSNR;
+
+  // Per-channel best SNR — used by ganglion template matching
+  info.vibrationSNR = bestVibSNR;
+  info.visualSNR    = bestVisSNR;
+  info.chemicalSNR  = bestChemSNR;
 
   // Size estimate: uncertainty narrows with best SNR from any channel
   if (bestSNR > 0) {

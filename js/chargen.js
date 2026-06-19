@@ -95,6 +95,9 @@ function beginGame(){
   state.player.integrationCapacity = 0;
   state.player.tier = 1;
 
+  // ── Stress chemistry (Ganglion system) ──
+  state.player.stressLevel = 0;
+
   initWorld(Math.floor(Math.random()*999999));
   document.getElementById('species-screen').style.display = 'none';
   state.gameState = 'play';

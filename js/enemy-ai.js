@@ -8,7 +8,7 @@
 // dormancy, and the runCreatureAI wiring function.
 
 import { state, worlds, covers, monsters, groundItems } from './state.js';
-import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
+import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, getNeuralArchitecture, selectHitZone,
          MAX_BONUS_MOVE_CHANCE, MIN_ACTION_CHANCE, STAT_MAX, TURN_AGILITY_COEFF,
          facingSteps, checkNeuralDeath, getAvailableAttacks, hasLocomotion, checkSenseLoss,
          getPathways, computeBleedPenalty, computeStrikeDamage, SEEP_COEFF, CLOT_RATE, REGEN_FRACTION,
@@ -38,7 +38,9 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, selectHitZone,
          CIRC_EFFICIENCY_CLOSED, CIRC_EFFICIENCY_OPEN, CIRC_EFFICIENCY_HYBRID,
          SPECIES_TEMPLATES,
          SPATIAL_CELL_SIZE, SPATIAL_QUERY_RADIUS,
-         ACTIVE_RADIUS, DORMANT_RADIUS, MAX_DRIFT } from './constants.js';
+         ACTIVE_RADIUS, DORMANT_RADIUS, MAX_DRIFT,
+         STRESS_RELEASE_AMOUNT, STRESS_RELEASE_MILD, STRESS_CLEARANCE_BASE,
+         STRESS_MAX } from './constants.js';
 import { T, isWalkable, isFoodTile, terrainInfo, tileBlocksVision } from './terrain.js';
 import { rand, randi, roll100 } from './rng.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval, restHealAmount, creatureViewRadius } from './player.js';
@@ -56,6 +58,7 @@ import { computeSignals } from './signals.js';
 
 // ── Imports from new modules ──
 import { computeIntegrationCapacity, getTier, evaluateReactiveRules,
+         processGanglionSystem,
          canOverrideReactive, deliberativeEvaluation, updateGoalPersistence,
          _ruleLabel, getDominantDrive, combatCapability } from './cognition.js';
 import { buildAllDetectionInfo, detectThreats, applySafetyFromThreats,
@@ -67,7 +70,7 @@ import { executeAction, adjacencyCombatCheck, monsterMelee, executeWander,
          performBonusMove, executeFlee } from './behaviors.js';
 import { dist, isWaterTile, isWaterLocked, hasCladeTerritory, wouldExceedTerritory,
          getCreatureMass, canMoveTo, WATER_TILES,
-         rebuildSpatialGrid, getNearbyCreatures } from './ai-utils.js';
+         rebuildSpatialGrid, getNearbyCreatures, getCorpseAt } from './ai-utils.js';
 
 /** Locomotion muscle / total mass — physics-derived power-to-weight ratio.
  *  Used by the speed system so player and NPCs of the same species are at parity.
@@ -154,26 +157,28 @@ function _depleteLocomotionSubstrate(creature) {
   const bodyMap = getBodyMap(creature);
   if (!bodyMap) return;
 
-  const behavior = creature.currentBehavior;
-
-  // Determine depletion rate from behavior
-  let depletionRate = 0;
-  if (behavior === 'flee' || behavior === 'flee_refuge' || behavior === 'hunt') {
-    depletionRate = SUBSTRATE_DEPLETION_HIGH;
-  } else if (behavior === 'wander' || behavior === 'forage' || behavior === 'maintain_distance') {
-    depletionRate = SUBSTRATE_DEPLETION_MOD;
+  // Use ganglion intensity if available, otherwise fall back to behavior label
+  let intensityFactor;
+  if (creature._lastGanglionIntensity != null) {
+    intensityFactor = creature._lastGanglionIntensity;
   } else {
-    // orient, hold, rest, or unknown — no significant locomotion substrate cost
-    return;
+    const behavior = creature.currentBehavior;
+    if (behavior === 'flee' || behavior === 'flee_refuge' || behavior === 'hunt') {
+      intensityFactor = 1.0;
+    } else if (behavior === 'wander' || behavior === 'forage' || behavior === 'maintain_distance') {
+      intensityFactor = 0.25;
+    } else {
+      return;
+    }
   }
 
   for (const zone of bodyMap) {
     if (zone.destroyed) continue;
     if (!zone.locomotion) continue;
-    if (zone.fiberRatio == null) continue; // no fiber data, skip
+    if (zone.fiberRatio == null) continue;
 
     const fastMass = zone.muscle * zone.fiberRatio;
-    const cost = fastMass * depletionRate;
+    const cost = fastMass * SUBSTRATE_DEPLETION_HIGH * intensityFactor;
     zone.substrate = Math.max(0, (zone.substrate || 0) - cost);
   }
 }
@@ -621,6 +626,105 @@ function isDriftPositionValid(creature, tx, ty, layer) {
   return true;
 }
 
+// ==================== STRESS CHEMISTRY (Hare Vertical Slice) ====================
+
+/**
+ * Update stress chemical level.
+ * Release: triggered by ganglion threat detection (flagged during processing).
+ * Clearance: each turn, gated by circulatory efficiency.
+ */
+function _updateStressChemistry(creature) {
+  // Release (if the ganglion system flagged a trigger this turn)
+  if (creature._ganglionTriggeredStress === true) {
+    creature.stressLevel = Math.min(
+      STRESS_MAX,
+      (creature.stressLevel || 0) + STRESS_RELEASE_AMOUNT
+    );
+  } else if (creature._ganglionTriggeredStress === 'mild') {
+    creature.stressLevel = Math.min(
+      STRESS_MAX,
+      (creature.stressLevel || 0) + STRESS_RELEASE_MILD
+    );
+  }
+  // Clear the trigger flag
+  creature._ganglionTriggeredStress = false;
+
+  // Clearance — gated by circulatory efficiency
+  const circEff = _getCirculatoryEfficiency(creature);
+  creature.stressLevel = Math.max(
+    0,
+    (creature.stressLevel || 0) - STRESS_CLEARANCE_BASE * circEff
+  );
+}
+
+/**
+ * Translate ganglion motor output into an action the existing execution
+ * system can handle. This is a bridge — eventually the execution system
+ * will read intensity directly. For now, map to existing behavior labels.
+ */
+function _ganglionOutputToAction(output, creature) {
+  if (!output) return { behavior: 'hold', magnitude: 0.1 };
+
+  // Store ganglion intensity for substrate depletion
+  creature._lastGanglionIntensity = output.intensity;
+
+  if (output.intensity <= 0) {
+    // No locomotion signal — hold still or check feeding
+    if (output.type === 'alert') {
+      // Orient toward threat bearing (face it while holding still)
+      return {
+        behavior: 'orient',
+        magnitude: 0.4,
+        direction: output.direction != null ? (output.direction + 4) % 8 : null,
+      };
+    }
+    // At food tile — graze (mid-graze local ganglion contact-chemical reflex)
+    if (output.atFood && creature.drives && creature.drives.hunger > HUNGER_THRESHOLD) {
+      return { behavior: 'graze', magnitude: 0.3 };
+    }
+    // Check mid-graze contact feeding on corpses
+    const corpse = getCorpseAt(state.player.layer, creature.x, creature.y);
+    if (corpse && creature.drives && creature.drives.hunger > HUNGER_THRESHOLD) {
+      return { behavior: 'eat_corpse', magnitude: 0.3 };
+    }
+    if (output.type === 'forage' && output.direction != null) {
+      return {
+        behavior: 'forage_approach',
+        magnitude: 0.3,
+        direction: output.direction,
+      };
+    }
+    return { behavior: 'hold', magnitude: 0.1 };
+  }
+
+  // Locomotion signal present
+  if (output.intensity >= 0.7) {
+    // High intensity — flee equivalent
+    creature.threatSource = output.source || creature.threatSource;
+    return {
+      behavior: 'flee',
+      magnitude: output.intensity,
+      _ganglionIntensity: output.intensity,
+    };
+  } else if (output.intensity >= 0.3) {
+    // Moderate intensity — directed movement (approach food, cautious movement)
+    return {
+      behavior: 'wander',
+      magnitude: output.intensity,
+      direction: output.direction,
+      _ganglionIntensity: output.intensity,
+    };
+  } else {
+    // Low intensity — slow approach
+    return {
+      behavior: 'wander',
+      magnitude: output.intensity,
+      direction: output.direction,
+      _ganglionIntensity: output.intensity,
+    };
+  }
+}
+
 // ==================== UNIFIED AI LOOP ====================
 
 /** Main AI entry point — called once per creature per turn. */
@@ -630,6 +734,9 @@ function runCreatureAI(creature) {
   // ── Reset per-turn state flags (Prompt L-A) ──
   creature.movedThisTurn = false;
   creature.inCombatThisTurn = false;
+  // Reset ganglion transient fields
+  creature._lastGanglionIntensity = null;
+  creature._ganglionTriggeredStress = false;
 
   // Immobilized creatures can't move but can still attack adjacently
   if (creature.immobilized) {
@@ -671,39 +778,77 @@ function runCreatureAI(creature) {
   updateGoalPersistence(creature);
 
   // ══════════════════════════════════════════════════════════════
-  // ── Reactive-Deliberative Architecture (Prompt O) ──
-  // Step 1: Reactive layer always runs — produces recommendation + magnitude
-  let reactiveAction = evaluateReactiveRules(creature);
+  // ── Behavior Decision ──
+  const neural = getNeuralArchitecture(creature);
+  let action;
+  let reactiveAction = null;
 
-  // Step 2: Deliberative override attempt
-  let action = reactiveAction;
-  let overrideAttempted = false;
-  let overrideSucceeded = false;
-  const overrideCapacity = creature.integrationCapacity * OVERRIDE_SCALE;
-  const overrideThreshold = reactiveAction.magnitude * STIMULUS_RESISTANCE;
-  const overrideProbability = (reactiveAction.magnitude >= CRITICAL_MAGNITUDE) ? 0
-    : (overrideThreshold > 0 ? Math.min(1, overrideCapacity / overrideThreshold) : 1);
-
-  if (canOverrideReactive(creature, reactiveAction.magnitude)) {
-    overrideAttempted = true;
-    const deliberateAction = deliberativeEvaluation(creature);
-    if (deliberateAction) {
-      overrideSucceeded = true;
-      action = deliberateAction;
+  if (neural) {
+    // ── Ganglion Architecture Path ──
+    // Creature has ganglion architecture — use physical system.
+    // Pre-check: damage this turn spikes stress (pain is a physical signal
+    // that bypasses the sensory ganglion pathway)
+    if (creature.tookDamageThisTurn) {
+      creature.stressLevel = Math.min(
+        STRESS_MAX,
+        (creature.stressLevel || 0) + STRESS_RELEASE_AMOUNT
+      );
     }
-  }
 
-  // ── Store decision trace for debugCognition() ──
-  creature._lastTrace = {
-    reactiveRule: _ruleLabel(reactiveAction),
-    reactiveBehavior: reactiveAction.behavior,
-    reactiveMagnitude: reactiveAction.magnitude,
-    overrideProbability: overrideProbability,
-    overrideAttempted: overrideAttempted,
-    overrideSucceeded: overrideSucceeded,
-    finalBehavior: action.behavior,
-    fromDeliberate: !!action.fromDeliberate,
-  };
+    const ganglionOutput = processGanglionSystem(creature);
+    action = _ganglionOutputToAction(ganglionOutput, creature);
+
+    // ── Stress chemistry update ──
+    _updateStressChemistry(creature);
+
+    // ── Store decision trace for debugCognition() ──
+    creature._lastTrace = {
+      reactiveRule: 'GANGLION ' + (ganglionOutput ? ganglionOutput.type : 'null'),
+      reactiveBehavior: action.behavior,
+      reactiveMagnitude: action.magnitude || 0,
+      overrideProbability: 0,
+      overrideAttempted: false,
+      overrideSucceeded: false,
+      finalBehavior: action.behavior,
+      fromDeliberate: false,
+      ganglionIntensity: ganglionOutput ? ganglionOutput.intensity : 0,
+      stressLevel: creature.stressLevel || 0,
+    };
+  } else {
+    // ── Reactive-Deliberative Architecture (Prompt O) ──
+    // Step 1: Reactive layer always runs — produces recommendation + magnitude
+    reactiveAction = evaluateReactiveRules(creature);
+
+    // Step 2: Deliberative override attempt
+    action = reactiveAction;
+    let overrideAttempted = false;
+    let overrideSucceeded = false;
+    const overrideCapacity = creature.integrationCapacity * OVERRIDE_SCALE;
+    const overrideThreshold = reactiveAction.magnitude * STIMULUS_RESISTANCE;
+    const overrideProbability = (reactiveAction.magnitude >= CRITICAL_MAGNITUDE) ? 0
+      : (overrideThreshold > 0 ? Math.min(1, overrideCapacity / overrideThreshold) : 1);
+
+    if (canOverrideReactive(creature, reactiveAction.magnitude)) {
+      overrideAttempted = true;
+      const deliberateAction = deliberativeEvaluation(creature);
+      if (deliberateAction) {
+        overrideSucceeded = true;
+        action = deliberateAction;
+      }
+    }
+
+    // ── Store decision trace for debugCognition() ──
+    creature._lastTrace = {
+      reactiveRule: _ruleLabel(reactiveAction),
+      reactiveBehavior: reactiveAction.behavior,
+      reactiveMagnitude: reactiveAction.magnitude,
+      overrideProbability: overrideProbability,
+      overrideAttempted: overrideAttempted,
+      overrideSucceeded: overrideSucceeded,
+      finalBehavior: action.behavior,
+      fromDeliberate: !!action.fromDeliberate,
+    };
+  }
 
   // Step 3: Execute the selected action
   creature.currentBehavior = action.behavior;
@@ -1109,6 +1254,7 @@ function debugCognition() {
 
     rows.push({
       name: m.name,
+      system: getNeuralArchitecture(m) ? 'GANGLION' : 'REACTIVE',
       IC: ic,
       domSense: dom.type,
       rule: t.reactiveRule || '—',
@@ -1117,6 +1263,8 @@ function debugCognition() {
       override: t.overrideSucceeded ? 'YES' : (t.overrideAttempted ? 'tried' : 'no'),
       final: t.finalBehavior || '—',
       delib: t.fromDeliberate ? '✓' : '',
+      stress: (m.stressLevel || 0).toFixed(2),
+      gIntensity: t.ganglionIntensity != null ? t.ganglionIntensity.toFixed(2) : '',
       detections: snrSummary,
     });
   }

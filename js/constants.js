@@ -614,6 +614,19 @@ export const CIRC_EFFICIENCY_CLOSED   = 1.0;    // circulatory efficiency for cl
 export const CIRC_EFFICIENCY_OPEN     = 0.65;   // circulatory efficiency for open systems
 export const CIRC_EFFICIENCY_HYBRID   = 0.85;   // circulatory efficiency for hybrid systems
 
+// ==================== GANGLION SYSTEM (Hare Vertical Slice) ====================
+// Thresholds for the ganglion-based behavior system.  Only creatures with
+// CREATURE_NEURAL data run this path; all others use evaluateReactiveRules.
+// First pass — tune during playtesting.
+export const BASE_BOLT_THRESHOLD       = 4.0;   // vibration SNR required for bolt reflex at calm
+export const BASE_FLEE_THRESHOLD       = 0.5;   // total threat confidence required for flee
+export const BASE_ALERT_THRESHOLD      = 0.25;  // total threat confidence required for alert
+export const STRESS_NEURAL_SENSITIVITY = 0.6;   // how much stress depresses thresholds (0-1)
+export const STRESS_RELEASE_AMOUNT     = 0.3;   // stress added per threat-ganglion trigger
+export const STRESS_RELEASE_MILD       = 0.08;  // stress added from alert (not flee)
+export const STRESS_CLEARANCE_BASE     = 0.04;  // stress cleared per turn before circ efficiency
+export const STRESS_MAX                = 1.5;   // ceiling on stress accumulation
+
 // ==================== DRIVE SYSTEM ====================
 export const MASS_HUNGER_COEFF   = 0.000015;  // hunger per turn per kg of total mass
 export const NEURAL_HUNGER_COEFF = 0.0003;    // hunger per turn per kg of neural mass

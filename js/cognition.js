@@ -5,6 +5,7 @@
 
 import { state } from './state.js';
 import { getBodyMap, getAvailableAttacks, computeStrikeDamage,
+         getNeuralArchitecture,
          DRIVE_COMPARE_THRESHOLD, PLANNING_THRESHOLD,
          SAFETY_THRESHOLD, HUNGER_THRESHOLD, REST_THRESHOLD,
          HERBIVORE_SAFETY_BONUS,
@@ -12,10 +13,13 @@ import { getBodyMap, getAvailableAttacks, computeStrikeDamage,
          REACTIVE_HUNGER_THRESHOLD,
          MIN_SEEK, SEEK_SCALE, PERSISTENCE_SCALE,
          ASSESS_INTEGRATION_THRESHOLD,
-         DIET_DECISION_THRESHOLD } from './constants.js';
+         DIET_DECISION_THRESHOLD,
+         BASE_BOLT_THRESHOLD, BASE_FLEE_THRESHOLD, BASE_ALERT_THRESHOLD,
+         STRESS_NEURAL_SENSITIVITY } from './constants.js';
 import { chebyshev } from './world-state.js';
+import { randi } from './rng.js';
 import { dist, getCreatureMass, findNearestWaterTile, findNearestFoodTile,
-         tileIsFood, getCorpseAt } from './ai-utils.js';
+         tileIsFood, getCorpseAt, directionAwayFrom, directionToward } from './ai-utils.js';
 import { getDominantSenseChannel, getAdjacentPrey } from './detection.js';
 
 // ==================== COGNITIVE TIER SYSTEM (Prompt M-A1) ====================
@@ -380,6 +384,293 @@ function evaluateReactiveRules(creature) {
   return { behavior: 'wander', magnitude: 0.1 };
 }
 
+// ==================== GANGLION-BASED BEHAVIOR (Hare Vertical Slice) ====================
+// Physical behavior system for creatures with CREATURE_NEURAL data.
+// Replaces evaluateReactiveRules for these creatures only.
+// Reads detection data through the creature's neural architecture.
+// Produces { direction, intensity } motor output instead of { behavior, magnitude }.
+//
+// FIRST PASS — will be refined as more creatures are converted.
+
+/**
+ * Process the ganglion-based behavior system for creatures with CREATURE_NEURAL.
+ * Reads detection data through the creature's neural architecture.
+ * Produces { direction, intensity } motor output instead of { behavior, magnitude }.
+ *
+ * FIRST PASS — will be refined as more creatures are converted.
+ * Currently handles: bolt reflex, threat-classification flee,
+ * food-identification approach, and default hold.
+ */
+function processGanglionSystem(creature) {
+  const neural = getNeuralArchitecture(creature);
+  if (!neural) return null; // fallback to reactive rules
+
+  const detectionInfo = creature.detectionInfo || [];
+  const stress = creature.stressLevel || 0;
+
+  // ── Phase 1: Compute effective thresholds from stress chemistry ──
+  const thresholds = _computeEffectiveThresholds(neural, stress);
+
+  // ── Phase 2: Check bolt reflex arcs ──
+  // The bolt reflex fires on ANY single-channel signal exceeding the bolt
+  // threshold. It does not require multi-channel confirmation.
+  const boltResult = _checkBoltReflex(creature, neural, detectionInfo, thresholds);
+  if (boltResult) {
+    // Bolt fires: max intensity, direction may be crude or random
+    // Also triggers stress release
+    creature._ganglionTriggeredStress = true;
+    return {
+      intensity: 1.0,
+      direction: boltResult.direction, // crude bearing or random
+      isBolt: true,
+    };
+  }
+
+  // ── Phase 3: Threat-classification template matching ──
+  // Templates fire on sufficient confidence from ANY channel or combination.
+  // A single channel at high SNR fires the template.
+  // Multiple channels at moderate SNR each contribute confidence —
+  // the template fires on total confidence exceeding threshold.
+  const threatResult = _matchThreatTemplates(creature, neural, detectionInfo, thresholds);
+
+  // ── Phase 4: Food-identification template matching ──
+  // Only runs if threat is not at alert level or above.
+  let foodResult = null;
+  if (!threatResult || threatResult.confidence < thresholds.alert) {
+    foodResult = _matchFoodTemplates(creature, neural, detectionInfo);
+  }
+
+  // ── Phase 5: Resolve at central locomotion ganglion ──
+  // Highest-intensity signal determines output. Not a priority system —
+  // threat signals are physically stronger because threat-classification
+  // produces higher-intensity output than food-identification.
+  return _resolveLocomotionOutput(creature, threatResult, foodResult, thresholds);
+}
+
+/**
+ * Compute effective thresholds by modulating base thresholds with stress level.
+ * Higher stress = lower thresholds = easier to trigger.
+ */
+function _computeEffectiveThresholds(neural, stress) {
+  const sensitivity = STRESS_NEURAL_SENSITIVITY;
+  const factor = 1.0 - Math.min(stress, 1.0) * sensitivity;
+  return {
+    bolt:  BASE_BOLT_THRESHOLD  * factor,
+    flee:  BASE_FLEE_THRESHOLD  * factor,
+    alert: BASE_ALERT_THRESHOLD * factor,
+  };
+}
+
+/**
+ * Check bolt reflex arcs on local ganglia.
+ * Fires if ANY single vibration detection exceeds the effective bolt threshold.
+ * The bolt is fast and crude — direction is estimated from the strongest
+ * vibration bearing if available, otherwise random.
+ */
+function _checkBoltReflex(creature, neural, detectionInfo, thresholds) {
+  // Find the bolt reflex structures
+  const boltStructures = neural.structures.filter(s =>
+    s.reflexArcs && s.reflexArcs.some(r => r.trigger === 'vibration_magnitude_spike')
+  );
+  if (boltStructures.length === 0) return null;
+
+  // Check each detection against bolt threshold
+  // Bolt fires on raw signal magnitude, not template confidence
+  let strongestMagnitude = 0;
+  let strongestSource = null;
+
+  for (const det of detectionInfo) {
+    // Check vibration channels specifically (bolt is vibration-triggered)
+    if (det.vibrationSNR && det.vibrationSNR > 0) {
+      // Use the vibration signal magnitude relative to distance
+      // Closer + stronger = higher magnitude
+      const magnitude = det.vibrationSNR;
+      if (magnitude > strongestMagnitude) {
+        strongestMagnitude = magnitude;
+        strongestSource = det.entity;
+      }
+    }
+    // Also check for sudden high-magnitude signals from any channel
+    // that the reflex structure monitors
+    if (det.bestSNR > strongestMagnitude * 1.5) {
+      // Exceptionally strong signal on any channel
+      strongestMagnitude = det.bestSNR;
+      strongestSource = det.entity;
+    }
+  }
+
+  if (strongestMagnitude < thresholds.bolt) return null;
+
+  // Bolt fires. Direction: crude bearing away from source, or random if unknown
+  let direction = null;
+  if (strongestSource) {
+    direction = directionAwayFrom(creature.x, creature.y,
+                                  strongestSource.x, strongestSource.y);
+  } else {
+    direction = randi(8); // random bolt — no bearing information
+  }
+
+  return { direction, magnitude: strongestMagnitude };
+}
+
+/**
+ * Threat-classification template matching.
+ *
+ * Key principle: templates fire on sufficient total confidence from
+ * ANY channel or combination. A single channel at high SNR can fire
+ * the template alone. Multiple channels at moderate SNR each contribute
+ * to total confidence. Integration improves accuracy (fewer false
+ * positives) but is not required for activation.
+ *
+ * Confidence from each channel is based on what that channel reveals:
+ * - Vibration: something is there, estimated size, whether it's moving
+ * - Visual: something is there, estimated size, bearing, shape
+ * - Chemical: clade, diet, stress state (future)
+ * Combined confidence is higher than any single channel because
+ * corroborating evidence narrows uncertainty.
+ */
+function _matchThreatTemplates(creature, neural, detectionInfo, thresholds) {
+  const threatRegion = neural.structures.find(s => s.templates === 'threat');
+  if (!threatRegion) return null;
+
+  let highestConfidence = 0;
+  let threatSource = null;
+  let threatBearing = null;
+
+  for (const det of detectionInfo) {
+    // Skip things we know are small/harmless
+    if (det.sizeRelative === 'smaller' || det.sizeRelative === 'much_smaller') continue;
+
+    // Accumulate confidence from each available channel
+    let confidence = 0;
+
+    // Vibration contribution
+    if (det.vibrationSNR && det.vibrationSNR > 0) {
+      // Stronger vibration = more confidence something large is there
+      const vibConf = Math.min(det.vibrationSNR / (thresholds.flee * 2), 0.7);
+      confidence += vibConf;
+    }
+
+    // Visual contribution
+    if (det.visualSNR && det.visualSNR > 0) {
+      // Visual confirmation — size, movement
+      const visConf = Math.min(det.visualSNR / (thresholds.flee * 2), 0.7);
+      confidence += visConf;
+    }
+
+    // Size contribution — larger things relative to self are more threatening
+    if (det.sizeRelative === 'much_larger') confidence += 0.3;
+    else if (det.sizeRelative === 'larger') confidence += 0.2;
+    else if (det.sizeRelative === 'ambiguous') confidence += 0.1;
+
+    // Diet contribution (if chemical detection available — hare has none airborne)
+    if (det.dietType === 'predator' && det.dietConfidence > 0.3) {
+      confidence += 0.3;
+    }
+
+    if (confidence > highestConfidence) {
+      highestConfidence = confidence;
+      threatSource = det.entity;
+      threatBearing = det.entity ?
+        directionAwayFrom(creature.x, creature.y, det.entity.x, det.entity.y) : null;
+    }
+  }
+
+  if (highestConfidence <= 0) return null;
+
+  return {
+    confidence: highestConfidence,
+    source: threatSource,
+    fleeBearing: threatBearing,
+    // Intensity for locomotion output — scales with confidence above flee threshold
+    fleeIntensity: Math.min(1.0, highestConfidence / thresholds.flee),
+  };
+}
+
+/**
+ * Food-identification template matching.
+ * Visual only for the hare. Produces approach signal if food is visible.
+ */
+function _matchFoodTemplates(creature, neural, detectionInfo) {
+  const foodRegion = neural.structures.find(s => s.templates === 'food_visual');
+  if (!foodRegion) return null;
+
+  // Check for food tiles visible from current position
+  // This reads from the existing food-detection system
+  const foodTarget = findNearestFoodTile(creature.x, creature.y);
+  if (!foodTarget) return null;
+
+  // Check if food is within visual range (food-identification uses head visual)
+  const d = dist(creature.x, creature.y, foodTarget.x, foodTarget.y);
+
+  // At the food tile — no approach needed, signal graze
+  if (d < 1) {
+    return {
+      target: foodTarget,
+      approachBearing: null,
+      intensity: 0, // no locomotion — creature is at the food
+      atFood: true,
+    };
+  }
+
+  // Use a simple range check — food identification doesn't need SNR,
+  // just "can the head visual see this tile"
+  const maxFoodRange = 6; // rough visual food-identification range
+  if (d > maxFoodRange) return null;
+
+  return {
+    target: foodTarget,
+    approachBearing: directionToward(creature.x, creature.y, foodTarget.x, foodTarget.y),
+    intensity: 0.3, // moderate approach intensity
+  };
+}
+
+/**
+ * Resolve competing signals at the central locomotion ganglion.
+ * Highest-intensity signal wins. Not a priority list — signal magnitude.
+ */
+function _resolveLocomotionOutput(creature, threatResult, foodResult, thresholds) {
+  // Check if threat exceeds flee threshold
+  if (threatResult && threatResult.confidence >= thresholds.flee) {
+    // Flee signal — high intensity, directional
+    creature._ganglionTriggeredStress = true;
+    return {
+      intensity: Math.min(1.0, threatResult.fleeIntensity),
+      direction: threatResult.fleeBearing,
+      source: threatResult.source,
+      type: 'flee', // cosmetic label for debug, not used for logic
+    };
+  }
+
+  // Check if threat exceeds alert threshold (suppresses food, no locomotion)
+  if (threatResult && threatResult.confidence >= thresholds.alert) {
+    // Alert — orient toward threat, hold still, mild stress
+    creature._ganglionTriggeredStress = 'mild';
+    return {
+      intensity: 0,
+      direction: threatResult.fleeBearing ? (threatResult.fleeBearing + 4) % 8 : null,
+      type: 'alert',
+    };
+  }
+
+  // No threat — check food
+  if (foodResult) {
+    return {
+      intensity: foodResult.intensity,
+      direction: foodResult.approachBearing,
+      type: 'forage',
+      atFood: foodResult.atFood || false,
+    };
+  }
+
+  // Nothing — hold still (default for vibration-dominant creature)
+  return {
+    intensity: 0,
+    direction: null,
+    type: 'hold',
+  };
+}
+
 // ==================== DELIBERATIVE OVERRIDE (Prompt O) ====================
 // After reactive layer produces a recommendation, the deliberative layer
 // attempts to override it based on integration capacity.
@@ -550,6 +841,7 @@ export {
   isReactivelyHungry, getBloodState,
   getDominantDrive,
   evaluateReactiveRules,
+  processGanglionSystem,
   canOverrideReactive, deliberativeEvaluation,
   updateGoalPersistence,
   _RULE_LABELS, _ruleLabel,

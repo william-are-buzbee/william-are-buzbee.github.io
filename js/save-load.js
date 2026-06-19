@@ -166,6 +166,10 @@ const TRANSIENT_FIELDS = [
     // Prompt S: active simulation radius — dormancy state (runtime only)
     '_dormant',             // boolean: true if creature is outside active radius
     '_dormantTurns',        // number: how many turns the creature has been dormant
+
+    // Ganglion system: per-turn flags (not persistent)
+    '_ganglionTriggeredStress',  // flag: stress release trigger this turn
+    '_lastGanglionIntensity',    // float: ganglion motor output intensity this turn
 ];
 
 /** Create a shallow copy with all transient per-turn fields removed. */
@@ -204,6 +208,8 @@ function initTransientFields(entity) {
     entity.bleedPenalty = 0;           // Prompt Q: recomputed from computeBleedPenalty
     entity._dormant = false;           // Prompt S: not dormant on load (activity check runs first turn)
     entity._dormantTurns = 0;          // Prompt S: no dormant turns accumulated
+    entity._ganglionTriggeredStress = false;  // Ganglion: no stress trigger pending
+    entity._lastGanglionIntensity = null;     // Ganglion: no intensity from last turn
 }
 
 // ==================== HELPERS ====================

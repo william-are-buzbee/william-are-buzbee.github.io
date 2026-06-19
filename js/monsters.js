@@ -795,6 +795,9 @@ function spawnMonster(key){
   m.integrationCapacity = 0;
   m.tier = 1;
 
+  // ── Stress chemistry (Ganglion system) ──
+  m.stressLevel = 0;
+
   // ── Drive system initialization (Prompt I-A) ──
   m.drives = {
     hunger: 0.15 + rand() * 0.30,   // random 0.15–0.45
