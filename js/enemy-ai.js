@@ -36,6 +36,7 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, getNeuralArchitecture, sele
          ASSESS_INTEGRATION_THRESHOLD,
          CHEM_MASS_COEFF,
          SUBSTRATE_DEPLETION_HIGH, SUBSTRATE_DEPLETION_MOD, SUBSTRATE_REGEN_RATE,
+         FAST_TWITCH_RECRUIT_THRESHOLD,
          CIRC_EFFICIENCY_CLOSED, CIRC_EFFICIENCY_OPEN, CIRC_EFFICIENCY_HYBRID,
          SPECIES_TEMPLATES,
          SPATIAL_CELL_SIZE, SPATIAL_QUERY_RADIUS,
@@ -173,13 +174,19 @@ function _depleteLocomotionSubstrate(creature) {
     }
   }
 
+  // Fast-twitch fibers only recruit above a minimum intensity.
+  // Below this threshold, locomotion is fully aerobic — slow-twitch only, zero substrate cost.
+  if (intensityFactor < FAST_TWITCH_RECRUIT_THRESHOLD) return;
+
+  const excessIntensity = intensityFactor - FAST_TWITCH_RECRUIT_THRESHOLD;
+
   for (const zone of bodyMap) {
     if (zone.destroyed) continue;
     if (!zone.locomotion) continue;
     if (zone.fiberRatio == null) continue;
 
     const fastMass = zone.muscle * zone.fiberRatio;
-    const cost = fastMass * SUBSTRATE_DEPLETION_HIGH * intensityFactor;
+    const cost = fastMass * excessIntensity * SUBSTRATE_DEPLETION_HIGH;
     zone.substrate = Math.max(0, (zone.substrate || 0) - cost);
   }
 }
