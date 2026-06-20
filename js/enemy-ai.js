@@ -215,10 +215,20 @@ function _regenerateSubstrate(creature, ticks) {
     if (zone.substrateMax == null || zone.substrateMax <= 0) continue;
     if (zone.substrate >= zone.substrateMax) continue; // already full
 
-    // Don't regenerate locomotion zones that were active this turn.
-    // (If creature acted multiple times, locomotion zones that fired on
-    //  ANY action skip regen.)
-    if (zone.locomotion && creature.movedThisTurn) continue;
+    // Only block locomotion-zone regen when movement intensity was high enough
+    // to recruit fast-twitch fibers.  Below the threshold the system is fully
+    // aerobic — regen proceeds as if the zone were at rest.
+    if (zone.locomotion && creature.movedThisTurn) {
+      let intensity;
+      if (creature._lastGanglionIntensity != null) {
+        intensity = creature._lastGanglionIntensity;
+      } else {
+        const behavior = creature.currentBehavior;
+        intensity = (behavior === 'flee' || behavior === 'flee_refuge' || behavior === 'hunt')
+          ? 1.0 : 0.25;
+      }
+      if (intensity >= FAST_TWITCH_RECRUIT_THRESHOLD) continue;
+    }
 
     const slowMass = zone.muscle * (1 - zone.fiberRatio);
     const regen = slowMass * SUBSTRATE_REGEN_RATE * circEff * timeScale;
