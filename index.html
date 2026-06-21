@@ -13,15 +13,9 @@
     --fg-dark:#3a3a3a;
     --fg-faint:#5a5a5a;
     --bg:#0a0a0a;
-    --device:#1a1a1c;
-    --device-light:#2a2a2d;
-    --device-dark:#0a0a0c;
     --accent:#b8a870;
     --empty:#555;
     --pixel-font:'Press Start 2P', 'Courier New', monospace;
-    --rpg-border:#4a4a5a;
-    --rpg-border-hi:#6a6a7a;
-    --rpg-border-lo:#2a2a3a;
   }
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{
@@ -71,17 +65,16 @@
   /* ─── RPG-style log box (bottom-left, floating over canvas) ─── */
   .log-wrapper{
     position:absolute;
-    left:6px;
-    bottom:6px;
-    width:370px;
-    height:96px;
+    left:0;
+    bottom:0;
+    width:min(420px, 45%);
+    max-height:130px;
     z-index:4;
     display:flex;
     flex-direction:column;
-    background:#08080c;
-    border:3px solid var(--rpg-border);
-    outline:2px solid #000;
-    outline-offset:0px;
+    background:linear-gradient(to top, rgba(6,6,10,0.88) 0%, rgba(6,6,10,0.55) 65%, transparent 100%);
+    padding-top:18px;
+    pointer-events:none;
   }
   .log-wrapper.minimized{
     display:none;
@@ -89,17 +82,18 @@
 
   .log{
     flex:1;
-    padding:8px 10px;
+    padding:6px 12px 8px;
     font-size:10px;
     line-height:1.7;
     overflow-y:auto;
     scrollbar-width:thin;
-    scrollbar-color:#333 #08080c;
+    scrollbar-color:#333 transparent;
     color:var(--fg);
     white-space:pre-wrap;
     pointer-events:auto;
   }
-  .log::-webkit-scrollbar{width:4px;}
+  .log::-webkit-scrollbar{width:3px;}
+  .log::-webkit-scrollbar-track{background:transparent;}
   .log::-webkit-scrollbar-thumb{background:#222;}
   .log .muted{color:var(--fg-dim);}
   .log .hit{color:#fff;}
@@ -115,13 +109,14 @@
   /* ─── Minimal HUD (always-visible HP/food bars) ─── */
   .hud{
     position:absolute;
-    top:6px;
-    right:6px;
+    top:8px;
+    right:8px;
     z-index:4;
     display:none;
     flex-direction:column;
-    gap:3px;
+    gap:2px;
     pointer-events:none;
+    /* No background, no border — just floating bars */
   }
   .hud.show{display:flex;}
   .hud-row{
@@ -130,10 +125,10 @@
     gap:4px;
   }
   .hud-bar{
-    width:68px;
-    height:6px;
-    background:#1a1a1a;
-    border:2px solid #111;
+    width:72px;
+    height:4px;
+    background:rgba(20,20,20,0.6);
+    border:none;
     overflow:hidden;
     image-rendering:pixelated;
   }
@@ -148,7 +143,7 @@
   .hud-num{
     font-family:var(--pixel-font);
     font-size:7px;
-    color:#666;
+    color:#555;
     min-width:36px;
     text-align:right;
     letter-spacing:0;
@@ -156,7 +151,7 @@
   .hud-zone-label{
     font-family:var(--pixel-font);
     font-size:7px;
-    color:#555;
+    color:#444;
     min-width:46px;
     text-align:left;
     letter-spacing:0;
@@ -166,6 +161,37 @@
     flex-direction:column;
     gap:5px;
     margin-bottom:4px;
+  }
+
+  /* ─── Region label (top-left) ─── */
+  .region-label{
+    position:absolute;
+    top:8px;
+    left:10px;
+    z-index:4;
+    font-family:var(--pixel-font);
+    font-size:8px;
+    color:#3a3a3a;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    pointer-events:none;
+  }
+
+  /* ─── Zoom indicator (bottom-right) ─── */
+  .zoom-label{
+    position:absolute;
+    bottom:8px;
+    right:10px;
+    z-index:4;
+    font-family:var(--pixel-font);
+    font-size:7px;
+    color:#2a2a2a;
+    letter-spacing:1px;
+    pointer-events:none;
+    transition:opacity 0.5s ease;
+  }
+  .zoom-label.flash{
+    color:#555;
   }
 
   /* ─── Effects list ─── */
@@ -256,7 +282,7 @@
   .game-overlay.show{display:flex;}
   .game-overlay .ov-body{
     background:#08080c;
-    border:2px solid var(--rpg-border);
+    border:2px solid #4a4a5a;
     outline:2px solid #000;
     width:320px;
     max-height:70vh;
@@ -274,7 +300,7 @@
     color:#fff;
     text-transform:uppercase;
     padding-bottom:10px;
-    border-bottom:2px solid var(--rpg-border);
+    border-bottom:2px solid #4a4a5a;
     margin-bottom:12px;
     font-weight:normal;
   }
@@ -391,7 +417,7 @@
   .modal.show{display:flex;}
   .modal-inner{
     background:#08080c;
-    border:3px solid var(--rpg-border);
+    border:3px solid #4a4a5a;
     outline:2px solid #000;
     padding:18px 24px;
     min-width:380px;
@@ -903,6 +929,8 @@
 <div class="screen" id="screen">
       <canvas id="viewport"></canvas>
 
+      <div class="region-label" id="region-label"></div>
+
       <div class="log-wrapper" id="log-wrapper">
         <div class="log" id="log"></div>
       </div>
@@ -918,6 +946,8 @@
           <span class="hud-num" id="hud-food-num"></span>
         </div>
       </div>
+
+      <div class="zoom-label" id="zoom-label">×2</div>
 
       <div class="game-overlay" id="game-overlay">
         <div class="ov-body" id="overlay-body"></div>
