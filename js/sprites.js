@@ -1,5 +1,12 @@
 // ==================== SPRITES (16x16, 2 colors) ====================
-import { PIX, SPR, COL_FG, COL_MID, BIOME } from './constants.js';
+import { COL_FG, COL_MID, BIOME } from './constants.js';
+import { SPRITE_NATIVE } from './display.js';
+
+// Sprite bake resolution: each pixel in the 16×16 art is drawn as PIX×PIX,
+// producing 32×32 canvases. Display scaling to actual tile size happens in
+// rendering.js via drawImage(sprite, ..., tileSize, tileSize).
+const SPR = SPRITE_NATIVE;
+const PIX = 2;
 
 export const S = {};
 // ---- Player body-type sprites (Clade A) ----
