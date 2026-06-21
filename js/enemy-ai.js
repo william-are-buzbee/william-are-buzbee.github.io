@@ -1401,6 +1401,91 @@ function debugCognition() {
   return rows;
 }
 
+/** Dump substrate state for all creatures with fiber data on the active layer.
+ *  Shows current substrate %, regen rate per turn, and turns to full.
+ *  Call from console: window.debugSubstrate()
+ *  Optional: window.debugSubstrate('hare') to filter by key. */
+function debugSubstrate(filterKey) {
+  const mons = monstersHere();
+  const rows = [];
+
+  // Helper: compute one zone's regen for display
+  function zoneRegen(zone, circRegenEff) {
+    const vasc = VASCULARITY_MIN + (1.0 - VASCULARITY_MIN) * (1.0 - zone.fiberRatio);
+    const frac = (zone.substrate || 0) / zone.substrateMax;
+    const boost = 1.0 + REGEN_UPREGULATION * (1.0 - frac);
+    return zone.muscle * SUBSTRATE_REGEN_BASE * circRegenEff * vasc * boost;
+  }
+
+  for (const m of mons) {
+    if (m.hp <= 0) continue;
+    if (filterKey && m.key !== filterKey) continue;
+    const bm = getBodyMap(m);
+    if (!bm) continue;
+    const circRegenEff = _getCirculatoryRegenEfficiency(m);
+
+    for (const z of bm) {
+      if (z.destroyed || z.fiberRatio == null) continue;
+      if (z.substrateMax == null || z.substrateMax <= 0) continue;
+      const pct = ((z.substrate || 0) / z.substrateMax * 100);
+      const regen = zoneRegen(z, circRegenEff);
+      // Estimate turns to full (rough — ignores the curve flattening)
+      const deficit = z.substrateMax - (z.substrate || 0);
+      const turnsToFull = deficit > 0 ? Math.ceil(deficit / regen) : 0;
+
+      rows.push({
+        name: m.name,
+        key: m.key,
+        circ: m.circulationType || '?',
+        zone: z.key,
+        loco: z.locomotion ? '✓' : '',
+        fiberRatio: z.fiberRatio.toFixed(2),
+        substrate: (z.substrate || 0).toFixed(3),
+        max: z.substrateMax.toFixed(2),
+        pct: pct.toFixed(1) + '%',
+        regen: regen.toFixed(4),
+        '~turnsToFull': turnsToFull,
+      });
+    }
+  }
+
+  // Also show player
+  const p = state.player;
+  const pbm = getBodyMap(p);
+  if (pbm) {
+    const pCirc = _getCirculatoryRegenEfficiency(p);
+    for (const z of pbm) {
+      if (z.destroyed || z.fiberRatio == null) continue;
+      if (z.substrateMax == null || z.substrateMax <= 0) continue;
+      const pct = ((z.substrate || 0) / z.substrateMax * 100);
+      const regen = zoneRegen(z, pCirc);
+      const deficit = z.substrateMax - (z.substrate || 0);
+      const turnsToFull = deficit > 0 ? Math.ceil(deficit / regen) : 0;
+      rows.push({
+        name: '>>> PLAYER',
+        key: p.species || 'player',
+        circ: p.circulationType || '?',
+        zone: z.key,
+        loco: z.locomotion ? '✓' : '',
+        fiberRatio: z.fiberRatio.toFixed(2),
+        substrate: (z.substrate || 0).toFixed(3),
+        max: z.substrateMax.toFixed(2),
+        pct: pct.toFixed(1) + '%',
+        regen: regen.toFixed(4),
+        '~turnsToFull': turnsToFull,
+      });
+    }
+  }
+
+  if (rows.length === 0) {
+    console.log('No creatures with fiber/substrate data found.');
+    return [];
+  }
+
+  console.table(rows);
+  return rows;
+}
+
 // ==================== EXPORTS ====================
 // Re-export the full public API so external modules don't need to change imports.
 
@@ -1408,7 +1493,7 @@ export { endPlayerTurn, enemyAct, playerInTerritory, monInOwnTerritory,
          syncSwarmAI, mushroomPackAI, mushroomTouch, wanderInTerritory, moveMonsterToward,
          wanderMonster, moveMonsterTowardPlayer,
          processBleed,
-         debugEcology, debugForceHunger, debugCognition };
+         debugEcology, debugForceHunger, debugCognition, debugSubstrate };
 
 // Re-exports from sub-modules
 export { monsterMelee } from './behaviors.js';
