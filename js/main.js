@@ -3,10 +3,10 @@
 // NO game logic lives here — only delegation.
 
 import { state, worlds } from './state.js';
-import { TILE, VIEW_W, VIEW_H } from './constants.js';
+import { tileSize, viewW, viewH, cycleZoom, setZoom, zoom } from './display.js';
 import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js';
 import { updateUI, hideHud } from './ui.js';
-import { canvas, ctx } from './rendering.js';
+import { canvas, ctx, resizeCanvas, render } from './rendering.js';
 
 import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks, eatAction } from './player-actions.js';
 import { terrainName } from './terrain.js';
@@ -59,16 +59,17 @@ function safeDispatch(fn, ...args) {
 }
 
 // ==================== COORDINATE HELPERS ====================
-const VIEW_OFS_X = (canvas.width  - VIEW_W * TILE) >> 1;
-const VIEW_OFS_Y = (canvas.height - VIEW_H * TILE) >> 1;
-
 function canvasToWorld(ev) {
+  const TILE = tileSize();
+  const VW = viewW();
+  const VH = viewH();
   const rect = canvas.getBoundingClientRect();
-  const cx = Math.floor(((ev.clientX - rect.left) * (canvas.width / rect.width) - VIEW_OFS_X) / TILE);
-  const cy = Math.floor(((ev.clientY - rect.top) * (canvas.height / rect.height) - VIEW_OFS_Y) / TILE);
+  // Scale from CSS pixels to canvas pixels, then to tile coordinates
+  const cx = Math.floor((ev.clientX - rect.left) * (canvas.width / rect.width) / TILE);
+  const cy = Math.floor((ev.clientY - rect.top) * (canvas.height / rect.height) / TILE);
   return {
-    wx: state.player.x - (VIEW_W >> 1) + cx,
-    wy: state.player.y - (VIEW_H >> 1) + cy,
+    wx: state.player.x - (VW >> 1) + cx,
+    wy: state.player.y - (VH >> 1) + cy,
   };
 }
 
@@ -119,6 +120,17 @@ canvas.addEventListener('contextmenu', (ev) => {
     console.error('[OverWorld Zero] examineTile failed:', err);
   }
 });
+
+// ── Zoom controls ──
+canvas.addEventListener('wheel', (ev) => {
+  ev.preventDefault();
+  // Scroll up = zoom in (larger tiles), scroll down = zoom out (smaller tiles)
+  const direction = ev.deltaY < 0 ? 1 : -1;
+  if (cycleZoom(direction)) {
+    resizeCanvas();
+    if (state.gameState === 'play') render();
+  }
+}, { passive: false });
 
 // ==================== LOG TOGGLE (TAB key) ====================
 function toggleLog() {
@@ -294,6 +306,18 @@ document.addEventListener('keydown', (ev) => {
   }
   if (isMapOpen()) {
     if (ev.key === 'Escape') { closeMap(); ev.preventDefault(); }
+    return;
+  }
+
+  // Zoom
+  if (ev.key === '=' || ev.key === '+') {
+    ev.preventDefault();
+    if (cycleZoom(1)) { resizeCanvas(); render(); }
+    return;
+  }
+  if (ev.key === '-') {
+    ev.preventDefault();
+    if (cycleZoom(-1)) { resizeCanvas(); render(); }
     return;
   }
 
@@ -495,4 +519,15 @@ window.fh  = debugForceHunger;
 window.dc  = debugCognition;
 window.ds  = debugSubstrate;
 window.debugCognition = debugCognition;
-window.state = state;    
+window.state = state;
+
+// ==================== WINDOW RESIZE ====================
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  if (state.gameState === 'play') render();
+});
+
+// ==================== ZOOM DEBUG ====================
+//   setZoom(0) → ×1 (16px)   setZoom(1) → ×2 (32px)   setZoom(2) → ×3 (48px)
+window.setZoom = (idx) => { if (setZoom(idx)) { resizeCanvas(); render(); } };
+window.zoom = zoom;

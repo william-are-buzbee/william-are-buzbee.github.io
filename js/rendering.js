@@ -1,8 +1,9 @@
 // ==================== RENDERING ====================
 import { state, worlds, covers, groundItems } from './state.js';
-import { TILE, VIEW_W, VIEW_H, LAYER_UNDER, BIOME, SNR_FULL_RENDER,
+import { LAYER_UNDER, BIOME, SNR_FULL_RENDER,
          SPECIES_DISPLAY_CONFIDENCE, MARKER_MIN_RADIUS, MARKER_MAX_RADIUS,
          MARKER_MASS_MIN, MARKER_MASS_MAX } from './constants.js';
+import { tileSize, viewW, viewH, zoom } from './display.js';
 import { T, terrainInfo } from './terrain.js';
 import { spriteCache, tintedSprite, tintedMonsterSprite, COLOR_PALETTES } from './sprites.js';
 import { inBounds, isTownCell, monsterAt, getCover } from './world-state.js';
@@ -10,19 +11,26 @@ import { updateUI } from './ui.js';
 import { drawTimeTint } from './time-cycle.js';
 
 export const canvas = document.getElementById('viewport');
-canvas.width  = VIEW_W * TILE;
-canvas.height = VIEW_H * TILE;
-
-// Publish viewport dimensions as CSS custom properties so the device shell,
-// overlays, and display-size canvas all derive from VIEW_W / VIEW_H / TILE.
-document.documentElement.style.setProperty('--vp-w', canvas.width  + 'px');
-document.documentElement.style.setProperty('--vp-h', canvas.height + 'px');
-
 export const ctx = canvas.getContext('2d');
-ctx.imageSmoothingEnabled = false;
-canvas.style.imageRendering = 'pixelated';
 
-const S = TILE / 32;
+/**
+ * Resize canvas to match current viewport dimensions.
+ * Called on zoom change, window resize, and initial load.
+ */
+export function resizeCanvas() {
+  const ts = tileSize();
+  const vw = viewW();
+  const vh = viewH();
+  canvas.width = vw * ts;
+  canvas.height = vh * ts;
+  ctx.imageSmoothingEnabled = false;
+  // Update CSS custom properties for overlay/modal sizing
+  document.documentElement.style.setProperty('--vp-w', canvas.width + 'px');
+  document.documentElement.style.setProperty('--vp-h', canvas.height + 'px');
+}
+
+// Initial sizing
+resizeCanvas();
 
 // ---- Ground item display priority ----
 // When multiple items share a tile, render only the highest-priority one.
@@ -37,18 +45,18 @@ function groundItemPriority(stack) {
   return best;
 }
 
-const VIEW_OFS_X = (canvas.width  - VIEW_W * TILE) >> 1;
-const VIEW_OFS_Y = (canvas.height - VIEW_H * TILE) >> 1;
-
 function render(){
+  const TILE = tileSize();
+  const VW = viewW();
+  const VH = viewH();
+  const S = TILE / 32;
+  const currentZoom = zoom();
+
   ctx.fillStyle = '#000';
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  ctx.save();
-  ctx.translate(VIEW_OFS_X, VIEW_OFS_Y);
-
-  const ox = state.player.x - (VIEW_W>>1);
-  const oy = state.player.y - (VIEW_H>>1);
+  const ox = state.player.x - (VW >> 1);
+  const oy = state.player.y - (VH >> 1);
   const layer = state.player.layer;
   const coverGrid = covers[layer];
 
@@ -58,8 +66,8 @@ function render(){
   const fovVisible = state.fovSet;
   const fovExplored = state.explored[layer];
 
-  for (let vy=0; vy<VIEW_H; vy++){
-    for (let vx=0; vx<VIEW_W; vx++){
+  for (let vy=0; vy<VH; vy++){
+    for (let vx=0; vx<VW; vx++){
       const wx = ox+vx, wy = oy+vy;
       const px = vx*TILE, py = vy*TILE;
 
@@ -135,8 +143,8 @@ function render(){
         ctx.drawImage(tintedSprite(groundSpriteName, groundInfo.palette), px, py, TILE, TILE);
       }
 
-      // ---- Ground decorations ----
-      if (!cover && !monsterAt(wx,wy,layer) && !(wx===state.player.x && wy===state.player.y)){
+      // ---- Ground decorations (skip at ×1 for performance/clarity) ----
+      if (currentZoom >= 2 && !cover && !monsterAt(wx,wy,layer) && !(wx===state.player.x && wy===state.player.y)){
         const decor = tileHash;
         ctx.save();
         ctx.translate(px, py);
@@ -368,7 +376,7 @@ function render(){
     }
   }
 
-  drawTimeTint(ctx, 0, 0, VIEW_W * TILE, VIEW_H * TILE, layer);
+  drawTimeTint(ctx, 0, 0, VW * TILE, VH * TILE, layer);
 
   // ── Prompt Q: Species-confidence gated rendering of non-visual detections ──
   // Below SPECIES_DISPLAY_CONFIDENCE: generic size-scaled blob (no species info).
@@ -384,7 +392,7 @@ function render(){
       const svx = creature.x - ox;
       const svy = creature.y - oy;
       // Skip if outside the viewport
-      if (svx < 0 || svx >= VIEW_W || svy < 0 || svy >= VIEW_H) continue;
+      if (svx < 0 || svx >= VW || svy < 0 || svy >= VH) continue;
       const spx = svx * TILE;
       const spy = svy * TILE;
 
@@ -416,7 +424,6 @@ function render(){
   }
 
   canvas.classList.toggle('stealth', state.player.stealth);
-  ctx.restore();
   const logEl = document.getElementById('log');
   if (logEl) logEl.scrollTop = logEl.scrollHeight;
   updateUI();
@@ -505,6 +512,8 @@ function drawUnidentifiedMarker(ctx, sizeEstimate, screenX, screenY, tileSize) {
 
 // Draw monster and player at a tile position
 function drawEntityAtTile(wx, wy, px, py, layer){
+  const TILE = tileSize();
+  const S = TILE / 32;
   const mon = monsterAt(wx, wy, layer);
   if (mon){
     let tintColor = null;

@@ -1,6 +1,7 @@
 // ==================== CONSTANTS ====================
-export const TILE = 48, PIX = 2, SPR = 16;
-export const VIEW_W = 19, VIEW_H = 15;
+// Display constants (TILE, VIEW_W, VIEW_H) moved to display.js — they are now
+// dynamic, computed from window size and zoom level.
+// Sprite source resolution: SPRITE_NATIVE = 16 (in display.js).
 
 export const W_SURF = 224, H_SURF = 224;
 
