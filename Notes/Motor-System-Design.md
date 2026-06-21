@@ -72,7 +72,7 @@ When a moderate-intensity signal arrives:
 
 The local substrate stored in muscle tissue is a physical consequence of having muscle. More muscle stores more substrate, because the substrate is stored in the cells themselves. There is no separate "energy pool" stat. The substrate level is a property of the tissue, the way blood volume is a property of body mass.
 
-Substrate is consumed when fast-contracting fibers fire. It is regenerated when the zone is at low activity, at a rate determined by the zone's slow-contracting fiber mass (which houses the aerobic regeneration machinery) and the creature's circulatory efficiency (which determines fuel and oxygen delivery to the zone).
+Substrate is consumed when fast-contracting fibers fire. It is regenerated when the zone is at low activity, at a rate driven by total muscle mass (every cell has resynthesis enzymes), circulatory regeneration efficiency (nutrient delivery at rest), vascularity (capillary density, correlated with oxidative fiber content), and enzymatic upregulation (resynthesis enzymes are more active when stores are depleted, producing a front-loaded recovery curve).
 
 A zone that has been heavily recruited at high intensity has depleted substrate. The same zone receiving the same high-intensity signal will now produce less force — not because a game rule reduces it, but because the fast-contracting fibers have no fuel. The slow-contracting fibers still respond (they're circulatory-sustained), so the zone still produces force. It's just slower and weaker than when substrate was available.
 
@@ -171,9 +171,9 @@ This connects to the existing clade architecture patterns. Clade A's distributed
 
 **Body Map (Body-Sim-Design.md):** The body map is the source of truth for motor capability. Zone muscle mass, fiber composition, and local substrate determine tissue response. Pathway topology determines which zones can be recruited from which coordinating centers. Neural allocation determines coordinating center capacity. The motor system reads all of this. It never writes to the body map — tissue changes come from damage, healing, and mutation.
 
-**Muscle Fiber & Energy (Muscle-Fiber-Design.md):** Fiber composition determines how tissue responds to different activation intensities. Local substrate determines whether fast-contracting fibers can fire. Circulatory efficiency determines slow-contracting fiber performance and substrate regeneration rate. The motor system sends activation signals. The fiber and energy system determines what those signals physically produce.
+**Muscle Fiber & Energy (Muscle-Fiber-Design.md):** Fiber composition determines how tissue responds to different activation intensities. Local substrate determines whether fast-contracting fibers can fire. Circulatory efficiency determines slow-contracting fiber performance during exertion; circulatory regeneration efficiency (a separate, gentler measure) determines substrate regeneration rate at rest. The motor system sends activation signals. The fiber and energy system determines what those signals physically produce.
 
-**Circulation (Circulatory-Immune-Design.md):** Circulatory type determines the aerobic ceiling — how effectively slow-contracting fibers perform and how quickly local substrate regenerates during low activity. The motor system doesn't read circulation directly. Tissue responds according to its state, and circulation affects tissue state continuously in the background.
+**Circulation (Circulatory-Immune-Design.md):** Circulatory type determines the aerobic ceiling — how effectively slow-contracting fibers perform during exertion. Circulatory regeneration efficiency (a separate measure with a gentler penalty for open systems) determines how quickly local substrate regenerates during low activity. The motor system doesn't read circulation directly. Tissue responds according to its state, and circulation affects tissue state continuously in the background.
 
 ## Implementation Sequence
 

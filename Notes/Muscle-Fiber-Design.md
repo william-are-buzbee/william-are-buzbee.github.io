@@ -53,15 +53,25 @@ A zone that isn't receiving high-intensity activation consumes negligible substr
 
 ### Regeneration
 
-Substrate regenerates when the zone is at low activity. The regeneration machinery is housed in the aerobic infrastructure of the zone's slow-contracting fibers, fueled by circulatory delivery:
+Substrate regenerates when the zone is at low activity. Every muscle cell — regardless of fiber type — has the enzymatic machinery to resynthesize substrate from circulating blood sugar. The rate limiter is circulatory delivery of raw material and the activity level of the resynthesis enzymes, not which fiber type the cell is.
 
 ```
-regenRate = zone.slowContractingMass × SUBSTRATE_REGEN_COEFF × circulationEfficiency
+vascularityFactor = VASCULARITY_MIN + (1.0 - VASCULARITY_MIN) × (1 - zone.fiberRatio)
+depletionBoost = 1.0 + REGEN_UPREGULATION × (1.0 - substrateFraction)
+regenRate = zone.muscle × SUBSTRATE_REGEN_BASE × circRegenEfficiency × vascularityFactor × depletionBoost
 ```
 
-Where `circulationEfficiency` reflects the creature's circulatory type (see Circulatory-Immune-Design.md). More efficient circulation delivers fuel and clears waste faster, accelerating regeneration.
+Four factors govern the rate:
 
-A zone with more slow-contracting fiber mass regenerates faster — it has more aerobic machinery. A zone that is almost entirely fast-contracting (fiberRatio 0.9) regenerates very slowly — there's very little aerobic infrastructure to do the work. This is a physical trade-off: extreme burst capability comes with slow recovery.
+**Total muscle mass.** More muscle means more cells, more enzymatic capacity to process delivered substrate. This is the primary driver — every cell contributes, not just one fiber type.
+
+**Circulatory regeneration efficiency.** How effectively the circulatory system delivers blood sugar to the zone at rest. This uses separate efficiency values from the aerobic force output constants because the physical process is different. Aerobic force output requires real-time oxygen delivery under load — open circulation genuinely struggles there. Substrate regeneration happens at rest, over minutes, with the muscle slowly absorbing circulating sugar. Open circulation (hemolymph bathing tissue directly) is adequate for this; the penalty is modest (roughly 20%) rather than severe (35% for aerobic output).
+
+**Vascularity.** Oxidative fibers correlate with higher capillary density — more blood vessels per unit volume, because those fibers rely on constant circulatory delivery for normal operation. A zone with high fiberRatio has fewer capillaries and receives somewhat less blood flow, slowing nutrient delivery. This is a secondary modifier (25-35% penalty at extreme fiberRatio), not the primary bottleneck. A purely fast-twitch zone still regenerates — it just receives less blood flow per unit volume.
+
+**Enzymatic upregulation (depletion boost).** The resynthesis enzyme is allosterically inhibited by its own product — when substrate stores are full, the enzyme slows down. When stores are depleted, the enzyme is maximally active. This produces a front-loaded recovery curve: rapid initial resynthesis that tapers as stores approach capacity. An empty zone refills its first 50% much faster than its last 50%. This is the mechanism that allows prey animals to recover functional sprint capacity within minutes of a bolt — the enzymatic acceleration at low stores does the heavy lifting.
+
+The combination of these factors means that a heavily fast-twitch zone with open circulation (like the hare's rear locomotion) has a slower baseline regeneration rate, but the depletion boost ensures functional recovery is fast enough to survive repeated predator encounters. A mixed-fiber zone with closed circulation (like a prowler's locomotion) regenerates faster at baseline because it has better vascularity and better circulatory delivery.
 
 ### Consequences of Per-Zone Substrate
 
@@ -120,6 +130,8 @@ Substrate consumption is negligible because fast-contracting fibers aren't recru
 The key interaction: fast-contracting fibers don't need efficient circulation. They burn substrate stored locally, without oxygen. Slow-contracting fibers depend entirely on circulatory oxygen delivery.
 
 A creature's circulatory type selectively affects one end of the fiber spectrum. Efficient circulation (closed systems) gets full value from slow-contracting fibers. Less efficient circulation (open systems) gets reduced value. Both get full value from fast-contracting fibers because those fibers don't use circulatory delivery.
+
+Circulation affects substrate regeneration through a different mechanism and with a different penalty than aerobic force output. During exertion, the muscle needs oxygen delivered in real time — open circulation genuinely struggles here (lower pressure, non-directed flow, hemocyanin carrying less oxygen per volume). The aerobic output penalty for open circulation is substantial. During rest, the muscle slowly rebuilds substrate stores from circulating blood sugar — hemolymph bathing tissue directly is adequate for this slow, steady nutrient uptake. The regeneration penalty for open circulation is modest. These are separate physical processes with separate efficiency values.
 
 Consequence: creatures with less efficient circulation naturally evolve toward higher fiberRatio in high-demand zones, because fast-contracting fibers give them the most return on muscle investment. This is an evolutionary outcome that body maps should reflect for species with open circulation — not a rule imposed on the design.
 
@@ -181,7 +193,7 @@ Implementation details, exact AP thresholds, and per-action costs are deferred t
 
 1. **Add `fiberRatio` to all body map zones.** One float per zone. Use species profiles and the hare data entry prompt as starting values. No behavioral change yet.
 
-2. **Add per-zone substrate.** `substrateMax` derived from zone muscle mass × `SUBSTRATE_PER_KG_MUSCLE`. `substrate` initialized to max. Depleted by high-intensity motor activation on the zone, regenerated during low activity at a rate gated by the zone's slow-contracting mass and creature's circulatory efficiency.
+2. **Add per-zone substrate.** `substrateMax` derived from zone muscle mass × `SUBSTRATE_PER_KG_MUSCLE`. `substrate` initialized to max. Depleted by high-intensity motor activation on the zone, regenerated during low activity at a rate driven by total muscle mass, circulatory regeneration efficiency, vascularity (capillary density correlated with oxidative fiber content), and enzymatic upregulation (front-loaded curve — faster refill when stores are low).
 
 3. **Modify speed to read fiber composition and per-zone substrate.** Replace `locoMuscle / totalMass` with per-zone force summation. Each locomotion zone contributes force based on its fiber composition and current substrate level. This makes speed dynamic. Still uses the probabilistic bonus-move system until AP is built.
 
