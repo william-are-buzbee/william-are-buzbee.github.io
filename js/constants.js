@@ -609,11 +609,22 @@ export const HP_PER_KG = 5;
 export const SUBSTRATE_PER_KG_MUSCLE = 5.0;
 export const SUBSTRATE_DEPLETION_HIGH = 0.12;   // fraction of zone's fast-contracting mass consumed per turn at max intensity
 export const SUBSTRATE_DEPLETION_MOD  = 0.03;   // fraction consumed per turn at moderate intensity (wander, forage)
-export const SUBSTRATE_REGEN_RATE     = 0.04;   // fraction of zone's slow-contracting mass regenerated per turn at rest
 export const FAST_TWITCH_RECRUIT_THRESHOLD = 0.4; // intensity below this is fully aerobic — no substrate depletion
-export const CIRC_EFFICIENCY_CLOSED   = 1.0;    // circulatory efficiency for closed systems
-export const CIRC_EFFICIENCY_OPEN     = 0.65;   // circulatory efficiency for open systems
-export const CIRC_EFFICIENCY_HYBRID   = 0.85;   // circulatory efficiency for hybrid systems
+export const CIRC_EFFICIENCY_CLOSED   = 1.0;    // circulatory efficiency for closed systems (aerobic force output)
+export const CIRC_EFFICIENCY_OPEN     = 0.65;   // circulatory efficiency for open systems (aerobic force output)
+export const CIRC_EFFICIENCY_HYBRID   = 0.85;   // circulatory efficiency for hybrid systems (aerobic force output)
+
+// Substrate regeneration — biologically grounded formula (replaces SUBSTRATE_REGEN_RATE).
+// Every muscle cell independently resynthesizes substrate from circulating nutrients via
+// enzymatic activity. Rate scales with total muscle mass (enzymatic capacity), circulatory
+// nutrient delivery at rest, capillary density (correlated with oxidative fiber content),
+// and enzymatic upregulation when stores are depleted (front-loaded recovery curve).
+export const SUBSTRATE_REGEN_BASE     = 0.08;   // base substrate regenerated per kg muscle per turn (before modifiers)
+export const CIRC_REGEN_EFF_CLOSED    = 1.0;    // circulatory regen efficiency — closed systems (full nutrient delivery)
+export const CIRC_REGEN_EFF_OPEN      = 0.80;   // circulatory regen efficiency — open systems (adequate at rest, lower pressure)
+export const CIRC_REGEN_EFF_HYBRID    = 0.90;   // circulatory regen efficiency — hybrid systems
+export const VASCULARITY_MIN          = 0.65;   // minimum vascularity factor for pure fast-twitch muscle (fiberRatio 1.0)
+export const REGEN_UPREGULATION       = 3.0;    // enzymatic upregulation when substrate stores are depleted (boost multiplier at empty)
 
 // ==================== GANGLION SYSTEM (Hare Vertical Slice) ====================
 // Thresholds for the ganglion-based behavior system.  Only creatures with

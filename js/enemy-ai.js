@@ -35,7 +35,9 @@ import { DMG, LAYER_META, LAYER_SURFACE, getBodyMap, getNeuralArchitecture, sele
          MIN_SEEK, SEEK_SCALE, PERSISTENCE_SCALE,
          ASSESS_INTEGRATION_THRESHOLD,
          CHEM_MASS_COEFF,
-         SUBSTRATE_DEPLETION_HIGH, SUBSTRATE_DEPLETION_MOD, SUBSTRATE_REGEN_RATE,
+         SUBSTRATE_DEPLETION_HIGH, SUBSTRATE_DEPLETION_MOD,
+         SUBSTRATE_REGEN_BASE, CIRC_REGEN_EFF_CLOSED, CIRC_REGEN_EFF_OPEN, CIRC_REGEN_EFF_HYBRID,
+         VASCULARITY_MIN, REGEN_UPREGULATION,
          FAST_TWITCH_RECRUIT_THRESHOLD,
          CIRC_EFFICIENCY_CLOSED, CIRC_EFFICIENCY_OPEN, CIRC_EFFICIENCY_HYBRID,
          SPECIES_TEMPLATES,
@@ -147,6 +149,24 @@ function _getCirculatoryEfficiency(entity) {
   return CIRC_EFFICIENCY_CLOSED; // safe default
 }
 
+/** Get circulatory efficiency for substrate regeneration (nutrient delivery at rest).
+ *  Separate from _getCirculatoryEfficiency which governs aerobic force output.
+ *  Open circulation is less penalized at rest because hemolymph bathing tissue
+ *  directly is adequate for slow, steady nutrient uptake. */
+function _getCirculatoryRegenEfficiency(entity) {
+  const circType = entity.circulationType;
+  if (circType === 'closed') return CIRC_REGEN_EFF_CLOSED;
+  if (circType === 'open')   return CIRC_REGEN_EFF_OPEN;
+  if (circType === 'hybrid') return CIRC_REGEN_EFF_HYBRID;
+  if (entity.species) {
+    const template = SPECIES_TEMPLATES[entity.species];
+    if (template && template.circulationType) {
+      return _getCirculatoryRegenEfficiency({ circulationType: template.circulationType });
+    }
+  }
+  return CIRC_REGEN_EFF_CLOSED;
+}
+
 /**
  * Deplete substrate from locomotion zones based on movement intensity.
  * High intensity (flee, chase): fast-contracting fibers fully recruited.
@@ -202,11 +222,26 @@ function _depleteLocomotionSubstrate(creature) {
  * @param {object} creature
  * @param {number} [ticks=1] — world-time elapsed; scales regen proportionally.
  */
+/**
+ * Regenerate substrate on all zones that are at low activity.
+ * 
+ * Regen rate scales with:
+ *   - total muscle mass (enzymatic capacity — every cell has glycogen synthase)
+ *   - circulatory regen efficiency (nutrient delivery at rest)
+ *   - vascularity factor (capillary density, correlated with oxidative fiber content)
+ *   - depletion boost (enzymatic upregulation when stores are low — front-loaded curve)
+ *
+ * Locomotion zones that were used at high intensity this turn do NOT regenerate.
+ * All other zones with substrate below max regenerate.
+ *
+ * @param {object} creature
+ * @param {number} [ticks=1] — world-time elapsed; scales regen proportionally.
+ */
 function _regenerateSubstrate(creature, ticks) {
   const bodyMap = getBodyMap(creature);
   if (!bodyMap) return;
 
-  const circEff = _getCirculatoryEfficiency(creature);
+  const circRegenEff = _getCirculatoryRegenEfficiency(creature);
   const timeScale = ticks || 1.0;
 
   for (const zone of bodyMap) {
@@ -216,7 +251,7 @@ function _regenerateSubstrate(creature, ticks) {
     if (zone.substrate >= zone.substrateMax) continue; // already full
 
     // Only block locomotion-zone regen when movement intensity was high enough
-    // to recruit fast-twitch fibers.  Below the threshold the system is fully
+    // to recruit fast-twitch fibers. Below the threshold the system is fully
     // aerobic — regen proceeds as if the zone were at rest.
     if (zone.locomotion && creature.movedThisTurn) {
       let intensity;
@@ -230,8 +265,16 @@ function _regenerateSubstrate(creature, ticks) {
       if (intensity >= FAST_TWITCH_RECRUIT_THRESHOLD) continue;
     }
 
-    const slowMass = zone.muscle * (1 - zone.fiberRatio);
-    const regen = slowMass * SUBSTRATE_REGEN_RATE * circEff * timeScale;
+    // Vascularity: oxidative fibers correlate with capillary density.
+    // Pure fast-twitch zones have fewer capillaries (reduced nutrient delivery).
+    const vascularityFactor = VASCULARITY_MIN + (1.0 - VASCULARITY_MIN) * (1.0 - zone.fiberRatio);
+
+    // Enzymatic upregulation: glycogen synthase is more active when stores are low.
+    // Produces a front-loaded recovery curve — rapid initial refill, long tail to full.
+    const substrateFraction = (zone.substrate || 0) / zone.substrateMax;
+    const depletionBoost = 1.0 + REGEN_UPREGULATION * (1.0 - substrateFraction);
+
+    const regen = zone.muscle * SUBSTRATE_REGEN_BASE * circRegenEff * vascularityFactor * depletionBoost * timeScale;
     zone.substrate = Math.min(zone.substrateMax, (zone.substrate || 0) + regen);
   }
 }
@@ -1047,15 +1090,25 @@ function endPlayerTurn(action){
   {
     const playerBodyMap = getBodyMap(state.player);
     if (playerBodyMap) {
-      const circEff = _getCirculatoryEfficiency(state.player);
+      const circRegenEff = _getCirculatoryRegenEfficiency(state.player);
       for (const zone of playerBodyMap) {
         if (zone.destroyed || zone.fiberRatio == null) continue;
         if (zone.substrateMax == null || zone.substrateMax <= 0) continue;
         if (zone.substrate >= zone.substrateMax) continue;
-        // Locomotion zones that just moved skip regen this turn
-        if (zone.locomotion && state.player.movedThisTurn) continue;
-        const slowMass = zone.muscle * (1 - zone.fiberRatio);
-        const regen = slowMass * SUBSTRATE_REGEN_RATE * circEff;
+
+        // Block regen on locomotion zones only when movement was high-intensity.
+        // Walking/foraging is aerobic — regen proceeds normally.
+        if (zone.locomotion && state.player.movedThisTurn) {
+          // Player currently always moves at moderate intensity (SUBSTRATE_DEPLETION_MOD).
+          // Future: sprint action would set a flag for high intensity.
+          const playerIntensity = 0.25; // moderate — below FAST_TWITCH_RECRUIT_THRESHOLD
+          if (playerIntensity >= FAST_TWITCH_RECRUIT_THRESHOLD) continue;
+        }
+
+        const vascularityFactor = VASCULARITY_MIN + (1.0 - VASCULARITY_MIN) * (1.0 - zone.fiberRatio);
+        const substrateFraction = (zone.substrate || 0) / zone.substrateMax;
+        const depletionBoost = 1.0 + REGEN_UPREGULATION * (1.0 - substrateFraction);
+        const regen = zone.muscle * SUBSTRATE_REGEN_BASE * circRegenEff * vascularityFactor * depletionBoost;
         zone.substrate = Math.min(zone.substrateMax, (zone.substrate || 0) + regen);
       }
     }
