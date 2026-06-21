@@ -419,11 +419,21 @@ function updateHud(d) {
     c.num.textContent = Math.round(pct) + '%';
   }
 
+  // Hide zone bars when everything is healthy — no news is good news
+  const anyDamaged = zones.some(z => z.destroyed || z.hp < z.maxHp);
+  _hudZones.style.display = anyDamaged ? '' : 'none';
+
   // Food bar
   const fedPct = Math.max(0, Math.min(100, d.fedPct));
   _hudFoodBar.style.width = fedPct + '%';
   _hudFoodBar.className = 'hud-bar-fill food' + (d.fedWarn ? ' warn' : '');
   _hudFoodNum.textContent = Math.round(state.player.fed) + '%';
+
+  // Dim food bar when well-fed — it's only urgent information when low
+  const foodRow = _hudFoodBar.closest('.hud-row');
+  if (foodRow) {
+    foodRow.style.opacity = d.fedWarn ? '1.0' : '0.5';
+  }
 
   // Blood bar (matches HP/food bar style)
   if (_hudBloodRow && _hudBloodBar && _hudBloodNum) {
@@ -436,6 +446,12 @@ function updateHud(d) {
     } else {
       _hudBloodRow.style.display = 'none';
     }
+  }
+
+  // Region label
+  const regionEl = document.getElementById('region-label');
+  if (regionEl) {
+    regionEl.textContent = d.regionName || '';
   }
 }
 

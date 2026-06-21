@@ -121,6 +121,17 @@ canvas.addEventListener('contextmenu', (ev) => {
   }
 });
 
+// ── Zoom label updater ──
+function updateZoomLabel() {
+  const label = document.getElementById('zoom-label');
+  if (label) {
+    label.textContent = '×' + zoom();
+    label.classList.add('flash');
+    clearTimeout(label._fadeTimer);
+    label._fadeTimer = setTimeout(() => label.classList.remove('flash'), 800);
+  }
+}
+
 // ── Zoom controls ──
 canvas.addEventListener('wheel', (ev) => {
   ev.preventDefault();
@@ -129,6 +140,7 @@ canvas.addEventListener('wheel', (ev) => {
   if (cycleZoom(direction)) {
     resizeCanvas();
     if (state.gameState === 'play') render();
+    updateZoomLabel();
   }
 }, { passive: false });
 
@@ -312,12 +324,12 @@ document.addEventListener('keydown', (ev) => {
   // Zoom
   if (ev.key === '=' || ev.key === '+') {
     ev.preventDefault();
-    if (cycleZoom(1)) { resizeCanvas(); render(); }
+    if (cycleZoom(1)) { resizeCanvas(); render(); updateZoomLabel(); }
     return;
   }
   if (ev.key === '-') {
     ev.preventDefault();
-    if (cycleZoom(-1)) { resizeCanvas(); render(); }
+    if (cycleZoom(-1)) { resizeCanvas(); render(); updateZoomLabel(); }
     return;
   }
 
@@ -494,6 +506,7 @@ function drawTitleBackdrop() {
   }
 }
 drawTitleBackdrop();
+updateZoomLabel();
 
 // ==================== STARTUP ====================
 // Migration + async title-button check. Wrapped in async IIFE because
@@ -529,5 +542,5 @@ window.addEventListener('resize', () => {
 
 // ==================== ZOOM DEBUG ====================
 //   setZoom(0) → ×1 (16px)   setZoom(1) → ×2 (32px)   setZoom(2) → ×3 (48px)
-window.setZoom = (idx) => { if (setZoom(idx)) { resizeCanvas(); render(); } };
+window.setZoom = (idx) => { if (setZoom(idx)) { resizeCanvas(); render(); updateZoomLabel(); } };
 window.zoom = zoom;
