@@ -12,10 +12,11 @@ import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion,
 import { terrainName } from './terrain.js';
 import { inBounds, getCover, monsterAt as worldMonsterAt } from './world-state.js';
 import { getItems } from './ground-items.js';
-import { setOnPlayerDeathCallback, debugEcology, debugForceHunger, debugCognition } from './enemy-ai.js';
+import { setOnPlayerDeathCallback, debugEcology, debugForceHunger, debugCognition, debugSubstrate } from './enemy-ai.js';
 window.debugEcology = debugEcology;
 window.debugForceHunger = debugForceHunger;
 window.debugCognition = debugCognition;
+window.debugSubstrate = debugSubstrate;
 import { setOnVictoryCallback, toggleStealth } from './combat.js';
 import { useAction, showHelp, examineTile, readBook } from './interactions.js';
 import { log } from './log.js';
@@ -485,10 +486,13 @@ drawTitleBackdrop();
 // ==================== DEBUG / ECOLOGY TESTING ====================
 // Console helpers — call from browser devtools:
 //   dbg()        → table of all creature drives, behavior, prey counts
+//   ds()         → table of substrate %, regen rate, turns to full (all creatures + player)
+//   ds('hare')   → filter to hares only
 //   fh(0.85)     → force all predators to hunger 0.85 (triggers hunting)
 //   fh(0.95)     → starving — extended chase, fights through damage
 window.dbg = debugEcology;
 window.fh  = debugForceHunger;
 window.dc  = debugCognition;
+window.ds  = debugSubstrate;
 window.debugCognition = debugCognition;
 window.state = state;    
