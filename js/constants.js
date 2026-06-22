@@ -662,6 +662,14 @@ export const VIB_AIR_RANGE_COEFF     = 1.15;  // air vibration range coefficient
 export const VIS_RANGE_COEFF         = 1.9;   // visual range = cbrt(detectability × light) × sensitivity × coeff
 export const MAX_DETECTION_DISTANCE  = 40;    // absolute ceiling — nothing detected beyond this
 
+// ── Ambient terrain sensing ──
+// Per-channel coefficients: tiles of ambient awareness per unit of transducer quality.
+// These determine how far each sensory channel reveals terrain around the creature.
+// Ambient sensing marks terrain as explored; it does NOT reveal entities.
+export const AMBIENT_VISUAL_PERIPH  = 0.65;  // peripheral range as fraction of foveal view radius
+export const AMBIENT_CHEM_COEFF     = 4.0;   // tiles per unit chemical.airborne quality
+export const AMBIENT_VIB_COEFF      = 3.0;   // tiles per unit vibration.ground quality
+
 // --- Spatial Hash Grid (Prompt R) ---
 export const SPATIAL_CELL_SIZE    = 16;   // tiles per cell side
 export const SPATIAL_QUERY_RADIUS = 1;    // cells beyond center to query (1 = 3×3 neighborhood)

@@ -57,7 +57,7 @@ import { placeItem, generateItemId } from './ground-items.js';
 import { fedDrainFor } from './player-actions.js';
 import { advanceTick, getTimePhase, currentTimePhase } from './time-cycle.js';
 import { saveGame } from './save-load.js';
-import { updatePlayerFOV, hasLOS } from './fov.js';
+import { updatePlayerFOV, updateAmbientSensing, hasLOS } from './fov.js';
 import { computeSignals } from './signals.js';
 
 // ── Imports from new modules ──
@@ -1222,6 +1222,7 @@ function endPlayerTurn(action){
     if (monsters[layer]) monsters[layer] = monsters[layer].filter(m => m.hp > 0);
   }
   updatePlayerFOV();  // recompute FOV before rendering
+  updateAmbientSensing();  // ambient terrain sensing — extends explored set (no entities)
   computePlayerPerception();  // Prompt N: detect creatures through non-visual senses
   render();
   saveGame().catch(err => console.error('[Save] Auto-save failed:', err));  // Async fire-and-forget

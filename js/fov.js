@@ -32,7 +32,15 @@
 
 import { worlds, covers, state } from './state.js';
 import { inBounds, getCover } from './world-state.js';
-import { tileBlocksVision, tileHasVisionPenalty } from './terrain.js';
+import { T, tileBlocksVision, tileHasVisionPenalty } from './terrain.js';
+
+// Ambient terrain sensing — constants and the player body-map accessor.
+// getBodyMap is defined in constants.js (enemy-ai.js and combat.js both import
+// it from there); importing from constants.js avoids a circular dependency.
+import {
+  AMBIENT_VISUAL_PERIPH, AMBIENT_CHEM_COEFF, AMBIENT_VIB_COEFF,
+  getBodyMap,
+} from './constants.js';
 
 // Import player stat functions here to avoid circular dependency issues.
 // player.js has no dependency on fov.js, so this is safe.
@@ -367,5 +375,161 @@ export function updatePlayerFOV() {
   const exp = state.explored[layer];
   for (const key of vis) {
     exp.add(key);
+  }
+}
+
+// ==================== AMBIENT TERRAIN SENSING ====================
+// Passive, multi-channel terrain awareness around the player creature.
+// Runs AFTER updatePlayerFOV() each turn. The directed foveal cone reveals
+// terrain AND entities at high fidelity; ambient sensing extends only the
+// *terrain* knowledge (the explored set) using channels that don't require a
+// directed gaze: peripheral vision, airborne chemical signatures, and
+// substrate-borne vibration. No entities are revealed here.
+//
+// Per-channel radii are computed from the creature's best transducer quality
+// for that channel across all NON-destroyed body-map zones. Because the max is
+// taken over live zones each turn, destroying transducer zones physically
+// shrinks the relevant channel's reach (see Ambient-Terrain-Sensing-Design.md).
+
+/**
+ * Get terrain-based modifiers for ambient sensing channels.
+ * Based on the ground tile and cover at the creature's position — local terrain
+ * governs how well each signal propagates outward.
+ * Returns { chem, vib }. The visual peripheral uses an LOS check instead of a
+ * scalar modifier, so it has no entry here.
+ *
+ * @param {number} layer
+ * @param {number} x, y — creature position
+ * @returns {{chem: number, vib: number}}
+ */
+function _getAmbientTerrainModifiers(layer, x, y) {
+  const ground = worlds[layer]?.[y]?.[x];
+  const cover = getCover(layer, x, y);
+
+  // Default modifiers (open terrain / grassland)
+  let chem = 1.0;
+  let vib = 0.9;
+
+  // Underground (cave layer): stagnant air pools volatiles, rock carries vibration well.
+  const isCave = ground === T.CAVE_FLOOR || ground === T.CAVE_WALL || ground === T.CAVE_ROCK;
+
+  if (isCave) {
+    chem = 0.15;
+    vib = 1.2;
+  } else if (cover === T.FOREST || cover === T.MUSHFOREST) {
+    // Canopy traps volatiles; organic floor dampens vibration.
+    chem = 0.45;
+    vib = 0.7;
+  } else if (ground === T.SAND) {
+    // Decent air diffusion, terrible vibration propagation.
+    chem = 0.85;
+    vib = 0.3;
+  } else if (ground === T.ROCK) {
+    // Exposed rock: good air, excellent vibration.
+    chem = 0.9;
+    vib = 1.2;
+  } else if (ground === T.WATER) {
+    // Standing water: water volatiles dominate, vibration confused.
+    chem = 0.8;
+    vib = 0.5;
+  }
+  // else: grass/default → chem 1.0, vib 0.9
+
+  return { chem, vib };
+}
+
+/**
+ * Mark all in-bounds tiles within a circular radius as explored.
+ * No line-of-sight check — used for omnidirectional non-visual channels
+ * (chemical diffusion, vibration propagation), which travel around/through
+ * obstacles rather than along sightlines.
+ *
+ * @param {number} layer
+ * @param {number} ox, oy — origin
+ * @param {number} radius — circle radius in tiles (may be fractional)
+ * @param {Set<string>} explored — accumulator set of "x,y" keys
+ */
+function _markCircleExplored(layer, ox, oy, radius, explored) {
+  const r = Math.ceil(radius);
+  const r2 = radius * radius;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r2) continue;
+      const wx = ox + dx;
+      const wy = oy + dy;
+      if (inBounds(layer, wx, wy)) {
+        explored.add(`${wx},${wy}`);
+      }
+    }
+  }
+}
+
+/**
+ * Mark tiles as explored based on the player creature's ambient sensory channels.
+ * Runs AFTER updatePlayerFOV() each turn. Extends exploration beyond the foveal
+ * cone using peripheral vision, chemical airborne sensing, and vibration ground
+ * sensing.
+ *
+ *   Visual peripheral — full-circle shadowcast at 65% of view radius (needs LOS).
+ *   Chemical airborne — omnidirectional circle, no LOS (volatiles diffuse around obstacles).
+ *   Vibration ground  — omnidirectional circle, no LOS (propagates through substrate).
+ *
+ * Entities are NOT revealed — only terrain is marked as explored. state.fovSet
+ * is never touched. Player creature only; NPCs do not compute ambient sensing.
+ */
+export function updateAmbientSensing() {
+  const p = state.player;
+  if (!p) return;
+
+  const layer = p.layer;
+
+  // Ensure explored set exists for this layer
+  if (!state.explored[layer]) {
+    state.explored[layer] = new Set();
+  }
+  const explored = state.explored[layer];
+
+  // ── Read transducer qualities from body map (best across non-destroyed zones) ──
+  const bodyMap = getBodyMap(p);
+  let maxChemAirborne = 0;
+  let maxVibGround = 0;
+
+  if (bodyMap) {
+    for (const zone of bodyMap) {
+      if (zone.destroyed) continue;
+      const chem = zone.transducers?.chemical?.airborne;
+      if (chem != null && chem > maxChemAirborne) maxChemAirborne = chem;
+      const vib = zone.transducers?.vibration?.ground;
+      if (vib != null && vib > maxVibGround) maxVibGround = vib;
+    }
+  }
+
+  // ── Terrain modifiers for current position ──
+  const mods = _getAmbientTerrainModifiers(layer, p.x, p.y);
+
+  // ── 1. Visual peripheral (full-circle shadowcast, LOS required) ──
+  // View radius already bakes in visual capability, light level, and time-of-day,
+  // so the peripheral range is simply a fraction of the foveal radius.
+  const fovealRadius = playerViewRadius(p);
+  const peripheralRadius = Math.round(fovealRadius * AMBIENT_VISUAL_PERIPH);
+  if (peripheralRadius > 1) {
+    // Full-circle FOV with tree transparency rolls — same machinery as the
+    // foveal cone, but omnidirectional and shorter range.
+    const peripheralFOV = computeFOV(layer, p.x, p.y, peripheralRadius, p.per);
+    for (const key of peripheralFOV) {
+      explored.add(key);
+    }
+  }
+
+  // ── 2. Chemical airborne (omnidirectional circle, no LOS) ──
+  const chemRadius = maxChemAirborne * AMBIENT_CHEM_COEFF * mods.chem;
+  if (chemRadius >= 1) {
+    _markCircleExplored(layer, p.x, p.y, chemRadius, explored);
+  }
+
+  // ── 3. Vibration ground (omnidirectional circle, no LOS) ──
+  const vibRadius = maxVibGround * AMBIENT_VIB_COEFF * mods.vib;
+  if (vibRadius >= 1) {
+    _markCircleExplored(layer, p.x, p.y, vibRadius, explored);
   }
 }
