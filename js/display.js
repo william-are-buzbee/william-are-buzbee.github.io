@@ -24,15 +24,15 @@ export function zoom() {
 
 /** Viewport width in tiles (always odd for centered player). */
 export function viewW() {
-  let vw = Math.floor(window.innerWidth / tileSize());
-  if (vw % 2 === 0) vw--;
+  let vw = Math.ceil(window.innerWidth / tileSize());
+  if (vw % 2 === 0) vw++;
   return Math.max(3, vw); // floor at 3 for absurdly small windows
 }
 
 /** Viewport height in tiles (always odd for centered player). */
 export function viewH() {
-  let vh = Math.floor(window.innerHeight / tileSize());
-  if (vh % 2 === 0) vh--;
+  let vh = Math.ceil(window.innerHeight / tileSize());
+  if (vh % 2 === 0) vh++;
   return Math.max(3, vh);
 }
 

@@ -121,6 +121,17 @@ canvas.addEventListener('contextmenu', (ev) => {
   }
 });
 
+// ── UI zoom (HUD/log/labels magnification, independent of world zoom) ──
+const UI_ZOOM_LEVELS = [1, 1.5, 2];
+let _uiZoomIndex = 0;
+
+function cycleUIZoom(direction) {
+  const next = _uiZoomIndex + direction;
+  if (next < 0 || next >= UI_ZOOM_LEVELS.length) return;
+  _uiZoomIndex = next;
+  document.documentElement.style.setProperty('--ui-zoom', UI_ZOOM_LEVELS[_uiZoomIndex]);
+}
+
 // ── Zoom label updater ──
 function updateZoomLabel() {
   const label = document.getElementById('zoom-label');
@@ -333,6 +344,10 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
+  // UI zoom (scales HUD, log, labels) — [ decrease, ] increase
+  if (ev.key === ']') { ev.preventDefault(); cycleUIZoom(1); return; }
+  if (ev.key === '[') { ev.preventDefault(); cycleUIZoom(-1); return; }
+
   // L key: enter look mode
   if (kLow === 'l') {
     ev.preventDefault();
@@ -544,3 +559,4 @@ window.addEventListener('resize', () => {
 //   setZoom(0) → ×1 (16px)   setZoom(1) → ×2 (32px)   setZoom(2) → ×3 (48px)
 window.setZoom = (idx) => { if (setZoom(idx)) { resizeCanvas(); render(); updateZoomLabel(); } };
 window.zoom = zoom;
+window.uiZoom = () => UI_ZOOM_LEVELS[_uiZoomIndex];
