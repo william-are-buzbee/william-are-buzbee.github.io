@@ -38,9 +38,17 @@ import { T, tileBlocksVision, tileHasVisionPenalty } from './terrain.js';
 // getBodyMap is defined in constants.js (enemy-ai.js and combat.js both import
 // it from there); importing from constants.js avoids a circular dependency.
 import {
-  AMBIENT_VISUAL_PERIPH, AMBIENT_CHEM_COEFF, AMBIENT_VIB_COEFF,
+  AMBIENT_VISUAL_COEFF, AMBIENT_CHEM_COEFF, AMBIENT_VIB_COEFF,
+  LAYER_SURFACE, LAYER_META,
   getBodyMap,
 } from './constants.js';
+
+// Per-species vision profiles (cone angles). monsters.js does not import fov.js,
+// and VISION_PROFILES is only read at call time, so this introduces no cycle.
+import { VISION_PROFILES } from './monsters.js';
+
+// Time-of-day phase for the ambient visual light modifier.
+import { getTimePhase } from './time-cycle.js';
 
 // Import player stat functions here to avoid circular dependency issues.
 // player.js has no dependency on fov.js, so this is safe.
@@ -339,9 +347,6 @@ export function hasLOS(layer, x0, y0, x1, y1, per) {
 
 // ==================== FOV STATE MANAGEMENT ====================
 
-// Player cone angle — matches the humanoid default from VISION_PROFILES.
-const PLAYER_CONE_ANGLE = 150;
-
 /**
  * Recompute the player's FOV and update state.fovSet + state.explored.
  * Uses cone + awareness bubble for the player.
@@ -357,11 +362,20 @@ export function updatePlayerFOV() {
   const awareR = awarenessRadius(p);
   const { dx: fdx, dy: fdy } = state.facing;
 
+  // Look up the species-specific foveal cone angle from the vision profiles.
+  // bodyMapKey is the creatureKey (e.g. 'wolf', 'hare'); fall back to species.
+  // The 150° fallback only applies if the species has no profile entry, or has
+  // a radius-type profile with no coneAngle (e.g. cave_crab) — a safe default,
+  // not the primary path.
+  const creatureKey = p.bodyMapKey || p.species;
+  const visionProfile = VISION_PROFILES[creatureKey];
+  const coneAngle = visionProfile ? (visionProfile.coneAngle || 150) : 150;
+
   const vis = computeConeFOV(
     layer, p.x, p.y,
     coneDepth, awareR,
     fdx, fdy,
-    PLAYER_CONE_ANGLE,
+    coneAngle,
     p.per
   );
 
@@ -465,12 +479,43 @@ function _markCircleExplored(layer, ox, oy, radius, explored) {
 }
 
 /**
+ * Get the ambient light modifier for visual peripheral sensing.
+ * Peripheral vision requires light — it collapses in darkness.
+ * Mirrors the darkness/time-of-day logic in creatureViewRadius() (player.js)
+ * but returns a 0–1 modifier instead of a tile count.
+ * Returns 0.0 (no light) to 1.0 (full daylight).
+ *
+ * @param {number} layer
+ * @returns {number} light modifier in [0, 1]
+ */
+function _getVisualLightModifier(layer) {
+  // Determine if the current layer is "dark" (underground, lava, etc.).
+  // Surface and town/shop interiors use time-based lighting; everything else is dark.
+  const meta = LAYER_META[layer];
+  const layerType = meta ? meta.type : (layer === LAYER_SURFACE ? 'surface' : 'underground');
+  const isDark = layerType !== 'surface' && layerType !== 'town' && layerType !== 'shop';
+
+  if (isDark) return 0.0;  // no ambient light underground
+
+  // Surface — time of day governs available light.
+  const { phase } = getTimePhase(state.worldTick);
+  switch (phase) {
+    case 'day':   return 1.0;
+    case 'dawn':  return 0.5;
+    case 'dusk':  return 0.5;
+    case 'night': return 0.0;   // no peripheral vision in darkness
+    default:      return 1.0;
+  }
+}
+
+/**
  * Mark tiles as explored based on the player creature's ambient sensory channels.
  * Runs AFTER updatePlayerFOV() each turn. Extends exploration beyond the foveal
  * cone using peripheral vision, chemical airborne sensing, and vibration ground
  * sensing.
  *
- *   Visual peripheral — full-circle shadowcast at 65% of view radius (needs LOS).
+ *   Visual peripheral — full-circle shadowcast from the body map's best visual
+ *                        transducer quality × coefficient × light modifier (needs LOS).
  *   Chemical airborne — omnidirectional circle, no LOS (volatiles diffuse around obstacles).
  *   Vibration ground  — omnidirectional circle, no LOS (propagates through substrate).
  *
@@ -491,12 +536,15 @@ export function updateAmbientSensing() {
 
   // ── Read transducer qualities from body map (best across non-destroyed zones) ──
   const bodyMap = getBodyMap(p);
+  let maxVisualQuality = 0;
   let maxChemAirborne = 0;
   let maxVibGround = 0;
 
   if (bodyMap) {
     for (const zone of bodyMap) {
       if (zone.destroyed) continue;
+      const vis = zone.transducers?.visual || 0;
+      if (vis > maxVisualQuality) maxVisualQuality = vis;
       const chem = zone.transducers?.chemical?.airborne;
       if (chem != null && chem > maxChemAirborne) maxChemAirborne = chem;
       const vib = zone.transducers?.vibration?.ground;
@@ -508,13 +556,14 @@ export function updateAmbientSensing() {
   const mods = _getAmbientTerrainModifiers(layer, p.x, p.y);
 
   // ── 1. Visual peripheral (full-circle shadowcast, LOS required) ──
-  // View radius already bakes in visual capability, light level, and time-of-day,
-  // so the peripheral range is simply a fraction of the foveal radius.
-  const fovealRadius = playerViewRadius(p);
-  const peripheralRadius = Math.round(fovealRadius * AMBIENT_VISUAL_PERIPH);
+  // Computed directly from the body map's best visual transducer quality,
+  // modulated by available light. The foveal cone depth is deliberately short
+  // for gameplay tension and must NOT drive the terrain-awareness radius.
+  const lightMod = _getVisualLightModifier(layer);
+  const peripheralRadius = Math.round(maxVisualQuality * AMBIENT_VISUAL_COEFF * lightMod);
   if (peripheralRadius > 1) {
     // Full-circle FOV with tree transparency rolls — same machinery as the
-    // foveal cone, but omnidirectional and shorter range.
+    // foveal cone, but omnidirectional and longer range.
     const peripheralFOV = computeFOV(layer, p.x, p.y, peripheralRadius, p.per);
     for (const key of peripheralFOV) {
       explored.add(key);
