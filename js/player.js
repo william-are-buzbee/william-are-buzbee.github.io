@@ -4,7 +4,7 @@ import { DMG, LAYER_SURFACE, PRICE_CAT, LAYER_META,
          MAX_DODGE_CHANCE,
          BASE_ACCURACY, ACC_PER_VISUAL, STEALTH_SIZE_COEFF,
          CREATURE_PATHWAYS, SPECIES_TEMPLATES, initBodyMap, getAvailableAttacks,
-         computeStrikeDamage } from './constants.js';
+         computeStrikeDamage, getVisualAcuity } from './constants.js';
 import { getTimePhase } from './time-cycle.js';
 import { state } from './state.js';
 import { rand, randomRound } from './rng.js';
@@ -107,7 +107,10 @@ function freshPlayer(speciesKey, colorPalette){
         const vib = z.transducers.vibration;
         const vibVal = (vib && typeof vib === 'object') ? Math.max(vib.ground || 0, vib.air || 0, vib.water || 0) : (vib || 0);
         if (vibVal > bestVib) bestVib = vibVal;
-        if ((z.transducers.visual || 0) > bestVis) bestVis = z.transducers.visual;
+        // Visual: support new structured format { acuity, placement, fieldAngle }
+        // and legacy flat number via the shared accessor.
+        const visAcuity = getVisualAcuity(z);
+        if (visAcuity > bestVis) bestVis = visAcuity;
       }
     }
     p.chem = Math.max(1, bestChem * 10);

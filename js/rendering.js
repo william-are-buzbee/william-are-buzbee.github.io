@@ -62,8 +62,9 @@ function render(){
 
   // FOV visibility — when fovSet is null (first frame before any action),
   // treat all tiles as visible for backward compatibility.
-  const fovActive  = state.fovSet !== null;
-  const fovVisible = state.fovSet;
+  const fovActive   = state.fovSet !== null;
+  const fovVisible  = state.fovSet;       // binocular tier (bright, full detail)
+  const fovMonocular = state.monocularSet; // monocular tier (lightly dimmed)
   const fovExplored = state.explored[layer];
 
   for (let vy=0; vy<VH; vy++){
@@ -80,6 +81,9 @@ function render(){
       // ---- FOV: tile visibility state ----
       const tileKey = `${wx},${wy}`;
       const isVisible  = !fovActive || fovVisible.has(tileKey);
+      // Monocular: covered by exactly one eye — only meaningful when FOV is
+      // active and the tile is not already binocular-visible.
+      const isMonocular = fovActive && !isVisible && fovMonocular && fovMonocular.has(tileKey);
       const isExplored = !fovActive || (fovExplored && fovExplored.has(tileKey));
 
       // Unexplored: pure black
@@ -364,14 +368,22 @@ function render(){
         }
       }
 
-      // ---- FOV: fog overlay for seen-but-not-visible tiles ----
-      if (!isVisible){
+      // ---- FOV: three visual tiers ----
+      // Binocular (visible): full brightness, full entity detail.
+      // Monocular: entity drawn, then a light overlay communicates reduced clarity.
+      // Explored/ambient (neither): dimmed terrain, no entities.
+      if (isVisible){
+        drawEntityAtTile(wx, wy, px, py, layer);
+      } else if (isMonocular){
+        // Draw the entity FIRST, then dim it lightly so monocular targets read
+        // as "I can see this, but not as clearly."
+        drawEntityAtTile(wx, wy, px, py, layer);
+        ctx.fillStyle = 'rgba(0,0,0,0.18)';
+        ctx.fillRect(px, py, TILE, TILE);
+      } else {
         ctx.fillStyle = 'rgba(0,0,0,0.42)';
         ctx.fillRect(px, py, TILE, TILE);
-        // Entities are NOT drawn on remembered-but-not-visible tiles
-      } else {
-        // ---- Entities (monster, player) ----
-        drawEntityAtTile(wx, wy, px, py, layer);
+        // Entities are NOT drawn on remembered/ambient-sensed tiles
       }
     }
   }
@@ -387,6 +399,11 @@ function render(){
     for (const sensed of state.player.sensedCreatures) {
       const creature = sensed.creature;
       const bestSNR = sensed.bestSNR || 1;
+
+      // Skip if already rendered as a visible entity (binocular or monocular) —
+      // drawEntityAtTile handled it in the tile loop above.
+      if (fovVisible && fovVisible.has(`${creature.x},${creature.y}`)) continue;
+      if (fovMonocular && fovMonocular.has(`${creature.x},${creature.y}`)) continue;
 
       // Convert world position to viewport position
       const svx = creature.x - ox;

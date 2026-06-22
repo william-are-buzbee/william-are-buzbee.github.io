@@ -873,7 +873,7 @@ export const BODY_MAPS = {
       exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.80, structural: 0.60, neural: 0.85, sensory: 0.50, connective: 0.75, mass: 3.5,
       neuralAllocation: { chemicalProcessing: 0.25, visualProcessing: 0.10, episodicMemory: 0.18, integration: 0.15, motorCoordination: 0.08, threatAssessment: 0.04, patternLibrary: 0.05 },
-      transducers: { chemical: { contact: 2, airborne: 6, dissolved: 0 }, visual: 3, vibration: { ground: 0, air: 2, water: 0 } },
+      transducers: { chemical: { contact: 2, airborne: 6, dissolved: 0 }, visual: { acuity: 3, placement: 'forward', fieldAngle: 120 }, vibration: { ground: 0, air: 2, water: 0 } },
       locomotion: false, vital: false,
       attacks: [{ key: 'bite', name: 'Bite', baseDamage: 4, damageType: 'puncture', accuracy: 0.80, canReflex: false, footprintModifier: 0.15 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
@@ -943,7 +943,7 @@ export const BODY_MAPS = {
       exposure: ['front', 'front_left', 'front_right'],
       muscle: 2.00, structural: 1.60, neural: 1.26, sensory: 0.90, connective: 2.24, mass: 8.0,
       neuralAllocation: { chemicalProcessing: 0.38, visualProcessing: 0.20, episodicMemory: 0.26, integration: 0.20, motorCoordination: 0.10, threatAssessment: 0.06, patternLibrary: 0.06 },
-      transducers: { chemical: { contact: 2, airborne: 7, dissolved: 0 }, visual: 4, vibration: { ground: 0, air: 3, water: 0 } },
+      transducers: { chemical: { contact: 2, airborne: 7, dissolved: 0 }, visual: { acuity: 4, placement: 'forward', fieldAngle: 120 }, vibration: { ground: 0, air: 3, water: 0 } },
       locomotion: false, vital: false,
       attacks: [{ key: 'bite', name: 'Bite', baseDamage: 8, damageType: 'puncture', accuracy: 0.80, canReflex: false, footprintModifier: 0.15 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
@@ -1014,7 +1014,7 @@ export const BODY_MAPS = {
       muscle: 0.04, structural: 0.06, neural: 0.042, sensory: 0.08, connective: 0.058, mass: 0.28,
       fiberRatio: 0.15, substrate: 0.20, substrateMax: 0.20,
       neuralAllocation: { visualProcessing: 0.020, vibrationProcessing: 0.010, patternLibrary: 0.008, motorControl: 0.004 },
-      transducers: { visual: 4, vibration: { ground: 0, air: 1, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 } },
+      transducers: { visual: { acuity: 4, placement: 'lateral', fieldAngle: 170 }, vibration: { ground: 0, air: 1, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 } },
       locomotion: false, vital: false,
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
@@ -1109,7 +1109,7 @@ export const BODY_MAPS = {
       exposure: ['front', 'front_left', 'front_right'],
       muscle: 2.50, structural: 2.80, neural: 1.10, sensory: 1.00, connective: 4.60, mass: 12.0,
       neuralAllocation: { chemicalProcessing: 0.28, visualProcessing: 0.26, episodicMemory: 0.22, integration: 0.14, motorCoordination: 0.10, patternLibrary: 0.08, threatAssessment: 0.02 },
-      transducers: { chemical: { contact: 4, airborne: 5, dissolved: 0 }, visual: 5, vibration: { ground: 0, air: 2, water: 0 } },
+      transducers: { chemical: { contact: 4, airborne: 5, dissolved: 0 }, visual: { acuity: 5, placement: 'lateral', fieldAngle: 150 }, vibration: { ground: 0, air: 2, water: 0 } },
       locomotion: false, vital: false,
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
@@ -1244,7 +1244,7 @@ export const BODY_MAPS = {
       exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.40, structural: 0.50, neural: 0.28, sensory: 0.35, connective: 0.67, mass: 2.2,
       neuralAllocation: { visualProcessing: 0.12, vibrationProcessing: 0.06, integration: 0.05, motorControl: 0.03, patternLibrary: 0.02 },
-      transducers: { visual: 3, vibration: { ground: 0, air: 2, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 } },
+      transducers: { visual: { acuity: 3, placement: 'forward', fieldAngle: 120 }, vibration: { ground: 0, air: 2, water: 0 }, chemical: { contact: 0, airborne: 0, dissolved: 0 } },
       locomotion: false, vital: false,
       attacks: [{ key: 'bite', name: 'Bite', baseDamage: 4, damageType: 'puncture', accuracy: 0.80, canReflex: false, footprintModifier: 0.15 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
@@ -1292,7 +1292,7 @@ export const BODY_MAPS = {
       exposure: ['rear', 'rear_left', 'left'],
       muscle: 1.80, structural: 0.45, neural: 0.18, sensory: 0.12, connective: 0.35, mass: 2.9,
       neuralAllocation: { vibrationProcessing: 0.06, visualProcessing: 0.04, motorControl: 0.05, patternLibrary: 0.03 },
-      transducers: { vibration: { ground: 2, air: 1, water: 0 }, visual: 1, chemical: { contact: 0, airborne: 0, dissolved: 0 } },
+      transducers: { vibration: { ground: 2, air: 1, water: 0 }, visual: { acuity: 1, placement: 'forward', fieldAngle: 120 }, chemical: { contact: 0, airborne: 0, dissolved: 0 } },
       locomotion: true, vital: false,
       attacks: [{ key: 'kick', name: 'Kick', baseDamage: 4, damageType: 'blunt', accuracy: 0.80, canReflex: true, footprintModifier: 0.35 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
@@ -1300,7 +1300,7 @@ export const BODY_MAPS = {
       exposure: ['rear', 'rear_right', 'right'],
       muscle: 1.80, structural: 0.45, neural: 0.18, sensory: 0.12, connective: 0.35, mass: 2.9,
       neuralAllocation: { vibrationProcessing: 0.06, visualProcessing: 0.04, motorControl: 0.05, patternLibrary: 0.03 },
-      transducers: { vibration: { ground: 2, air: 1, water: 0 }, visual: 1, chemical: { contact: 0, airborne: 0, dissolved: 0 } },
+      transducers: { vibration: { ground: 2, air: 1, water: 0 }, visual: { acuity: 1, placement: 'forward', fieldAngle: 120 }, chemical: { contact: 0, airborne: 0, dissolved: 0 } },
       locomotion: true, vital: false,
       attacks: [{ key: 'kick', name: 'Kick', baseDamage: 4, damageType: 'blunt', accuracy: 0.80, canReflex: true, footprintModifier: 0.35 }],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
@@ -1356,7 +1356,7 @@ export const BODY_MAPS = {
       exposure: ['front', 'front_left', 'front_right'],
       muscle: 0.80, structural: 0.60, neural: 0.85, sensory: 0.50, connective: 0.75, mass: 3.5,
       neuralAllocation: { chemicalProcessing: 0.25, visualProcessing: 0.10, episodicMemory: 0.18, integration: 0.15, motorCoordination: 0.08, threatAssessment: 0.04, patternLibrary: 0.05 },
-      transducers: { chemical: { contact: 2, airborne: 6, dissolved: 0 }, visual: 3, vibration: { ground: 0, air: 2, water: 0 } },
+      transducers: { chemical: { contact: 2, airborne: 6, dissolved: 0 }, visual: { acuity: 3, placement: 'forward', fieldAngle: 120 }, vibration: { ground: 0, air: 2, water: 0 } },
       locomotion: false, vital: false,
       attacks: [],
       bleedRate: 0.5, bleedThreshold: 0.3, destroyed: false },
@@ -1727,6 +1727,47 @@ export function getBodyMap(entity) {
     return BODY_MAPS[entity.key] || null;
   }
   return null;
+}
+
+// ==================== VISUAL TRANSDUCER ACCESSORS ====================
+// The visual transducer on a zone is a structured object describing a physical
+// eye: { acuity, placement, fieldAngle }. The legacy flat-number format
+// (visual: 4) is still accepted so older saves and any unconverted data keep
+// working. These accessors are the single source of truth for reading eye data
+// — every module that needs visual quality or eye optics goes through them.
+
+/**
+ * Read visual acuity from a zone's transducer data.
+ * Handles both the new structured format { acuity, placement, fieldAngle }
+ * and the legacy flat number format.
+ * @param {object} zone — a body-map zone
+ * @returns {number} acuity (0 if no visual transducer)
+ */
+export function getVisualAcuity(zone) {
+  const v = zone?.transducers?.visual;
+  if (v == null) return 0;
+  if (typeof v === 'number') return v;      // legacy: visual: 4
+  return v.acuity || 0;                     // new: visual: { acuity: 4, ... }
+}
+
+/**
+ * Read the full visual transducer config from a zone.
+ * Returns { acuity, placement, fieldAngle } or null if no visual transducer.
+ * Handles the legacy flat-number format by returning a forward/120° default.
+ * @param {object} zone — a body-map zone
+ * @returns {{acuity:number, placement:string, fieldAngle:number}|null}
+ */
+export function getVisualConfig(zone) {
+  const v = zone?.transducers?.visual;
+  if (v == null || v === 0) return null;
+  if (typeof v === 'number') {
+    return { acuity: v, placement: 'forward', fieldAngle: 120 }; // legacy default
+  }
+  return {
+    acuity: v.acuity || 0,
+    placement: v.placement || 'forward',
+    fieldAngle: v.fieldAngle || 120,
+  };
 }
 
 // Initialize a per-instance body map for a creature or player.

@@ -34,7 +34,13 @@ export const state = {
   // ---- Field of Vision ----
   // fovSet: Set of "x,y" strings for tiles currently visible this turn.
   // Recomputed each player action; read by the renderer.
+  // With the per-eye visual field, this is the BINOCULAR tier (covered by 2+
+  // eyes) — the bright, full-detail identification zone.
   fovSet: null,
+  // monocularSet: Set of "x,y" strings covered by exactly one eye this turn.
+  // The lightly-dimmed middle rendering tier between binocular (fovSet) and
+  // ambient/explored. Recomputed each player action alongside fovSet.
+  monocularSet: null,
   // explored: { layerIndex → Set<"x,y"> } — tiles the player has ever seen.
   // Persists across turns so revisiting shows remembered terrain (dimmed).
   explored: {},
