@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
   :root{
+    --ui-zoom:1;
     --fg:#e8e8e8;
     --fg-dim:#8a8a8a;
     --fg-dark:#3a3a3a;
@@ -68,13 +69,30 @@
     left:0;
     bottom:0;
     width:min(420px, 45%);
-    max-height:130px;
+    height:130px;                    /* starting height — user can resize */
     z-index:4;
     display:flex;
     flex-direction:column;
     background:linear-gradient(to top, rgba(6,6,10,0.88) 0%, rgba(6,6,10,0.55) 65%, transparent 100%);
     padding-top:18px;
     pointer-events:none;
+    zoom:var(--ui-zoom);
+  }
+  .log-drag-top{
+    position:absolute;
+    top:-2px; left:0; right:10px;
+    height:6px;
+    cursor:ns-resize;
+    pointer-events:auto;
+    z-index:5;
+  }
+  .log-drag-right{
+    position:absolute;
+    top:0; right:-2px; bottom:0;
+    width:6px;
+    cursor:ew-resize;
+    pointer-events:auto;
+    z-index:5;
   }
   .log-wrapper.minimized{
     display:none;
@@ -114,19 +132,20 @@
     z-index:4;
     display:none;
     flex-direction:column;
-    gap:2px;
+    gap:4px;
     pointer-events:none;
+    zoom:var(--ui-zoom);
     /* No background, no border — just floating bars */
   }
   .hud.show{display:flex;}
   .hud-row{
     display:flex;
     align-items:center;
-    gap:4px;
+    gap:6px;
   }
   .hud-bar{
-    width:72px;
-    height:4px;
+    width:180px;
+    height:8px;
     background:rgba(20,20,20,0.6);
     border:none;
     overflow:hidden;
@@ -142,17 +161,17 @@
   .hud-bar-fill.food.warn{background:#c86a5a;}
   .hud-num{
     font-family:var(--pixel-font);
-    font-size:7px;
-    color:#555;
-    min-width:36px;
+    font-size:10px;
+    color:#666;
+    min-width:44px;
     text-align:right;
     letter-spacing:0;
   }
   .hud-zone-label{
     font-family:var(--pixel-font);
-    font-size:7px;
-    color:#444;
-    min-width:46px;
+    font-size:10px;
+    color:#555;
+    min-width:56px;
     text-align:left;
     letter-spacing:0;
   }
@@ -175,6 +194,7 @@
     letter-spacing:1.5px;
     text-transform:uppercase;
     pointer-events:none;
+    zoom:var(--ui-zoom);
   }
 
   /* ─── Zoom indicator (bottom-right) ─── */
@@ -189,6 +209,7 @@
     letter-spacing:1px;
     pointer-events:none;
     transition:opacity 0.5s ease;
+    zoom:var(--ui-zoom);
   }
   .zoom-label.flash{
     color:#555;
@@ -932,6 +953,8 @@
       <div class="region-label" id="region-label"></div>
 
       <div class="log-wrapper" id="log-wrapper">
+        <div class="log-drag-top" id="log-drag-top"></div>
+        <div class="log-drag-right" id="log-drag-right"></div>
         <div class="log" id="log"></div>
       </div>
 
@@ -1019,6 +1042,63 @@
       this.classList.remove('show');
     }
   });
+
+  // ── Log resize drag handles ──
+  (function() {
+    const logWrapper = document.getElementById('log-wrapper');
+    const dragTop = document.getElementById('log-drag-top');
+    const dragRight = document.getElementById('log-drag-right');
+    if (!logWrapper || !dragTop || !dragRight) return;
+
+    // Account for CSS zoom on the wrapper
+    function getUIZoom() {
+      const z = getComputedStyle(document.documentElement).getPropertyValue('--ui-zoom');
+      return parseFloat(z) || 1;
+    }
+
+    // ── Top handle: resize height ──
+    dragTop.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startY = e.clientY;
+      const startH = logWrapper.offsetHeight;
+      const uiZoom = getUIZoom();
+
+      function onMove(e) {
+        // Dragging up (negative deltaY) = taller
+        const delta = (startY - e.clientY) / uiZoom;
+        const newH = Math.max(60, Math.min(window.innerHeight * 0.7, startH + delta));
+        logWrapper.style.height = newH + 'px';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    // ── Right handle: resize width ──
+    dragRight.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startW = logWrapper.offsetWidth;
+      const uiZoom = getUIZoom();
+
+      function onMove(e) {
+        const delta = (e.clientX - startX) / uiZoom;
+        const newW = Math.max(200, Math.min(window.innerWidth * 0.7, startW + delta));
+        logWrapper.style.width = newW + 'px';
+      }
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  })();
 </script>
 <script type="module" src="js/main.js"></script>
 </body>
