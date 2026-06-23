@@ -2,14 +2,16 @@
 // The conductor: wires modules, binds input, runs the state machine.
 // NO game logic lives here — only delegation.
 
-import { state, worlds } from './state.js';
+import { state, worlds, covers } from './state.js';
 import { tileSize, viewW, viewH, cycleZoom, setZoom, zoom } from './display.js';
+// LEGACY POPUP: modal.js still used by ground items, shops, NPC dialogue, books.
+// Migrate these features to HUD-native patterns, then remove this import.
 import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js';
-import { updateUI, hideHud } from './ui.js';
+import { updateUI, hideHud, toggleStatusPanel, closeStatusPanel, isStatusPanelOpen } from './ui.js';
 import { canvas, ctx, resizeCanvas, render } from './rendering.js';
 
 import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks, eatAction } from './player-actions.js';
-import { terrainName } from './terrain.js';
+import { terrainName, terrainInfo } from './terrain.js';
 import { inBounds, getCover, monsterAt as worldMonsterAt } from './world-state.js';
 import { getItems } from './ground-items.js';
 import { setOnPlayerDeathCallback, debugEcology, debugForceHunger, debugCognition, debugSubstrate } from './enemy-ai.js';
@@ -21,11 +23,12 @@ window.debugSubstrate = debugSubstrate;
 window.scentAt = debugScentAt;
 window.scentStats = debugScentStats;
 import { setOnVictoryCallback, toggleStealth } from './combat.js';
-import { useAction, showHelp, examineTile, readBook } from './interactions.js';
+import { useAction, showHelp, readBook } from './interactions.js';
 import { log } from './log.js';
 import { openCharGen, renderCharGen, randomizeAttrs, beginGame, onPlayerDeath, onVictory } from './chargen.js';
 import { hasSave, tryResume, deleteSave, migrateFromLocalStorage } from './save-load.js';
 import { isMapOpen, toggleMap, closeMap, markCurrentCell } from './worldmap.js';
+// LEGACY POPUP: overlay.js still used by inventory panel. Migrate to HUD-native.
 import { isOverlayOpen, activePanel, togglePanel, closeOverlay, setInventoryActions } from './overlay.js';
 
 
@@ -33,6 +36,7 @@ import { isOverlayOpen, activePanel, togglePanel, closeOverlay, setInventoryActi
 setUpdateUICallback(updateUI);
 setOnPlayerDeathCallback(() => { deleteSave().catch(e => console.error('[Save]', e)); onPlayerDeath(); });
 setOnVictoryCallback(() => { deleteSave().catch(e => console.error('[Save]', e)); onVictory(); });
+// LEGACY POPUP: ground pickup still uses modal. Migrate to HUD-native.
 setGroundModalCallbacks(openModal, closeModal);
 setInventoryActions({
   eat:       (i) => eatItem(i),
@@ -118,9 +122,9 @@ canvas.addEventListener('contextmenu', (ev) => {
   if (state.gameState !== 'play' || modalEl.classList.contains('show')) return;
   const { wx, wy } = canvasToWorld(ev);
   try {
-    examineTile(wx, wy);
+    inspectTile(wx, wy);
   } catch (err) {
-    console.error('[OverWorld Zero] examineTile failed:', err);
+    console.error('[OverWorld Zero] inspectTile failed:', err);
   }
 });
 
@@ -259,6 +263,93 @@ function lookAtTile(tx, ty) {
   log(parts.join(' '), 'system');
 }
 
+// ==================== RIGHT-CLICK TILE INSPECTION → LOG ====================
+// Replaces the old popup/overlay examineTile. Pushes terse log entries
+// based on the player's current visibility of the tile.
+
+/** Right-click tile inspection — log-only, visibility gated. */
+function inspectTile(tx, ty) {
+  const layer = state.player.layer;
+
+  // Out-of-bounds: nothing to see
+  if (!inBounds(layer, tx, ty)) {
+    log("You can't see that area.", 'system');
+    return;
+  }
+
+  const tileKey = `${tx},${ty}`;
+
+  // Determine visibility tier
+  const inBinocular = state.fovSet && state.fovSet.has(tileKey);
+  const inMonocular = !inBinocular && state.monocularSet && state.monocularSet.has(tileKey);
+  const inExplored  = !inBinocular && !inMonocular && state.explored[layer] && state.explored[layer].has(tileKey);
+  // If FOV hasn't been computed yet (first frame), treat as visible
+  const fovActive = state.fovSet !== null;
+
+  // ── Unexplored / not visible ──
+  if (fovActive && !inBinocular && !inMonocular && !inExplored) {
+    log("You can't see that area.", 'system');
+    return;
+  }
+
+  // ── Explored but not currently visible (memory only) ──
+  if (fovActive && inExplored) {
+    const ground = worlds[layer]?.[ty]?.[tx];
+    const coverType = covers[layer]?.[ty]?.[tx] || 0;
+    const gName = coverType ? terrainInfo(coverType).name : terrainInfo(ground).name;
+    log(`You recall ${gName} there.`, 'system');
+    return;
+  }
+
+  // ── Currently visible (binocular or monocular) ──
+  const ground = worlds[layer]?.[ty]?.[tx];
+  const coverType = covers[layer]?.[ty]?.[tx] || 0;
+  const parts = [];
+
+  // 1. Terrain type
+  const gName = coverType ? terrainInfo(coverType).name : terrainInfo(ground).name;
+  parts.push(capitalize(gName) + '.');
+
+  // 2. Cover / features (non-terrain cover objects)
+  const cover = getCover(layer, tx, ty);
+  if (cover && !coverType) {
+    const cName = (cover.name || cover.type || 'obstacle').replace(/_/g, ' ');
+    parts.push(capitalize(cName) + '.');
+  }
+
+  // 3. Ground items (only if currently visible)
+  const items = getItems(layer, tx, ty);
+  for (const it of items) {
+    if (inMonocular) {
+      // Monocular: vague item descriptions
+      parts.push('Something on the ground.');
+      break;  // only mention once
+    } else {
+      parts.push(`${articleFor(it.name)} ${it.name}.`);
+    }
+  }
+
+  // 4. Creatures
+  const mon = worldMonsterAt(tx, ty, layer);
+  if (mon) {
+    if (inBinocular || !fovActive) {
+      // Binocular: clear identification
+      parts.push(`${articleFor(mon.name)} ${mon.name} is here.`);
+    } else if (inMonocular) {
+      // Monocular: less certain description
+      parts.push('A shape moves here.');
+    }
+  }
+
+  // 5. Self tile
+  const isSelf = tx === state.player.x && ty === state.player.y;
+  if (isSelf && !cover && !coverType && items.length === 0 && !mon) {
+    parts.push('Nothing else here.');
+  }
+
+  log(parts.join(' '), 'system');
+}
+
 function handleLookDirection(dx, dy) {
   exitLookMode();
   const tx = state.player.x + dx;
@@ -300,8 +391,9 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  // ── Overlay panel handling ──
-  const PANEL_KEYS = { t: 'status', i: 'inventory' };
+  // ── Overlay panel handling (inventory only — status is HUD-native) ──
+  // LEGACY POPUP: inventory still uses overlay. Migrate to HUD-native pattern.
+  const PANEL_KEYS = { i: 'inventory' };
   const kLow = ev.key.toLowerCase();
 
   if (isOverlayOpen()) {
@@ -311,7 +403,21 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  // No overlay open — intercept panel keys before movement
+  // T key: toggle HUD-native status panel (non-blocking — game continues behind it)
+  if (kLow === 't' && !ev.shiftKey && !isMapOpen()) {
+    ev.preventDefault();
+    toggleStatusPanel();
+    return;
+  }
+
+  // Escape: close status panel if open (before checking other keys)
+  if (ev.key === 'Escape' && isStatusPanelOpen()) {
+    ev.preventDefault();
+    closeStatusPanel();
+    return;
+  }
+
+  // No overlay open — intercept inventory key before movement
   if (PANEL_KEYS[kLow] && !ev.shiftKey && !isMapOpen()) {
     ev.preventDefault();
     togglePanel(PANEL_KEYS[kLow]);
@@ -393,9 +499,8 @@ document.addEventListener('keydown', (ev) => {
 });
 
 // ==================== INVENTORY DELEGATION ====================
-// Items-list element no longer exists in the sidebar, but inventory
-// buttons still appear inside modals (ground loot, shops). We attach
-// the listener to the modal-inner instead so those buttons keep working.
+// LEGACY POPUP: inventory buttons still appear inside modals (ground loot,
+// shops). Migrate these to HUD-native patterns then remove this listener.
 const INV_ACTIONS = {
   eat:        (i) => eatItem(i),
   drop:       (i) => dropItem(i),
