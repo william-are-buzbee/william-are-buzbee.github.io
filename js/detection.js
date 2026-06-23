@@ -987,12 +987,18 @@ function computePlayerPerception() {
     const detections = detectTargetPerZone(player, creature);
     if (!detections) continue;
 
-    // Find best SNR across all detecting player zones
+    // Find best SNR across non-chemical channels only.
+    // Chemical creature detection is handled by the scent transport system now —
+    // sniff action, ground trail overlay, involuntary alerts.
     let bestSNR = 0;
     for (const det of detections) {
+      if (det.channel === 'chemicalAirborne') continue;
       if (det.snr > bestSNR) bestSNR = det.snr;
     }
 
+    // If creature was only detected chemically, don't add to sensed list
+    if (bestSNR <= 0) continue;
+    
     // Prompt Q: species confidence — same curve as buildDetectionInfo (any channel)
     let speciesConfidence = 0;
     if (bestSNR > SPECIES_CONF_MIN) {
