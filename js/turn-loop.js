@@ -529,4 +529,4 @@ function endPlayerTurn(action){
 }
 
 // ==================== EXPORTS ====================
-export { endPlayerTurn, setOnPlayerDeathCallback, setUseActionCallback, monstersHere };
+export { endPlayerTurn, monstersHere };
