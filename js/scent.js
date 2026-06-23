@@ -3,26 +3,63 @@
 //   Ground scent  — deposited on tiles, persistent, follows exact path, no wind.
 //   Airborne scent — emitted into air, wind-driven, fast-decaying plumes.
 //
+// Each tile carries a vector of MOLECULAR_CLASSES (8 volatile families), not a
+// few named "creature type" channels. What a creature emits is determined purely
+// by its body: a per-species emission profile distributes its metabolic output
+// across the molecular classes. Detection reads those classes back out and the
+// reader infers what produced them. No tile ever stores "predator" — it stores
+// ketones and amines, and a nose that knows what ketones+amines mean calls that
+// a meat-eater.
+//
 // See Chemical-Scent-System-Design.md for full design rationale.
 
 import { state, worlds, monsters } from './state.js';
 import { inBounds, getCover } from './world-state.js';
 import { T, terrainInfo, tileBlocksVision, isWaterGround } from './terrain.js';
-import { getBodyMap } from './constants.js';
+import { getBodyMap, SCENT_PROFILES } from './constants.js';
 import { log } from './log.js';
 import {
   GROUND_EMISSION_BASE, AIRBORNE_EMISSION_BASE, BLOOD_EMISSION_MULT,
   AIRBORNE_DECAY_RATE, ADVECTION_RATE, SPREAD_RATE, SCENT_FLOOR,
 } from './constants.js';
 
+// ==================== MOLECULAR CLASSES ====================
+// The volatile families a chemical transducer can resolve. Each is a broad class
+// of compounds produced by metabolism, tissue, or terrain:
+//   ketones    — carnivore metabolism
+//   amines     — protein breakdown, carnivore indicator
+//   terpenoids — tree/plant resins, forest terrain
+//   greenLeaf  — fresh vegetation, herbivore digestion
+//   hemolymph  — blood (copper-based alien)
+//   fattyAcids — general animal metabolism
+//   sulfur     — wetland, decay, cave air
+//   phenolics  — woody/fungal vegetation
+export const MOLECULAR_CLASSES = [
+  'ketones', 'amines', 'terpenoids', 'greenLeaf',
+  'hemolymph', 'fattyAcids', 'sulfur', 'phenolics',
+];
+
+/** A fresh zeroed scent vector (airborne entry, or base of a ground entry). */
+function _emptyScent() {
+  return {
+    ketones: 0, amines: 0, terpenoids: 0, greenLeaf: 0,
+    hemolymph: 0, fattyAcids: 0, sulfur: 0, phenolics: 0,
+  };
+}
+
+/** A fresh zeroed ground entry — scent vector plus an age counter. */
+function _emptyGroundScent() {
+  return { ..._emptyScent(), age: 0 };
+}
+
 // ==================== DATA STRUCTURES ====================
 // Scent maps are module-level, transient (not saved).
 // On load, they start empty and rebuild as creatures move.
 
-// groundScent[layer] = Map<"x,y", { predator, herbivore, blood, age }>
+// groundScent[layer]  = Map<"x,y", { ...8 classes, age }>
 const _groundScent = {};
 
-// airborneScent[layer] = Map<"x,y", { predator, herbivore, blood }>
+// airborneScent[layer] = Map<"x,y", { ...8 classes }>
 const _airborneScent = {};
 
 function _getGroundMap(layer) {
@@ -133,8 +170,23 @@ function _getScentTerrainMods(layer, x, y) {
 // ==================== EMISSION ====================
 
 /**
+ * Resolve a creature's emission profile — the fractions of its metabolic output
+ * that fall into each molecular class. This is a property of the body, looked up
+ * by species first, then body-map key, then creature key. The fallback is a
+ * generic animal signature for any creature without a defined profile yet.
+ */
+function _getScentProfile(creature) {
+  return SCENT_PROFILES[creature.species]
+      || SCENT_PROFILES[creature.bodyMapKey]
+      || SCENT_PROFILES[creature.key]
+      || { fattyAcids: 0.5, ketones: 0.3, amines: 0.2 };
+}
+
+/**
  * Emit scent for a single creature.
- * Deposits ground scent at current tile and adds airborne scent.
+ * Deposits ground scent at current tile and adds airborne scent, distributing
+ * the total emission across molecular classes via the species profile. Blood
+ * (hemolymph) is added separately when the creature is wounded.
  */
 function _emitCreatureScent(creature, layer) {
   if (!creature || creature.hp <= 0) return;
@@ -142,7 +194,6 @@ function _emitCreatureScent(creature, layer) {
   if (!inBounds(layer, x, y)) return;
 
   const mass = creature.totalMass || 5;
-  const diet = creature.diet || 'predator';
 
   // Activity multiplier — proxied here through the creature's current behavior
   // label. The physically-grounded source is locomotor/respiratory intensity
@@ -160,12 +211,12 @@ function _emitCreatureScent(creature, layer) {
     airActivity = 0.5;
   }
 
-  // Metabolic channel
-  const isPredator = diet === 'predator';
+  // Total metabolic emission (mass × base × activity), distributed across classes.
   const groundAmount = mass * GROUND_EMISSION_BASE * groundActivity;
   const airAmount = mass * AIRBORNE_EMISSION_BASE * airActivity;
+  const profile = _getScentProfile(creature);
 
-  // Blood emission (if wounded)
+  // Blood emission (if wounded) — added to the hemolymph class only.
   let bloodAmount = 0;
   if (creature.blood != null && creature.bloodMax != null && creature.bloodMax > 0) {
     const bloodLost = 1.0 - (creature.blood / creature.bloodMax);
@@ -178,35 +229,30 @@ function _emitCreatureScent(creature, layer) {
 
   // ── Ground deposit ──
   const gMap = _getGroundMap(layer);
-  const gExisting = gMap.get(key);
-  if (gExisting) {
-    if (isPredator) gExisting.predator += groundAmount;
-    else gExisting.herbivore += groundAmount;
-    gExisting.blood += bloodAmount;
-    gExisting.age = 0; // refresh age — most recent deposit
-  } else {
-    gMap.set(key, {
-      predator: isPredator ? groundAmount : 0,
-      herbivore: isPredator ? 0 : groundAmount,
-      blood: bloodAmount,
-      age: 0,
-    });
+  let gEntry = gMap.get(key);
+  if (!gEntry) {
+    gEntry = _emptyGroundScent();
+    gMap.set(key, gEntry);
   }
+  for (const cls of MOLECULAR_CLASSES) {
+    const frac = profile[cls] || 0;
+    if (frac > 0) gEntry[cls] += groundAmount * frac;
+  }
+  gEntry.hemolymph += bloodAmount;
+  gEntry.age = 0; // refresh age — most recent deposit
 
   // ── Airborne emission ──
   const aMap = _getAirborneMap(layer);
-  const aExisting = aMap.get(key);
-  if (aExisting) {
-    if (isPredator) aExisting.predator += airAmount;
-    else aExisting.herbivore += airAmount;
-    aExisting.blood += bloodAmount * 0.3; // less blood aerosolizes than deposits
-  } else {
-    aMap.set(key, {
-      predator: isPredator ? airAmount : 0,
-      herbivore: isPredator ? 0 : airAmount,
-      blood: bloodAmount * 0.3,
-    });
+  let aEntry = aMap.get(key);
+  if (!aEntry) {
+    aEntry = _emptyScent();
+    aMap.set(key, aEntry);
   }
+  for (const cls of MOLECULAR_CLASSES) {
+    const frac = profile[cls] || 0;
+    if (frac > 0) aEntry[cls] += airAmount * frac;
+  }
+  aEntry.hemolymph += bloodAmount * 0.3; // less blood aerosolizes than deposits
 }
 
 // ==================== GROUND LAYER UPDATE ====================
@@ -226,13 +272,11 @@ function _updateGroundLayer(layer) {
     const mods = _getScentTerrainMods(layer, x, y);
     const decay = mods.groundDecay;
 
-    scent.predator *= decay;
-    scent.herbivore *= decay;
-    scent.blood *= decay;
+    for (const cls of MOLECULAR_CLASSES) scent[cls] *= decay;
     scent.age++;
 
-    // Cleanup
-    if (scent.predator < SCENT_FLOOR && scent.herbivore < SCENT_FLOOR && scent.blood < SCENT_FLOOR) {
+    // Cleanup — drop the tile once every class has fallen below the floor.
+    if (!MOLECULAR_CLASSES.some(cls => scent[cls] >= SCENT_FLOOR)) {
       toRemove.push(key);
     }
   }
@@ -255,8 +299,6 @@ function _updateAirborneLayer(layer) {
   const windOfs = WIND_OFFSETS[windDir];
   const advFraction = Math.min(1.0, windSpd * ADVECTION_RATE);
 
-  const channels = ['predator', 'herbivore', 'blood'];
-
   for (const [key, scent] of current) {
     const comma = key.indexOf(',');
     const x = +key.substring(0, comma);
@@ -278,7 +320,7 @@ function _updateAirborneLayer(layer) {
       }
     }
 
-    for (const ch of channels) {
+    for (const ch of MOLECULAR_CLASSES) {
       const val = scent[ch];
       if (val < SCENT_FLOOR) continue;
 
@@ -317,10 +359,8 @@ function _updateAirborneLayer(layer) {
   // Apply decay to entire next map
   const toRemove = [];
   for (const [key, scent] of next) {
-    scent.predator *= AIRBORNE_DECAY_RATE;
-    scent.herbivore *= AIRBORNE_DECAY_RATE;
-    scent.blood *= AIRBORNE_DECAY_RATE;
-    if (scent.predator < SCENT_FLOOR && scent.herbivore < SCENT_FLOOR && scent.blood < SCENT_FLOOR) {
+    for (const cls of MOLECULAR_CLASSES) scent[cls] *= AIRBORNE_DECAY_RATE;
+    if (!MOLECULAR_CLASSES.some(cls => scent[cls] >= SCENT_FLOOR)) {
       toRemove.push(key);
     }
   }
@@ -330,119 +370,64 @@ function _updateAirborneLayer(layer) {
   _airborneScent[layer] = next;
 }
 
-/** Add a value to a channel on a tile in a scent map, creating the entry if needed. */
+/** Add a value to a class on a tile in a scent map, creating the entry if needed. */
 function _addToMap(map, key, channel, amount) {
   let entry = map.get(key);
   if (!entry) {
-    entry = { predator: 0, herbivore: 0, blood: 0 };
+    entry = _emptyScent();
     map.set(key, entry);
   }
   entry[channel] += amount;
 }
 
-// ==================== PLAYER DETECTION ====================
+// ==================== SCENT INTERPRETATION ====================
+// Turning a raw molecular vector into words. The reader's nose detects classes;
+// what those classes mean is inference. ketones+amines together read as a
+// meat-eater; greenLeaf reads as a plant-feeder; and so on. This is the single
+// place that mapping lives, shared by the sniff action and involuntary alerts.
 
-// Per-detection-type log throttle so standing on a scented tile doesn't flood
-// the game log every turn.
-const _lastDetectionTurn = {
-  groundPred: -99, groundHerb: -99, groundBlood: -99,
-  airPred: -99, airHerb: -99, airBlood: -99,
-};
-const DETECTION_LOG_COOLDOWN = 3;
-
-function _shouldLog(type) {
-  const turn = state.turnCount || 0;
-  if (turn - _lastDetectionTurn[type] < DETECTION_LOG_COOLDOWN) return false;
-  _lastDetectionTurn[type] = turn;
-  return true;
+/** Coarse intensity word for a concentration value. */
+function _intensityWord(v) {
+  if (v >= 0.30) return 'strong';
+  if (v >= 0.08) return 'distinct';
+  return 'faint';
 }
 
 /**
- * Check what the player's chemical transducers detect at their current position.
- * Fires log messages for significant detections.
- * Called once per turn after scent maps update.
+ * Build a list of human descriptors for the classes in a scent vector that sit
+ * above `threshold`. Related classes are combined (ketones + amines → meat-eater).
+ * Returns an array of phrases (possibly empty).
  */
-function _detectPlayerScent() {
-  const p = state.player;
-  if (!p) return;
-  const layer = p.layer;
-  const key = `${p.x},${p.y}`;
+function _describeScent(scent, threshold) {
+  const parts = [];
+  const k = scent.ketones || 0;
+  const a = scent.amines || 0;
+  const meatEater = k > threshold && a > threshold;
 
-  const bodyMap = getBodyMap(p);
-  if (!bodyMap) return;
-
-  // Find best contact and airborne chemical qualities across surviving zones
-  let bestContact = 0;
-  let bestAirborne = 0;
-  for (const zone of bodyMap) {
-    if (zone.destroyed) continue;
-    const contact = zone.transducers?.chemical?.contact || 0;
-    const airborne = zone.transducers?.chemical?.airborne || 0;
-    if (contact > bestContact) bestContact = contact;
-    if (airborne > bestAirborne) bestAirborne = airborne;
+  if (meatEater) {
+    parts.push(`${_intensityWord(k + a)} meat-eater metabolism`);
   }
-
-  // ── Ground trail detection (contact transducers) ──
-  if (bestContact > 0) {
-    const gMap = _getGroundMap(layer);
-    const gScent = gMap.get(key);
-    if (gScent) {
-      const contactThreshold = SCENT_FLOOR / bestContact;
-
-      // Also check adjacent tiles for trail direction
-      let freshestDir = null;
-      let freshestAge = gScent.age;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          const adj = gMap.get(`${p.x + dx},${p.y + dy}`);
-          if (adj && adj.age < freshestAge) {
-            freshestAge = adj.age;
-            freshestDir = _offsetToCompass(dx, dy);
-          }
-        }
-      }
-
-      if (gScent.predator > contactThreshold && _shouldLog('groundPred')) {
-        const freshness = gScent.age < 10 ? 'fresh' : gScent.age < 40 ? 'recent' : 'fading';
-        const dirHint = freshestDir ? `, trail freshens toward the ${freshestDir}` : '';
-        log(`You detect a ${freshness} predator trail here${dirHint}.`, 'warn');
-      }
-      if (gScent.herbivore > contactThreshold && _shouldLog('groundHerb')) {
-        const freshness = gScent.age < 10 ? 'fresh' : gScent.age < 40 ? 'recent' : 'fading';
-        const dirHint = freshestDir ? `, trail freshens toward the ${freshestDir}` : '';
-        log(`You detect a ${freshness} grazer trail here${dirHint}.`, 'muted');
-      }
-      if (gScent.blood > contactThreshold && _shouldLog('groundBlood')) {
-        log('You detect blood on the ground here.', 'hit');
-      }
-    }
+  if ((scent.greenLeaf || 0) > threshold) {
+    parts.push(`${_intensityWord(scent.greenLeaf)} plant-feeder scent`);
   }
-
-  // ── Airborne detection (airborne transducers) ──
-  if (bestAirborne > 0) {
-    const aMap = _getAirborneMap(layer);
-    const aScent = aMap.get(key);
-    if (aScent) {
-      const airThreshold = SCENT_FLOOR / bestAirborne;
-      const windName = COMPASS_NAMES[state.windDirection];
-      const hasWind = state.windSpeed > 0;
-      const dirHint = hasWind ? ` from the ${windName}` : '';
-
-      if (aScent.predator > airThreshold && _shouldLog('airPred')) {
-        const intensity = aScent.predator > 0.5 ? 'strong' : aScent.predator > 0.1 ? 'faint' : 'trace';
-        log(`You catch ${intensity} predator scent${dirHint}.`, 'warn');
-      }
-      if (aScent.herbivore > airThreshold && _shouldLog('airHerb')) {
-        const intensity = aScent.herbivore > 0.5 ? 'strong' : aScent.herbivore > 0.1 ? 'faint' : 'trace';
-        log(`You catch ${intensity} grazer scent${dirHint}.`, 'muted');
-      }
-      if (aScent.blood > airThreshold && _shouldLog('airBlood')) {
-        const intensity = aScent.blood > 0.3 ? 'strong' : 'faint';
-        log(`You smell ${intensity} blood in the air${dirHint}.`, 'hit');
-      }
-    }
+  if ((scent.hemolymph || 0) > threshold) {
+    parts.push('blood — copper-bright');
   }
+  // fatty acids on their own read as plain animal musk — but only when the
+  // meat-eater signature hasn't already accounted for the animal.
+  if (!meatEater && (scent.fattyAcids || 0) > threshold) {
+    parts.push(`${_intensityWord(scent.fattyAcids)} animal musk`);
+  }
+  if ((scent.terpenoids || 0) > threshold) {
+    parts.push('tree resins');
+  }
+  if ((scent.phenolics || 0) > threshold) {
+    parts.push('fungal-woody notes');
+  }
+  if ((scent.sulfur || 0) > threshold) {
+    parts.push('sulfurous traces');
+  }
+  return parts;
 }
 
 /** Convert a dx,dy offset to a compass name. */
@@ -456,6 +441,236 @@ function _offsetToCompass(dx, dy) {
   if (dx ===  0 && dy === -1) return 'north';
   if (dx ===  1 && dy === -1) return 'northeast';
   return '';
+}
+
+// ==================== SNIFF ACTION ====================
+
+/** Local terrain volatiles — what the air smells like here from the terrain
+ *  itself, independent of any transported creature scent. */
+function _localTerrainVolatiles(layer, x, y) {
+  const ground = worlds[layer]?.[y]?.[x];
+  const cover = getCover(layer, x, y);
+  const isCave = ground === T.CAVE_FLOOR || ground === T.CAVE_WALL || ground === T.CAVE_ROCK;
+
+  if (isCave) return 'The air is stale — mineral dust and faint sulfur.';
+  if (isWaterGround(ground)) return 'Fresh water and dissolved minerals.';
+  if (cover === T.MUSHFOREST) return 'Heavy fungal spores and earthy decay surround you.';
+  if (cover === T.FOREST) return 'Tree resins and leaf litter fill the canopy air.';
+  if (ground === T.SAND) return 'Dry mineral dust — almost scentless.';
+  if (ground === T.ROCK) return 'Cold stone. Faintly metallic.';
+  return 'Fresh vegetation and warm soil.';
+}
+
+/** One-line wind description. */
+function _windDescription() {
+  const spd = state.windSpeed || 0;
+  if (spd <= 0) return 'The air is still.';
+  const word = spd === 1 ? 'gentle' : spd === 2 ? 'steady' : 'strong';
+  return `A ${word} wind from the ${COMPASS_NAMES[state.windDirection]}.`;
+}
+
+/**
+ * Deliberate sniff. Reads the player's contact and airborne chemical qualities
+ * from the body map and produces a multi-line readout: local terrain volatiles,
+ * wind, airborne creature scent (with source bearing), and ground trails (with
+ * freshness and trail direction). Does NOT consume a turn.
+ */
+export function performSniff() {
+  const p = state.player;
+  if (!p) return;
+  const layer = p.layer;
+  const key = `${p.x},${p.y}`;
+
+  const bodyMap = getBodyMap(p);
+  let bestContact = 0;
+  let bestAirborne = 0;
+  if (bodyMap) {
+    for (const zone of bodyMap) {
+      if (zone.destroyed) continue;
+      const contact = zone.transducers?.chemical?.contact || 0;
+      const airborne = zone.transducers?.chemical?.airborne || 0;
+      if (contact > bestContact) bestContact = contact;
+      if (airborne > bestAirborne) bestAirborne = airborne;
+    }
+  }
+
+  // No transducers at all — nothing to sniff with.
+  if (bestContact <= 0 && bestAirborne <= 0) {
+    log('You have no functioning chemical transducers.', 'muted');
+    return;
+  }
+
+  // 1. Local terrain volatiles (always available — you breathe the air you stand in)
+  log(_localTerrainVolatiles(layer, p.x, p.y), 'system');
+
+  // 2. Wind
+  log(_windDescription(), 'muted');
+
+  let detectedScent = false;
+
+  // 3. Airborne creature scent
+  if (bestAirborne > 0) {
+    const aScent = _getAirborneMap(layer).get(key);
+    const airThreshold = SCENT_FLOOR / bestAirborne;
+    const descriptors = aScent ? _describeScent(aScent, airThreshold) : [];
+    if (descriptors.length > 0) {
+      detectedScent = true;
+      const src = state.windSpeed > 0 ? ` from the ${COMPASS_NAMES[state.windDirection]}` : '';
+      log(`Carried on the air${src}: ${descriptors.join(', ')}.`, 'warn');
+    }
+  }
+
+  // 4. Ground scent
+  if (bestContact > 0) {
+    const gMap = _getGroundMap(layer);
+    const gScent = gMap.get(key);
+    const contactThreshold = SCENT_FLOOR / bestContact;
+    const descriptors = gScent ? _describeScent(gScent, contactThreshold) : [];
+    if (descriptors.length > 0) {
+      detectedScent = true;
+      const freshness = gScent.age < 8 ? 'Fresh' : gScent.age < 30 ? 'Recent' : 'Fading';
+
+      // Trail direction — the adjacent tile whose deposit is freshest (lowest age)
+      // is where the trail freshens toward.
+      let freshestDir = null;
+      let freshestAge = gScent.age;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const adj = gMap.get(`${p.x + dx},${p.y + dy}`);
+          if (adj && adj.age < freshestAge) {
+            freshestAge = adj.age;
+            freshestDir = _offsetToCompass(dx, dy);
+          }
+        }
+      }
+      const dirHint = freshestDir ? `, trail freshens toward the ${freshestDir}` : '';
+      log(`${freshness} ground traces: ${descriptors.join(', ')}${dirHint}.`, 'muted');
+    }
+  }
+
+  // 5. Nothing on the wind or the ground
+  if (!detectedScent) {
+    if (bestAirborne > 0) {
+      log('No creature scent on the wind.', 'muted');
+    } else {
+      log('You detect nothing of note.', 'muted');
+    }
+  }
+}
+
+// ==================== GROUND TRAIL QUERY (rendering) ====================
+
+/**
+ * Return a Map of ground scent entries within `radius` tiles of (cx, cy) on the
+ * given layer. Returns null if there are no entries in range. Used by the
+ * rendering layer to paint a subtle trail overlay near the player.
+ */
+export function getGroundScentNear(layer, cx, cy, radius) {
+  const gMap = _getGroundMap(layer);
+  if (gMap.size === 0) return null;
+  const r2 = radius * radius;
+  const result = new Map();
+  for (const [key, scent] of gMap) {
+    const comma = key.indexOf(',');
+    const x = +key.substring(0, comma);
+    const y = +key.substring(comma + 1);
+    const dx = x - cx, dy = y - cy;
+    if (dx * dx + dy * dy <= r2) result.set(key, scent);
+  }
+  return result.size > 0 ? result : null;
+}
+
+// ==================== INVOLUNTARY DETECTION ====================
+// The deliberate sniff handles everything the player goes looking for. The only
+// thing that reaches awareness unbidden is an overwhelming signal — standing in
+// a fresh kill, or a thick plume blowing straight into the face. High threshold
+// only; everything subtler waits for a sniff.
+
+const INVOLUNTARY_THRESHOLD = 0.5; // total concentration across all classes
+
+// Per-detection-type log throttle so a strong tile doesn't flood the log.
+const _lastDetectionTurn = { involAir: -99, involGround: -99 };
+const DETECTION_LOG_COOLDOWN = 3;
+
+function _shouldLog(type) {
+  const turn = state.turnCount || 0;
+  if (turn - _lastDetectionTurn[type] < DETECTION_LOG_COOLDOWN) return false;
+  _lastDetectionTurn[type] = turn;
+  return true;
+}
+
+/** Sum of all molecular classes in a scent vector. */
+function _totalConcentration(scent) {
+  let total = 0;
+  for (const cls of MOLECULAR_CLASSES) total += scent[cls] || 0;
+  return total;
+}
+
+/** The single strongest molecular class in a scent vector. */
+function _dominantClass(scent) {
+  let best = null, bestVal = 0;
+  for (const cls of MOLECULAR_CLASSES) {
+    const v = scent[cls] || 0;
+    if (v > bestVal) { bestVal = v; best = cls; }
+  }
+  return best;
+}
+
+// Short descriptor for an involuntary alert's dominant class.
+const _CLASS_ALERT = {
+  ketones:    'meat-eater metabolism',
+  amines:     'meat-eater metabolism',
+  terpenoids: 'tree resins',
+  greenLeaf:  'plant-feeder scent',
+  hemolymph:  'blood',
+  fattyAcids: 'animal musk',
+  sulfur:     'sulfurous decay',
+  phenolics:  'fungal-woody rot',
+};
+
+/**
+ * Fire a warning only for overwhelming chemical signals at the player's tile.
+ * Called once per turn after scent maps update. Deliberate detail comes from
+ * performSniff(); this is just the reflex that something is *right here*.
+ */
+function _detectPlayerScent() {
+  const p = state.player;
+  if (!p) return;
+  const layer = p.layer;
+  const key = `${p.x},${p.y}`;
+
+  const bodyMap = getBodyMap(p);
+  if (!bodyMap) return;
+
+  let bestContact = 0;
+  let bestAirborne = 0;
+  for (const zone of bodyMap) {
+    if (zone.destroyed) continue;
+    const contact = zone.transducers?.chemical?.contact || 0;
+    const airborne = zone.transducers?.chemical?.airborne || 0;
+    if (contact > bestContact) bestContact = contact;
+    if (airborne > bestAirborne) bestAirborne = airborne;
+  }
+
+  // ── Overwhelming airborne plume ──
+  if (bestAirborne > 0) {
+    const aScent = _getAirborneMap(layer).get(key);
+    if (aScent && _totalConcentration(aScent) >= INVOLUNTARY_THRESHOLD && _shouldLog('involAir')) {
+      const cls = _dominantClass(aScent);
+      const src = state.windSpeed > 0 ? ` from the ${COMPASS_NAMES[state.windDirection]}` : '';
+      log(`A powerful scent hits you${src} — ${_CLASS_ALERT[cls] || 'something overwhelming'}.`, 'warn');
+    }
+  }
+
+  // ── Overwhelming ground deposit underfoot ──
+  if (bestContact > 0) {
+    const gScent = _getGroundMap(layer).get(key);
+    if (gScent && _totalConcentration(gScent) >= INVOLUNTARY_THRESHOLD && _shouldLog('involGround')) {
+      const cls = _dominantClass(gScent);
+      log(`The ground reeks beneath you — ${_CLASS_ALERT[cls] || 'something overwhelming'}.`, 'warn');
+    }
+  }
 }
 
 // ==================== MASTER UPDATE ====================
@@ -484,7 +699,7 @@ export function updateScentSystem(layer) {
   // 4. Wind shifts
   _updateWind();
 
-  // 5. Player detection
+  // 5. Involuntary detection (high-threshold only)
   _detectPlayerScent();
 }
 
@@ -503,15 +718,19 @@ export function debugScentAt(x, y) {
   const g = gMap.get(key);
   const a = aMap.get(key);
 
+  const fmt = (s) => MOLECULAR_CLASSES
+    .map(cls => `${cls}=${(s[cls] || 0).toFixed(4)}`)
+    .join(' ');
+
   console.log(`Scent at (${x},${y}) layer ${layer}:`);
   console.log(`  Wind: from ${COMPASS_NAMES[state.windDirection]}, speed ${state.windSpeed}`);
   if (g) {
-    console.log(`  Ground: pred=${g.predator.toFixed(4)} herb=${g.herbivore.toFixed(4)} blood=${g.blood.toFixed(4)} age=${g.age}`);
+    console.log(`  Ground: ${fmt(g)} age=${g.age}`);
   } else {
     console.log('  Ground: none');
   }
   if (a) {
-    console.log(`  Airborne: pred=${a.predator.toFixed(4)} herb=${a.herbivore.toFixed(4)} blood=${a.blood.toFixed(4)}`);
+    console.log(`  Airborne: ${fmt(a)}`);
   } else {
     console.log('  Airborne: none');
   }
@@ -526,25 +745,24 @@ export function debugScentStats() {
   const gMap = _getGroundMap(layer);
   const aMap = _getAirborneMap(layer);
 
-  let gMaxPred = 0, gMaxHerb = 0, gMaxBlood = 0;
-  for (const [, s] of gMap) {
-    if (s.predator > gMaxPred) gMaxPred = s.predator;
-    if (s.herbivore > gMaxHerb) gMaxHerb = s.herbivore;
-    if (s.blood > gMaxBlood) gMaxBlood = s.blood;
-  }
-
-  let aMaxPred = 0, aMaxHerb = 0, aMaxBlood = 0;
-  for (const [, s] of aMap) {
-    if (s.predator > aMaxPred) aMaxPred = s.predator;
-    if (s.herbivore > aMaxHerb) aMaxHerb = s.herbivore;
-    if (s.blood > aMaxBlood) aMaxBlood = s.blood;
-  }
+  const maxes = (map) => {
+    const m = _emptyScent();
+    for (const [, s] of map) {
+      for (const cls of MOLECULAR_CLASSES) {
+        if ((s[cls] || 0) > m[cls]) m[cls] = s[cls];
+      }
+    }
+    return m;
+  };
+  const fmt = (m) => MOLECULAR_CLASSES
+    .map(cls => `${cls}=${m[cls].toFixed(4)}`)
+    .join(' ');
 
   console.log(`Scent stats (layer ${layer}):`);
   console.log(`  Wind: from ${COMPASS_NAMES[state.windDirection]}, speed ${state.windSpeed}`);
-  console.log(`  Ground tiles: ${gMap.size} | max pred=${gMaxPred.toFixed(4)} herb=${gMaxHerb.toFixed(4)} blood=${gMaxBlood.toFixed(4)}`);
-  console.log(`  Airborne tiles: ${aMap.size} | max pred=${aMaxPred.toFixed(4)} herb=${aMaxHerb.toFixed(4)} blood=${aMaxBlood.toFixed(4)}`);
+  console.log(`  Ground tiles: ${gMap.size} | max ${fmt(maxes(gMap))}`);
+  console.log(`  Airborne tiles: ${aMap.size} | max ${fmt(maxes(aMap))}`);
 }
 
-// Export for debug
+// Export for debug / rendering
 export { _getGroundMap, _getAirborneMap, COMPASS_NAMES };

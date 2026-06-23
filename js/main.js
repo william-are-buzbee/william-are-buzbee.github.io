@@ -13,7 +13,7 @@ import { terrainName } from './terrain.js';
 import { inBounds, getCover, monsterAt as worldMonsterAt } from './world-state.js';
 import { getItems } from './ground-items.js';
 import { setOnPlayerDeathCallback, debugEcology, debugForceHunger, debugCognition, debugSubstrate } from './enemy-ai.js';
-import { debugScentAt, debugScentStats } from './scent.js';
+import { debugScentAt, debugScentStats, performSniff } from './scent.js';
 window.debugEcology = debugEcology;
 window.debugForceHunger = debugForceHunger;
 window.debugCognition = debugCognition;
@@ -193,6 +193,7 @@ const ACTION_MAP = {
   'r': () => eatAction(),          // Eat (ground corpses first, then inventory)
   'f': () => toggleStealth(),      // Sneak toggle
   'g': () => pickUpFromGround(),   // Get/pickup
+  'v': () => performSniff(),       // Sniff — deliberate chemical readout (free, no turn)
   '?': () => showHelp(),           // Help
   '/': () => showHelp(),
 };

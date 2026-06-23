@@ -42,7 +42,7 @@ import { T, tileBlocksVision, tileHasVisionPenalty } from './terrain.js';
 // getBodyMap is defined in constants.js (enemy-ai.js and combat.js both import
 // it from there); importing from constants.js avoids a circular dependency.
 import {
-  AMBIENT_VISUAL_COEFF, AMBIENT_CHEM_COEFF, AMBIENT_VIB_COEFF,
+  AMBIENT_VISUAL_COEFF, AMBIENT_VIB_COEFF,
   LAYER_SURFACE, LAYER_META,
   getBodyMap, getVisualConfig,
 } from './constants.js';
@@ -632,14 +632,11 @@ export function updateAmbientSensing() {
   // updatePlayerFOV() already marks the entire binocular + monocular field as
   // explored, so a separate visual-peripheral pass would be redundant.
   const bodyMap = getBodyMap(p);
-  let maxChemAirborne = 0;
   let maxVibGround = 0;
 
   if (bodyMap) {
     for (const zone of bodyMap) {
       if (zone.destroyed) continue;
-      const chem = zone.transducers?.chemical?.airborne;
-      if (chem != null && chem > maxChemAirborne) maxChemAirborne = chem;
       const vib = zone.transducers?.vibration?.ground;
       if (vib != null && vib > maxVibGround) maxVibGround = vib;
     }
@@ -648,13 +645,11 @@ export function updateAmbientSensing() {
   // ── Terrain modifiers for current position ──
   const mods = _getAmbientTerrainModifiers(layer, p.x, p.y);
 
-  // ── 1. Chemical airborne (omnidirectional circle, no LOS) ──
-  const chemRadius = maxChemAirborne * AMBIENT_CHEM_COEFF * mods.chem;
-  if (chemRadius >= 1) {
-    _markCircleExplored(layer, p.x, p.y, chemRadius, explored);
-  }
-
-  // ── 2. Vibration ground (omnidirectional circle, no LOS) ──
+  // ── Vibration ground (omnidirectional circle, no LOS) ──
+  // Chemical airborne ambient sensing was removed: a chemical transducer cannot
+  // sense terrain shape from diffuse volatiles — it senses scent sources (handled
+  // by the scent system and the deliberate sniff action), not the layout of empty
+  // ground. Vibration genuinely does carry substrate structure, so it stays.
   const vibRadius = maxVibGround * AMBIENT_VIB_COEFF * mods.vib;
   if (vibRadius >= 1) {
     _markCircleExplored(layer, p.x, p.y, vibRadius, explored);

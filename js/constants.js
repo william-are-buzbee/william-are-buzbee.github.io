@@ -679,6 +679,24 @@ export const ADVECTION_RATE         = 0.35;   // fraction of scent moved downwin
 export const SPREAD_RATE            = 0.12;   // fraction of scent spread to neighbors per turn (turbulent mixing)
 export const SCENT_FLOOR            = 0.002;  // below this, scent is removed (sparse cleanup)
 
+// ── Per-species emission profiles ──
+// Fractions of a creature's total metabolic emission distributed across the 8
+// molecular classes. They describe what a living, metabolically active body of
+// this species off-gasses — the signature is produced by the tissue, not chosen.
+// Fractions need not sum to exactly 1; the absolute emission amount is scaled by
+// mass/activity in scent.js and each class gets its profile fraction of it.
+// Hemolymph (wound blood) is added separately when the creature is bleeding.
+// Looked up by creature.species, then creature.bodyMapKey, then creature.key.
+export const SCENT_PROFILES = {
+  wolf:        { ketones:0.30, amines:0.28, fattyAcids:0.22, sulfur:0.05, greenLeaf:0,    terpenoids:0,    hemolymph:0, phenolics:0    },
+  dire_wolf:   { ketones:0.32, amines:0.30, fattyAcids:0.20, sulfur:0.05, greenLeaf:0,    terpenoids:0,    hemolymph:0, phenolics:0    },
+  hare:        { ketones:0.04, amines:0.03, fattyAcids:0.20, greenLeaf:0.45, terpenoids:0.08, sulfur:0,    hemolymph:0, phenolics:0    },
+  cave_crab:   { ketones:0.03, amines:0.02, fattyAcids:0.28, greenLeaf:0.30, phenolics:0.12, sulfur:0.08, terpenoids:0, hemolymph:0   },
+  ambush_pred: { ketones:0.28, amines:0.24, fattyAcids:0.22, sulfur:0.08, greenLeaf:0,    terpenoids:0,    hemolymph:0, phenolics:0    },
+  lurker:      { ketones:0.22, amines:0.20, fattyAcids:0.18, sulfur:0.18, greenLeaf:0,    terpenoids:0,    hemolymph:0, phenolics:0.05 },
+  mushroom:    { phenolics:0.40, sulfur:0.30, greenLeaf:0.10, fattyAcids:0.05, ketones:0,  amines:0,        terpenoids:0, hemolymph:0   },
+};
+
 // --- Spatial Hash Grid (Prompt R) ---
 export const SPATIAL_CELL_SIZE    = 16;   // tiles per cell side
 export const SPATIAL_QUERY_RADIUS = 1;    // cells beyond center to query (1 = 3×3 neighborhood)

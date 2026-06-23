@@ -2,13 +2,14 @@
 import { state, worlds, covers, groundItems } from './state.js';
 import { LAYER_UNDER, BIOME, SNR_FULL_RENDER,
          SPECIES_DISPLAY_CONFIDENCE, MARKER_MIN_RADIUS, MARKER_MAX_RADIUS,
-         MARKER_MASS_MIN, MARKER_MASS_MAX } from './constants.js';
+         MARKER_MASS_MIN, MARKER_MASS_MAX, SCENT_FLOOR, getBodyMap } from './constants.js';
 import { tileSize, viewW, viewH, zoom } from './display.js';
 import { T, terrainInfo } from './terrain.js';
 import { spriteCache, tintedSprite, tintedMonsterSprite, COLOR_PALETTES } from './sprites.js';
 import { inBounds, isTownCell, monsterAt, getCover } from './world-state.js';
 import { updateUI } from './ui.js';
 import { drawTimeTint } from './time-cycle.js';
+import { getGroundScentNear, MOLECULAR_CLASSES } from './scent.js';
 
 export const canvas = document.getElementById('viewport');
 export const ctx = canvas.getContext('2d');
@@ -388,6 +389,8 @@ function render(){
     }
   }
 
+  _renderGroundTrails(layer, ox, oy, VW, VH, TILE, fovActive, fovExplored);
+
   drawTimeTint(ctx, 0, 0, VW * TILE, VH * TILE, layer);
 
   // ── Prompt Q: Species-confidence gated rendering of non-visual detections ──
@@ -444,6 +447,65 @@ function render(){
   const logEl = document.getElementById('log');
   if (logEl) logEl.scrollTop = logEl.scrollHeight;
   updateUI();
+}
+
+// ─── Ground scent trail overlay ───
+// Paints a subtle colored tint on nearby tiles where ground scent has been
+// deposited, as read through the player's contact chemical transducers. The
+// reach is set by transducer quality (1–3 tiles), so a keener nose "sees" more
+// of the trail. Most tiles are clean. Blood-dominant tiles read reddish; every
+// other trail reads as warm gold. The overlay moves with the player.
+function _renderGroundTrails(layer, ox, oy, VW, VH, TILE, fovActive, fovExplored) {
+  const p = state.player;
+  if (!p) return;
+
+  // Best contact chemical quality across surviving zones (per-zone, like the
+  // scent detection pass — a destroyed zone contributes nothing).
+  const bodyMap = getBodyMap(p);
+  let bestContact = 0;
+  if (bodyMap) {
+    for (const zone of bodyMap) {
+      if (zone.destroyed) continue;
+      const c = zone.transducers?.chemical?.contact || 0;
+      if (c > bestContact) bestContact = c;
+    }
+  }
+  if (bestContact <= 0) return;
+
+  const detectRange = Math.min(Math.ceil(bestContact / 2), 3); // 1–3 tiles by quality
+  const entries = getGroundScentNear(layer, p.x, p.y, detectRange);
+  if (!entries) return;
+
+  const threshold = SCENT_FLOOR / bestContact;
+
+  ctx.save();
+  for (const [key, scent] of entries) {
+    const comma = key.indexOf(',');
+    const wx = +key.substring(0, comma);
+    const wy = +key.substring(comma + 1);
+
+    // Total concentration across all molecular classes
+    let total = 0;
+    for (const cls of MOLECULAR_CLASSES) total += scent[cls] || 0;
+    if (total < threshold) continue;
+
+    // Viewport bounds
+    const vx = wx - ox, vy = wy - oy;
+    if (vx < 0 || vx >= VW || vy < 0 || vy >= VH) continue;
+
+    // Only over explored terrain
+    if (fovActive && !(fovExplored && fovExplored.has(`${wx},${wy}`))) continue;
+
+    const opacity = Math.min(0.25, total * 0.15);
+    // Reddish for blood-dominant trails, warm gold for everything else.
+    if ((scent.hemolymph || 0) > total * 0.4) {
+      ctx.fillStyle = `rgba(160, 50, 40, ${opacity})`;
+    } else {
+      ctx.fillStyle = `rgba(210, 180, 100, ${opacity})`;
+    }
+    ctx.fillRect(vx * TILE, vy * TILE, TILE, TILE);
+  }
+  ctx.restore();
 }
 
 // ─── Prompt G: Facing direction indicator for enemies ───
