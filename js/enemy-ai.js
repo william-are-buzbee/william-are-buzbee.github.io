@@ -59,6 +59,7 @@ import { advanceTick, getTimePhase, currentTimePhase } from './time-cycle.js';
 import { saveGame } from './save-load.js';
 import { updatePlayerFOV, updateAmbientSensing, hasLOS } from './fov.js';
 import { computeSignals } from './signals.js';
+import { updateScentSystem } from './scent.js';
 
 // ── Imports from new modules ──
 import { computeIntegrationCapacity, getTier, evaluateReactiveRules,
@@ -1223,6 +1224,7 @@ function endPlayerTurn(action){
   }
   updatePlayerFOV();  // recompute FOV before rendering
   updateAmbientSensing();  // ambient terrain sensing — extends explored set (no entities)
+  updateScentSystem(state.activeLayer);  // scent emission, transport, and player detection (log after vision)
   computePlayerPerception();  // Prompt N: detect creatures through non-visual senses
   render();
   saveGame().catch(err => console.error('[Save] Auto-save failed:', err));  // Async fire-and-forget

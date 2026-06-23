@@ -49,6 +49,12 @@ export const state = {
   // Index of the layer currently being rendered / ticked.
   // Only this layer runs enemy AI and is drawn each frame.
   activeLayer: null,
+
+  // ---- Wind ----
+  // windDirection: compass direction wind blows FROM (0=E, 1=SE, 2=S, 3=SW, 4=W, 5=NW, 6=N, 7=NE)
+  // A creature detecting airborne scent knows the source is toward windDirection.
+  windDirection: 4,   // default: wind from the west
+  windSpeed: 1,       // 0=still, 1=light, 2=moderate, 3=strong
 };
 
 // ==================== SPARSE WORLD STORAGE ====================

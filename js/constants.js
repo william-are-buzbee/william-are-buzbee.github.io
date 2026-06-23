@@ -670,6 +670,15 @@ export const AMBIENT_VISUAL_COEFF   = 5.0;   // tiles per unit visual transducer
 export const AMBIENT_CHEM_COEFF     = 4.0;   // tiles per unit chemical.airborne quality
 export const AMBIENT_VIB_COEFF      = 3.0;   // tiles per unit vibration.ground quality
 
+// ── Chemical scent system ──
+export const GROUND_EMISSION_BASE   = 0.02;   // ground scent per kg body mass per turn
+export const AIRBORNE_EMISSION_BASE = 0.01;   // airborne scent per kg body mass per turn
+export const BLOOD_EMISSION_MULT    = 5.0;    // multiplier on blood channel when wounded
+export const AIRBORNE_DECAY_RATE    = 0.80;   // airborne scent retained per turn (20% loss)
+export const ADVECTION_RATE         = 0.35;   // fraction of scent moved downwind per unit wind speed
+export const SPREAD_RATE            = 0.12;   // fraction of scent spread to neighbors per turn (turbulent mixing)
+export const SCENT_FLOOR            = 0.002;  // below this, scent is removed (sparse cleanup)
+
 // --- Spatial Hash Grid (Prompt R) ---
 export const SPATIAL_CELL_SIZE    = 16;   // tiles per cell side
 export const SPATIAL_QUERY_RADIUS = 1;    // cells beyond center to query (1 = 3×3 neighborhood)
