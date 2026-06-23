@@ -48,16 +48,21 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Second-pass over perception/transducer system (chemical transducer restructure to airborn, ground and water based vibration, plus contact vs air for chemical)
 - [x] Species-confidence gated rendering (shows blobs if you can't identify a creature but know something is there)
 - [x] Significant optimization improvements (indexDB, active simulation radius, spatial hash grid)
+- [x] Remove telepathic knowledge of environment (granted by earlier passes of chemical sensing)
+- [x] UI minimalism overhaul (fullscreen support, flexible screen size, adjustable log, HUD can be scaled with a button press, zoom function, no stretch or visual issues)
+- [x] Vision cone vix (each eye has a specific cone of vision, binocular vs monocular vision, very possible for multiple unique eye placements to exist on a single creature)
+- [x] First pass muscle fiber system (muscle fiber type by contraction, aerobic vs anaerobic, aerobic capacity vs glycogen capacity, demand exceeding aerobic thresholds consumes glycogen)
+- [x] Third pass over cognitive system (Ganglia are physical structures that inform motor circuits, so running away is not an abstraction but a physical set of circuits connected to motor function)
+- [x] Chemical sensing third pass (molecule based detection, wind direction & detection, contact vs airborn detection, air diffusion, emittance, etc)
 
 ## Up Next
-- [ ] Second-pass over AI drive system (truly competetive behavior, not just plausible or believable behavior)
+- [ ] Legacy content removal (remove old king, old staircases, critical hits in message log, superfluous messages, old status menu is ancient, etc)
 
 ## Near-Term Plans (no particular order at the moment)
+- [ ] UI refinement (enhance log for clarity and minimalism, get rid of old UI elements)
+- [ ] 2x upscaled sprite pack (just to see if it looks better) 
 - [ ] Second-pass over bleed/metabolism/healing mechanic
-- [ ] Third-pass over sensory system (sensitivity windows for transducers) 
-- [ ] Third-pass over AI drive system
-- [ ] Third-pass over bleed/metabolism/healing
-- [ ] Third-pass over cognition/ganglia system (actual pattern libraries/memory system) 
+- [ ] Fourth-pass over cognition/ganglia system (actual pattern libraries/memory system) 
 
 ## Long-Term Plans
 - [ ] Immune/infection mechanics (needs metabolism first)
@@ -79,6 +84,8 @@ Prompt queue and task tracker. Check things off as they're done.
 For new chats, include:
 - Only the files that touch the system being changed
 - The Project Handoff document (always)
+- Design-Principles.md (always — describes HOW systems must be built)
+- Session-Handoff-Sensory-UI.md (for any sensory, vision, scent, or UI work — captures the full state of the sensory/UI overhaul session)
 - Relevant design documents:
   - Body-Sim-Design — body map architecture, zone composition, tissue types
   - Surface-Creatures — all five creature body maps with exact transducer values, mass breakdowns, neural allocations
@@ -89,6 +96,11 @@ For new chats, include:
   - Cognition-Design — reactive-deliberative architecture, integration capacity, memory design, hormonal system (UPDATED: reflects the reactive/deliberative two-layer model, NOT the old tier-based system)
   - Sensory-Design — per-zone detection, SNR-based information quality, continuous uncertainty ranges, sensitivity windows (future), signal-to-noise framework
   - Circulatory-Immune-Design — circulatory diversity across clades, immune architecture, infection mechanics, microbial ecology, mutation as immune event (all future/design-phase, not yet implemented)
+  - Muscle-Fiber-Design — per-zone fiber composition, substrate system, regeneration formula (UPDATED: biologically grounded regeneration with enzymatic upregulation curve)
+  - Motor-System-Design — motor pathway activation, force computation (UPDATED: references new regeneration model and separate circulatory regen efficiency)
+  - Ambient-Terrain-Sensing-Design — per-channel ambient terrain awareness from transducers (visual peripheral + vibration ground; chemical ambient was removed as physically incorrect)
+  - Per-Eye-Visual-Field-Design — per-eye visual field computation from body map anatomy, binocular/monocular zones, three-tier rendering, replaces VISION_PROFILES for player
+  - Chemical-Scent-System-Design — two-layer scent model (ground trails + airborne plumes), wind-driven transport, 8 molecular classes, sniff action, detection architecture
 - Key utility signatures (worldDims returns array, getFeature returns by reference, etc.)
 - Known bugs and what causes them
 - What NOT to change
@@ -101,9 +113,29 @@ For new chats, include:
 
 - **Save bloat — reconstructable constants:** `pathways` and `clade` on creatures are stripped before save and reconstructed from `CREATURE_PATHWAYS[key]` and `CLADE_DATA[key]` on load. Do not store data on creatures that can be derived from their template key.
 
+- **Visual transducers are structured objects:** `zone.transducers.visual` is `{ acuity, placement, fieldAngle }`, not a single number. `placement` is `'lateral'` (prey eyes, ±80° offset) or `'forward'` (predator eyes, ±20° offset). `fieldAngle` is the single eye's FOV width in degrees. Use `getVisualAcuity(zone)` and `getVisualConfig(zone)` helpers (exported from constants.js) — they handle both the new structured format and the legacy flat-number format.
+
 - **Chemical transducers are objects:** `zone.transducers.chemical` is `{ contact, airborne, dissolved }`, not a single number. Any code reading it as a number will break. This mirrors vibration's `{ ground, air, water }` structure.
 
 - **Vibration transducers are objects:** `zone.transducers.vibration` is `{ ground, air, water }`, not a single number. Same principle as chemical.
+
+- **Chemical detection removed from player perception:** `computePlayerPerception` in detection.js filters out `chemicalAirborne` channel from SNR aggregation. Creatures detected only through chemical SNR do NOT produce sensed-creature blobs. Chemical creature detection is exclusively through the scent transport system (sniff action, ground trail overlay, involuntary strong-signal alerts). Only vibration and visual channels contribute to sensed-creature rendering.
+
+- **VISION_PROFILES deprecated for player, active for NPCs:** Player visual field is computed from body map per-eye anatomy (fov.js `updatePlayerFOV`). NPC vision still reads `visionConeWidth` from `VISION_CONE_WIDTHS` in monsters.js and `visionType`/`coneAngle` from `VISION_PROFILES`. NPC vision update to use body map is deferred.
+
+- **display.js owns viewport state:** `TILE`, `VIEW_W`, `VIEW_H` are no longer constants — they are computed from `display.js` functions `tileSize()`, `viewW()`, `viewH()`. Only rendering.js and main.js import from display.js. Three zoom levels (×1/×2/×3). Canvas fills the browser window.
+
+- **Three-tier visual rendering:** `state.fovSet` = binocular tiles (bright). `state.monocularSet` = monocular tiles (18% overlay). `state.explored[layer]` = explored/ambient tiles (42% overlay). Entities are rendered in both binocular and monocular zones but NOT in explored-only zones. The monocular set is computed per-eye from body map visual transducer placement and field angle.
+
+- **Scent maps are transient (not saved):** Ground and airborne scent maps are module-level Maps in scent.js. They are NOT in state.js and are NOT persisted. On load, scent maps start empty and rebuild naturally as creatures move. The self-shadow maps (for filtering the player's own scent) are also transient.
+
+- **Scent system uses 8 molecular classes:** `ketones, amines, terpenoids, greenLeaf, hemolymph, fattyAcids, sulfur, phenolics`. Per-species emission profiles in `SCENT_PROFILES` (constants.js) distribute emission across these classes. The sniff action (V key, does not consume a turn) translates molecular concentrations into naturalistic text descriptions.
+
+- **Wind state is in state.js:** `state.windDirection` (0-7 compass, where wind blows FROM) and `state.windSpeed` (0-3). Shifts gradually over time. Airborne scent advects downwind. Direction info for airborne detections comes from the wind vector, not from the scent gradient.
+
+- **Creature UIDs for debug tracking:** Every creature gets `_uid` (monotonic integer) at spawn. `syncCreatureUIDs()` from monsters.js must be called after save-load to prevent UID collisions. Ctrl+right-click toggles per-turn stat tracking. Console: `track(uid)`, `untrack(uid)`, `untrackAll()`, `tracked()`.
+
+- **Substrate regeneration uses enzymatic upregulation:** The formula is `zone.muscle × SUBSTRATE_REGEN_BASE × circRegenEff × vascularityFactor × depletionBoost`. The `depletionBoost = 1 + REGEN_UPREGULATION × (1 - substrateFraction)` creates a front-loaded recovery curve. Separate `CIRC_REGEN_EFF_*` constants for regeneration (gentler penalty for open circulation at rest) vs `CIRC_EFFICIENCY_*` for aerobic force output.
 
 - **Detection is per-zone, not per-creature:** There is no creature-level aggregated sensitivity. Each zone independently computes detection range from its own transducer quality. `cacheEffectiveSenses` and `computePlayerSensoryProfile` no longer exist. Detection uses `detectTargetPerZone` which returns an array of `{zone, channel, quality, snr}` per detected target.
 
@@ -128,23 +160,28 @@ For new chats, include:
 ### Typical File Sets
 - **Biome/terrain work:** surface-gen.js, constants.js, terrain.js
 - **Enemy AI / drives / behavior:** enemy-ai.js, monsters.js, combat.js, terrain.js, signals.js
-- **Perception / detection:** enemy-ai.js, signals.js, constants.js, fov.js, time-cycle.js, terrain.js
+- **Perception / detection:** detection.js, signals.js, constants.js, fov.js, time-cycle.js, terrain.js
 - **Movement/combat:** player-actions.js, combat.js, enemy-ai.js, state.js
 - **Transitions:** world-gen.js, interactions.js, state.js, world-state.js
-- **Rendering:** rendering.js, sprites.js, terrain.js, constants.js
+- **Rendering:** rendering.js, sprites.js, terrain.js, constants.js, display.js
 - **Spawning:** world-logic.js, monsters.js, surface-gen.js or underground-gen.js
-- **FOV/vision:** fov.js, player.js, rendering.js, terrain.js, time-cycle.js, state.js
+- **FOV / vision / visual field:** fov.js, player.js, rendering.js, terrain.js, time-cycle.js, state.js, display.js, constants.js (getVisualConfig, getVisualAcuity)
+- **Scent system:** scent.js, constants.js (SCENT_PROFILES), state.js (wind), enemy-ai.js (call site), rendering.js (ground trail overlay)
+- **Ambient terrain sensing:** fov.js (updateAmbientSensing), constants.js (AMBIENT_VISUAL_COEFF, AMBIENT_VIB_COEFF), terrain.js
 - **Facing/turning:** player-actions.js, enemy-ai.js, fov.js, main.js, state.js
 - **Underground:** underground-gen.js, world-gen.js, constants.js, terrain.js
 - **Shops/economy:** interactions.js, items.js, player.js, ui.js, modal.js, constants.js
 - **NPCs/structures:** world-logic.js, surface-gen.js, constants.js, interactions.js, terrain.js, sprites.js
 - **Chargen/attributes:** chargen.js, player.js, constants.js, main.js, index.html, state.js
-- **UI/layout:** index.html, ui.js, main.js, rendering.js, constants.js
+- **UI/layout:** index.html, ui.js, main.js, rendering.js, display.js, constants.js
+- **Viewport / zoom:** display.js, rendering.js, main.js, index.html
 - **Save/load:** save-load.js, state.js, chargen.js, interactions.js, main.js (async IndexedDB — saveGame is fire-and-forget, loadGame must be awaited)
 - **Input/controls:** main.js, player-actions.js, constants.js
 - **Body map / creatures:** constants.js, monsters.js, combat.js, Body-Sim-Design.md, Surface-Creatures.md
+- **Muscle fiber / substrate:** enemy-ai.js (_regenerateSubstrate, _depleteLocomotionSubstrate), constants.js (substrate/fiber constants), Muscle-Fiber-Design.md
 - **Signals / emission:** signals.js, enemy-ai.js, constants.js, terrain.js
 - **Spatial grid / optimization:** enemy-ai.js, constants.js, state.js
-- **Sensory / detection:** enemy-ai.js, signals.js, constants.js, rendering.js, Sensory-Design.md
+- **Sensory / detection:** detection.js, signals.js, constants.js, rendering.js, Sensory-Design.md
 - **Cognition / AI behavior:** enemy-ai.js, monsters.js, constants.js, Cognition-Design.md
 - **Metabolism / immune (future):** Circulatory-Immune-Design.md, constants.js, monsters.js, combat.js
+- **Debug tracking:** enemy-ai.js, monsters.js, rendering.js, main.js
