@@ -290,7 +290,77 @@
   .inv-header .over{color:#c88;}
   .inv-header .gold-val{color:var(--accent);font-weight:bold;}
 
-  /* ─── Game overlay (centered panel with dimmed backdrop) ─── */
+  /* ─── Status panel (T key) — HUD-native, upper-right ─── */
+  .status-panel{
+    position:absolute;
+    top:0;
+    right:0;
+    width:min(280px, 38%);
+    z-index:5;
+    display:none;
+    flex-direction:column;
+    background:linear-gradient(to bottom, rgba(6,6,10,0.88) 0%, rgba(6,6,10,0.55) 75%, transparent 100%);
+    padding:36px 16px 24px 18px;
+    pointer-events:none;
+    zoom:var(--ui-zoom);
+  }
+  .status-panel.show{display:flex;}
+  .status-panel .sp-heading{
+    font-size:7px;
+    color:#3a3a3a;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  .status-panel .sp-zone{
+    font-size:9px;
+    line-height:1.9;
+    padding:1px 0;
+  }
+  .status-panel .sp-zone-name{
+    color:var(--fg-dim);
+    letter-spacing:0.5px;
+  }
+  .status-panel .sp-state{
+    margin-left:6px;
+    letter-spacing:0.5px;
+  }
+  .status-panel .sp-state.bruised{color:#6a6a5a;}
+  .status-panel .sp-state.wounded{color:#c88;}
+  .status-panel .sp-state.critical{color:#d4a050;}
+  .status-panel .sp-state.failing{color:#d45a4a;}
+  .status-panel .sp-state.destroyed{color:#555;font-style:italic;}
+  .status-panel .sp-bleed{
+    color:#c88;
+    font-size:7px;
+    letter-spacing:1px;
+    margin-left:4px;
+  }
+  .status-panel .sp-separator{
+    border:none;
+    border-top:1px dashed #1e1e28;
+    margin:6px 0;
+  }
+  .status-panel .sp-hunger{
+    font-size:9px;
+    line-height:1.9;
+    letter-spacing:0.5px;
+  }
+  .status-panel .sp-hunger-label{color:var(--fg-dim);}
+  .status-panel .sp-hunger-state{margin-left:6px;}
+  .status-panel .sp-hunger-state.ok{color:#6a7a5a;}
+  .status-panel .sp-hunger-state.comfortable{color:var(--fg-dim);}
+  .status-panel .sp-hunger-state.hungry{color:#c88;}
+  .status-panel .sp-hunger-state.famished{color:#d4a050;}
+  .status-panel .sp-hunger-state.starving{color:#d45a4a;}
+  .status-panel .sp-none{
+    font-size:9px;
+    color:#4a4a4a;
+    font-style:italic;
+    letter-spacing:0.5px;
+  }
+
+  /* ─── LEGACY POPUP: game-overlay — migrate [inventory panel] to HUD-native pattern ─── */
   .game-overlay{
     position:absolute;
     inset:0;
@@ -425,7 +495,7 @@
   .game-overlay .ov-item-actions button:hover{color:#fff;}
   .game-overlay .ov-item-actions button:disabled{opacity:0.25;cursor:not-allowed;}
 
-  /* ─── Modal ─── */
+  /* ─── LEGACY POPUP: Modal — migrate [ground items, shops, NPC dialogue, books] to HUD-native pattern ─── */
   .modal{
     position:absolute;
     inset:0;
@@ -972,10 +1042,14 @@
 
       <div class="zoom-label" id="zoom-label">×2</div>
 
+      <div class="status-panel" id="status-panel"></div>
+
+      <!-- LEGACY POPUP: migrate [inventory panel] to HUD-native pattern -->
       <div class="game-overlay" id="game-overlay">
         <div class="ov-body" id="overlay-body"></div>
       </div>
 
+      <!-- LEGACY POPUP: migrate [ground items, shops, NPC dialogue, books] to HUD-native pattern -->
       <div class="modal" id="modal">
         <div class="modal-inner" id="modal-inner"></div>
       </div>
