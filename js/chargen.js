@@ -105,7 +105,7 @@ function beginGame(){
 
   const sp = SPECIES_TEMPLATES[state.selectedSpecies];
   log(`You awaken as a ${sp.displayName}. The land stretches before you.`, 'system');
-  log('Explore carefully. Danger lurks in every shadow.', 'system');
+  log('Explore carefully. Danger in every shadow.', 'system');
   updatePlayerFOV();
   render();
 }
@@ -125,7 +125,7 @@ function onPlayerDeath(){
 }
 function onVictory(){
   state.gameState = 'victory';
-  document.getElementById('victory-sub').textContent = `You struck down the Dread King. The land exhales.`;
+  document.getElementById('victory-sub').textContent = `The land exhales.`;
   document.getElementById('victory').style.display = 'flex';
 }
 

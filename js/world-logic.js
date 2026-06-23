@@ -141,144 +141,61 @@ export function placeStructures(){
 
   // (Starting town has been disabled — player spawns directly on surface.)
 
-  // DISABLED — legacy content
-  // Sunward Hold — W
-  // const sunward = findSpotNear(LAYER_SURFACE,
-  //   Math.floor(W_SURF * 0.16), Math.floor(H_SURF * 0.34), t=>t===T.GRASS||t===T.ROCK, searchR);
-  // if (sunward){
-  //   const [x,y] = sunward;
+  // DORMANT: Underground layer transitions — reactivate when underground is reimplemented
+  // // Mountain cave entrance — SW
+  // const cave = findSpotNear(LAYER_SURFACE,
+  //   Math.floor(W_SURF * 0.31), Math.floor(H_SURF * 0.63), t=>t===T.ROCK, searchR);
+  // if (cave){
+  //   const [x,y] = cave;
+  //   const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE_FLOOR, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
+  //              || findSpot(LAYER_UNDER, t=>t===T.CAVE_FLOOR, 500)
+  //              || [W_UNDER>>1, H_UNDER>>1];
+  //   placeAt(LAYER_SURFACE, x, y, T.STAIRS_DOWN, {
+  //     type:'stairs', dir:'down', targetLayer:LAYER_UNDER, targetX:uSpot[0], targetY:uSpot[1]
+  //   });
   //   for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
-  //     const nx=x+dx, ny=y+dy;
-  //     if (inBounds(LAYER_SURFACE,nx,ny) && worlds[LAYER_SURFACE][ny][nx]===T.ROCK){
-  //       worlds[LAYER_SURFACE][ny][nx] = T.GRASS;
+  //     const nx=uSpot[0]+dx, ny=uSpot[1]+dy;
+  //     if (inBounds(LAYER_UNDER,nx,ny) && worlds[LAYER_UNDER][ny][nx]===T.CAVE_WALL){
+  //       worlds[LAYER_UNDER][ny][nx] = T.CAVE_FLOOR;
   //     }
   //   }
-  //   placeAt(LAYER_SURFACE, x, y, T.CASTLE, {
-  //     type:'castle', castleKey:'sunward', name:'Sunward Hold',
-  //     chests:[
-  //       {key:'kingsbane', name:'Kingsbane', kind:'weapon'},
-  //       {key:'kingsgarb',  name:'Kingslayer Plate', kind:'armor'},
-  //     ],
-  //     guarded:true, knightSpawned:false,
+  //   placeAt(LAYER_UNDER, uSpot[0], uSpot[1], T.STAIRS_UP, {
+  //     type:'stairs', dir:'up', targetLayer:LAYER_SURFACE, targetX:x, targetY:y
   //   });
-  //   registerStructurePosition('sunward_hold', x, y, LAYER_SURFACE);
+  //   const sn2 = findSpotNear(LAYER_SURFACE, x-2, y+2, t=>t===T.GRASS||t===T.ROCK, 8);
+  //   if (sn2) placeAt(LAYER_SURFACE, sn2[0], sn2[1], T.SIGN, {type:'sign', text:SIGN_TEXTS.cave_warn});
   // }
-  // DISABLED — legacy content
-  // Blackspire Keep — SE
-  // const bsR = Math.max(6, Math.round(Math.min(W_SURF, H_SURF) * 0.27));
-  // const bs = findSpotNear(LAYER_SURFACE,
-  //   Math.floor(W_SURF * 0.61), Math.floor(H_SURF * 0.79), t=>t===T.GRASS||t===T.SAND, bsR);
-  // if (bs){
-  //   const [x,y] = bs;
-  //   for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
-  //     const nx=x+dx, ny=y+dy;
-  //     if (inBounds(LAYER_SURFACE,nx,ny) && !isWalkable(worlds[LAYER_SURFACE][ny][nx])){
-  //       worlds[LAYER_SURFACE][ny][nx] = T.GRASS;
+
+  // DORMANT: Underground layer transitions — reactivate when underground is reimplemented
+  // // Northeast surface cave entrances
+  // const neCaveSearchR = Math.max(4, Math.round(Math.min(W_SURF, H_SURF) * 0.134));
+  // const neScatterX = Math.max(1, Math.round(W_SURF * 0.134));
+  // const neScatterY = Math.max(1, Math.round(H_SURF * 0.16));
+  // for (let i=0; i<3; i++){
+  //   const neCave = findSpotNear(LAYER_SURFACE,
+  //     Math.floor(W_SURF * 0.65) + randi(neScatterX),
+  //     Math.floor(H_SURF * 0.07) + randi(neScatterY),
+  //     t=>t===T.ROCK||t===T.CAVE_FLOOR, neCaveSearchR);
+  //   if (neCave){
+  //     const [x,y] = neCave;
+  //     const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE_FLOOR||t===T.ROCK, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
+  //                || findSpot(LAYER_UNDER, t=>t===T.CAVE_FLOOR||t===T.ROCK, 500);
+  //     if (uSpot){
+  //       for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
+  //         const nx=uSpot[0]+dx, ny=uSpot[1]+dy;
+  //         if (inBounds(LAYER_UNDER,nx,ny) && worlds[LAYER_UNDER][ny][nx]===T.CAVE_WALL){
+  //           worlds[LAYER_UNDER][ny][nx] = T.CAVE_FLOOR;
+  //         }
+  //       }
+  //       placeAt(LAYER_SURFACE, x, y, T.STAIRS_DOWN, {
+  //         type:'stairs', dir:'down', targetLayer:LAYER_UNDER, targetX:uSpot[0], targetY:uSpot[1]
+  //       });
+  //       placeAt(LAYER_UNDER, uSpot[0], uSpot[1], T.STAIRS_UP, {
+  //         type:'stairs', dir:'up', targetLayer:LAYER_SURFACE, targetX:x, targetY:y
+  //       });
   //     }
   //   }
-  //   placeAt(LAYER_SURFACE, x, y, T.BLACKSPIRE, {
-  //     type:'castle', castleKey:'blackspire', name:'Blackspire Keep', descent:true,
-  //   });
-  //   registerStructurePosition('blackspire_keep', x, y, LAYER_SURFACE);
-  //   const sn = findSpotNear(LAYER_SURFACE, x-2, y-2, t=>t===T.GRASS||t===T.SAND, 10);
-  //   if (sn) placeAt(LAYER_SURFACE, sn[0], sn[1], T.SIGN, {type:'sign', text:SIGN_TEXTS.castle_warn});
   // }
-
-  // Mountain cave entrance — SW
-  const cave = findSpotNear(LAYER_SURFACE,
-    Math.floor(W_SURF * 0.31), Math.floor(H_SURF * 0.63), t=>t===T.ROCK, searchR);
-  if (cave){
-    const [x,y] = cave;
-    const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE_FLOOR, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
-               || findSpot(LAYER_UNDER, t=>t===T.CAVE_FLOOR, 500)
-               || [W_UNDER>>1, H_UNDER>>1];
-    placeAt(LAYER_SURFACE, x, y, T.STAIRS_DOWN, {
-      type:'stairs', dir:'down', targetLayer:LAYER_UNDER, targetX:uSpot[0], targetY:uSpot[1]
-    });
-    for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
-      const nx=uSpot[0]+dx, ny=uSpot[1]+dy;
-      if (inBounds(LAYER_UNDER,nx,ny) && worlds[LAYER_UNDER][ny][nx]===T.CAVE_WALL){
-        worlds[LAYER_UNDER][ny][nx] = T.CAVE_FLOOR;
-      }
-    }
-    placeAt(LAYER_UNDER, uSpot[0], uSpot[1], T.STAIRS_UP, {
-      type:'stairs', dir:'up', targetLayer:LAYER_SURFACE, targetX:x, targetY:y
-    });
-    const sn2 = findSpotNear(LAYER_SURFACE, x-2, y+2, t=>t===T.GRASS||t===T.ROCK, 8);
-    if (sn2) placeAt(LAYER_SURFACE, sn2[0], sn2[1], T.SIGN, {type:'sign', text:SIGN_TEXTS.cave_warn});
-  }
-
-  // DISABLED — legacy content (Blackspire throne room + Dread King boss)
-  // if (bs){
-  //   const [bsX, bsY] = bs;
-  //
-  //   let throneX = Math.max(4, Math.min(W_UNDER - 5, bsX));
-  //   let throneY = Math.max(4, Math.min(H_UNDER - 5, bsY));
-  //
-  //   for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
-  //     const nx=throneX+dx, ny=throneY+dy;
-  //     if (inBounds(LAYER_UNDER,nx,ny)) worlds[LAYER_UNDER][ny][nx] = T.ROCK;
-  //   }
-  //   let nearestX = W_UNDER >> 1, nearestY = H_UNDER >> 1;
-  //   let nearestDist = Infinity;
-  //   for (const fk of Object.keys(features[LAYER_UNDER] || {})) {
-  //     const f = features[LAYER_UNDER][fk];
-  //     if (f && f.type === 'stairs' && f.dir === 'up') {
-  //       const [fx, fy] = fk.split(',').map(Number);
-  //       const d = Math.abs(fx - throneX) + Math.abs(fy - throneY);
-  //       if (d < nearestDist) { nearestDist = d; nearestX = fx; nearestY = fy; }
-  //     }
-  //   }
-  //   carveBetween(worlds[LAYER_UNDER], W_UNDER, H_UNDER, throneX, throneY - 3, nearestX, nearestY);
-  //   const stairUpX = throneX, stairUpY = throneY - 4;
-  //   if (inBounds(LAYER_UNDER, stairUpX, stairUpY)) worlds[LAYER_UNDER][stairUpY][stairUpX] = T.CAVE_FLOOR;
-  //   placeAt(LAYER_UNDER, stairUpX, stairUpY, T.STAIRS_UP, {
-  //     type:'stairs', dir:'up', targetLayer:LAYER_SURFACE, targetX:bsX, targetY:bsY
-  //   });
-  //   const bsFeat = getFeature(LAYER_SURFACE, bsX, bsY);
-  //   bsFeat.targetLayer = LAYER_UNDER;
-  //   bsFeat.targetX = stairUpX;
-  //   bsFeat.targetY = stairUpY;
-  //   placeAt(LAYER_UNDER, throneX, throneY, T.THRONE, {type:'throne'});
-  //   // Boss
-  //   const dk = spawnMonster('dread_king');
-  //   dk.x = throneX; dk.y = throneY+1;
-  //   dk.homeX = dk.x; dk.homeY = dk.y;
-  //   worlds[LAYER_UNDER][dk.y][dk.x] = T.ROCK;
-  //   dk.isBoss = true;
-  //   dk.hp = dk.hpMax;
-  //   monsters[LAYER_UNDER].push(dk);
-  // }
-
-  // Northeast surface cave entrances
-  const neCaveSearchR = Math.max(4, Math.round(Math.min(W_SURF, H_SURF) * 0.134));
-  const neScatterX = Math.max(1, Math.round(W_SURF * 0.134));
-  const neScatterY = Math.max(1, Math.round(H_SURF * 0.16));
-  for (let i=0; i<3; i++){
-    const neCave = findSpotNear(LAYER_SURFACE,
-      Math.floor(W_SURF * 0.65) + randi(neScatterX),
-      Math.floor(H_SURF * 0.07) + randi(neScatterY),
-      t=>t===T.ROCK||t===T.CAVE_FLOOR, neCaveSearchR);
-    if (neCave){
-      const [x,y] = neCave;
-      const uSpot = findUndergroundNear(x, y, LAYER_UNDER, t=>t===T.CAVE_FLOOR||t===T.ROCK, Math.max(10, Math.round(Math.min(W_UNDER, H_UNDER) * 0.36)))
-                 || findSpot(LAYER_UNDER, t=>t===T.CAVE_FLOOR||t===T.ROCK, 500);
-      if (uSpot){
-        for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){
-          const nx=uSpot[0]+dx, ny=uSpot[1]+dy;
-          if (inBounds(LAYER_UNDER,nx,ny) && worlds[LAYER_UNDER][ny][nx]===T.CAVE_WALL){
-            worlds[LAYER_UNDER][ny][nx] = T.CAVE_FLOOR;
-          }
-        }
-        placeAt(LAYER_SURFACE, x, y, T.STAIRS_DOWN, {
-          type:'stairs', dir:'down', targetLayer:LAYER_UNDER, targetX:uSpot[0], targetY:uSpot[1]
-        });
-        placeAt(LAYER_UNDER, uSpot[0], uSpot[1], T.STAIRS_UP, {
-          type:'stairs', dir:'up', targetLayer:LAYER_SURFACE, targetX:x, targetY:y
-        });
-      }
-    }
-  }
 
   // Eastern water cave entrances
   const wCaveMargin = Math.max(2, Math.round(Math.min(W_SURF, H_SURF) * 0.18));
@@ -375,7 +292,7 @@ const SPAWN_DENSITY_MULT = 0.5;
 const NO_SPAWN_COVERS = new Set([
   T.STAIRS_DOWN, T.STAIRS_UP, T.GATE, T.NPC, T.SHOP, T.INN,
   T.HOUSE, T.HOUSE_LG, T.WALL, T.SHOPKEEPER, T.SIGN, T.CHEST,
-  T.BOOK, T.THRONE, T.WELL, T.WELL_TL, T.WELL_TR, T.WELL_BL,
+  T.BOOK, T.WELL, T.WELL_TL, T.WELL_TR, T.WELL_BL,
   T.WELL_BR, T.BARREL, T.CRATE, T.LAMP_POST, T.FOUNTAIN,
   T.FARM, T.CASTLE, T.BLACKSPIRE, T.TOWN,
 ]);

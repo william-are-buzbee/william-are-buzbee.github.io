@@ -240,18 +240,6 @@ const MON = {
                '#4080a0',
                {nightVision:true}],
 };
-// Boss: intelligent undead. High search, won't pursue beyond throne chamber.
-const DREAD_KING = ['The Dread King','DREAD_KING',
-               140, 140, 80, 0, 80, 100, 0,  6, 10,
-               900, [800,1200],
-               ['cursed','undead','armored'], DMG.BLADE,
-               [], LAYER_UNDER,
-               95, 7,
-               2, 8,
-               [T.CAVE_FLOOR,T.ROCK],  // throne area
-               99, 99,              // never gives up
-               '#6a6080',
-               {critMul:2.0, nightVision:true}];
 
 // Monster derived stats — Size & Strength driven (Prompt 2)
 function monHP(mon){ return mon.siz * HP_PER_SIZE; }
@@ -270,7 +258,6 @@ const MON_SPEED = {
   mushroom: 45,   rock_golem: 25,
   cave_eel: 80,   cave_crab: 45,
   drowned: 45,    deep_squid: 50,
-  dread_king: 70,
   ambush_pred: 70,
 };
 
@@ -411,7 +398,6 @@ const VISION_PROFILES = {
   goblin:      { visionType: 'cone', coneAngle: 120 },
   knight:      { visionType: 'cone', coneAngle: 120 },
   mummy:       { visionType: 'cone', coneAngle: 120 },
-  dread_king:  { visionType: 'cone', coneAngle: 120 },
   // Clade A predators — focused hunting cone
   wolf:        { visionType: 'cone', coneAngle: 90 },
   dire_wolf:   { visionType: 'cone', coneAngle: 90 },
@@ -631,8 +617,7 @@ const VISION_CONE_WIDTHS = {
 
 function spawnMonster(key){
   let d;
-  if (key === 'dread_king') d = DREAD_KING;
-  else d = MON[key];
+  d = MON[key];
   if (!d) return null;
   const [name, spr,
          siz, strength, chem, vib, vis, central, distributed,
@@ -852,7 +837,6 @@ function spawnMonster(key){
   Used by world-gen spawner to enforce regional exclusivity.
 */
 function getSpawnRules(key){
-  if (key === 'dread_king') return DREAD_KING[26] || null;
   const d = MON[key];
   if (!d) return null;
   return d[26] || null;
@@ -862,7 +846,6 @@ function getSpawnRules(key){
 // Creatures whose definitions are kept but should never appear in the world.
 // World-gen spawner must skip any key in this set.
 const SPAWN_BLACKLIST = new Set([
-  'dread_king',    // DISABLED — legacy content (boss)
   'ice_wraith',    // removed from rotation — too punishing
   'magma_hound',   // lava monsters disabled
   'lava_fiend',    // lava monsters disabled
@@ -945,5 +928,5 @@ const HABITAT = {
 };
 
 // Re-export everything that other modules need
-export { MON, DREAD_KING, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES, CLADE_DATA, HABITAT, WANDER_PROFILES, DEFAULT_WANDER_PROFILE };
+export { MON, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES, CLADE_DATA, HABITAT, WANDER_PROFILES, DEFAULT_WANDER_PROFILE };
 export { rollPersonality, monHP, monDodge, monAcc, monCritChance, monCritMult, monDamage, spawnMonster, getSpawnRules, getCladeData };

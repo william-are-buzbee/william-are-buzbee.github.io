@@ -10,10 +10,10 @@ import { DMG, resistMult, getBodyMap, selectHitZone,
          computeStrikeDamage } from './constants.js';
 import { T, coverBonus } from './terrain.js';
 import { rand, randi, randRange, roll100 } from './rng.js';
-import { playerAcc, playerDodge, playerDef, playerCritChance,
-         playerCritMult, effectiveAP, cursedBaneMul, xpFromKill, deriveHP,
+import { playerAcc, playerDodge, playerDef,
+         effectiveAP, cursedBaneMul, xpFromKill, deriveHP,
          stealthBonus, poisonResistance } from './player.js';
-import { monDodge, monAcc, monCritChance, monCritMult, monDamage } from './monsters.js';
+import { monDodge, monAcc, monDamage } from './monsters.js';
 import { inBounds, chebyshev, monsterAt, isTownCell, getCover } from './world-state.js';
 import { log } from './log.js';
 import { placeItem, generateItemId } from './ground-items.js';
@@ -50,7 +50,7 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
     hitZone.hp = 0;
     hitZone.destroyed = true;
 
-    log(`${entityName}'s ${hitZone.name} is destroyed!`, 'crit');
+    log(`${entityName}'s ${hitZone.name} is destroyed.`, 'crit');
 
     // Blood system — destruction dump + severance burst
     if (entity.blood != null && entity.bloodMax > 0) {
@@ -154,7 +154,7 @@ function rollHit(acc, dodge){
 function playerAttack(mon){
   const player = state.player
   // Break stealth
-  if (state.player.stealth) endStealth('You strike while undetected!!');
+  if (state.player.stealth) endStealth('You strike while undetected.');
 
   const acc = playerAcc(player);
   const mdodge = monDodge(mon);
@@ -182,19 +182,17 @@ function playerAttack(mon){
            + (state.player.weapon.atk || 0) + Math.floor((player.level - 1) * 0.5) + randi(3);
   if (player.perks && player.perks.blade_bonus && state.player.weapon.type === DMG.BLADE) base += 1;
   if (player.perks && player.perks.blunt_bonus && state.player.weapon.type === DMG.BLUNT) base += 1;
-  const crit = roll100() <= playerCritChance(player);
-  if (crit) base = Math.floor(base * playerCritMult(player));
   const effDef = Math.max(0, mon.def - effectiveAP(player));
   let dmg = Math.max(1, base - effDef);
   const mult = resistMult(mon.tags, state.player.weapon.type);
-  let suffix = '';
+  let resistNote = '';
   if (mult === 0){
     dmg = 0;
-    suffix = ' [NO EFFECT]';
+    resistNote = ' — no effect';
   } else {
     dmg = Math.max(1, Math.round(dmg * mult));
-    if (mult >= 1.4) suffix = ' [WEAK]';
-    else if (mult <= 0.6) suffix = ' [RESIST]';
+    if (mult >= 1.4) resistNote = ' — it cuts deep';
+    else if (mult <= 0.6) resistNote = ' — it barely marks the surface';
   }
   // Cursed bane
   if (dmg > 0){
@@ -204,9 +202,7 @@ function playerAttack(mon){
   // Weapon's own bane property
   if (dmg > 0 && state.player.weapon.bane && mon.tags.includes(state.player.weapon.bane)){
     dmg = Math.round(dmg * (state.player.weapon.baneMul || 1.5));
-    suffix += ' [BANE]';
   }
-  if (crit) suffix += ' ‼';
 
   // ─── Footprint-based zone resolution ───
   const monBodyMap = getBodyMap(mon);
@@ -241,10 +237,7 @@ function playerAttack(mon){
         footprint = 0.5; // fallback: small footprint
       }
 
-contactedZones = selectContactedZones(exposedZones, footprint, bodyDmgType);
-
-// DEBUG — remove later
-log(`[DBG] dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z=>!z.destroyed).length} fp=${footprint.toFixed(2)} hit=${contactedZones.map(z=>z.key).join('+')}`, 'muted');
+      contactedZones = selectContactedZones(exposedZones, footprint, bodyDmgType);
     }
   }
 
@@ -266,24 +259,19 @@ log(`[DBG] dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z
   const verb = state.player.weapon.type === DMG.BLUNT ? 'crush' :
                state.player.weapon.type === DMG.BLADE ? 'strike' : 'hit';
 
-  // Build zone contact log message
+  // Build zone contact log message — naturalistic, no numbers
   if (contactedZones.length === 1) {
     const zn = contactedZones[0].name;
-    if (crit) log(`CRIT! You ${verb} ${mon.name}'s ${zn}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
-    else log(`You ${verb} ${mon.name}'s ${zn}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+    log(`You ${verb} ${mon.name}'s ${zn}${resistNote}.`, 'hit');
   } else if (contactedZones.length === 2) {
     const names = contactedZones.map(z => z.name).join(' and ');
-    if (crit) log(`CRIT! You ${verb} across ${mon.name}'s ${names}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
-    else log(`You ${verb} across ${mon.name}'s ${names}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+    log(`You ${verb} across ${mon.name}'s ${names}${resistNote}.`, 'hit');
   } else if (contactedZones.length >= 3) {
     const last = contactedZones[contactedZones.length - 1].name;
     const rest = contactedZones.slice(0, -1).map(z => z.name).join(', ');
-    if (crit) log(`CRIT! Your strike slams into ${mon.name}'s ${rest}, and ${last}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
-    else log(`Your ${verb} catches ${mon.name}'s ${rest}, and ${last}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+    log(`Your ${verb} catches ${mon.name}'s ${rest}, and ${last}${resistNote}.`, 'hit');
   } else {
-    // No zones (no body map)
-    if (crit) log(`CRIT! You ${verb} ${mon.name}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'crit');
-    else log(`You ${verb} ${mon.name}. ${dmg} ${state.player.weapon.type}${suffix}.`, 'hit');
+    log(`You ${verb} ${mon.name}${resistNote}.`, 'hit');
   }
 
   // Elemental bonus
@@ -294,12 +282,11 @@ log(`[DBG] dir=${attackDir} exposed=${exposedZones.length}/${monBodyMap.filter(z
     } else {
       const ebase = state.player.weapon.elemBonus + randi(3);
       const edmg = Math.max(1, Math.round(ebase * emul));
-      let esuf = '';
-      if (emul >= 1.4) esuf = ' [WEAK]';
-      else if (emul <= 0.6) esuf = ' [RESIST]';
       // Prompt H: no creature-wide HP decrement; elemental damage enters zone pipeline
       totalDmg += edmg;
-      log(`  + ${edmg} ${state.player.weapon.elem}${esuf}.`, 'hit');
+      if (emul >= 1.4) log(`  The ${state.player.weapon.elem} burns deep.`, 'hit');
+      else if (emul <= 0.6) log(`  The ${state.player.weapon.elem} barely takes hold.`, 'hit');
+      else log(`  ${state.player.weapon.elem} damage.`, 'hit');
     }
   }
 
@@ -425,7 +412,7 @@ function killMonster(mon){
   const gold = Math.round(randRange(mon.goldRange[0], mon.goldRange[1]));
   state.player.xp += xp;
   state.player.gold += gold;
-  log(`${mon.name} falls. [+${xp} XP, +${gold}g]`, 'dead');
+  log(`${mon.name} falls.`, 'dead');
   if (mon.isBoss){
     state.player.defeatedBoss = true;
     setTimeout(() => { if (_onVictoryCallback) _onVictoryCallback(); }, 500);
@@ -442,7 +429,7 @@ function checkLevelUp(){
     const oldHpMax = state.player.hpMax;
     state.player.hpMax = deriveHP(player);
     // NO heal on level up per spec — just log max HP gain
-    log(`★ Level ${state.player.level}! Max HP +${state.player.hpMax - oldHpMax}. Rest or find food to heal.`, 'crit');
+    log(`You feel hardier. Your body can take more punishment.`, 'system');
   }
 }
 

@@ -9,7 +9,6 @@ import { FOOD, POTIONS, BOOKS, findWeapon, findArmor } from './items.js';
 import {
   INV_SLOTS, carryCapacity, totalWeight,
   playerMelee, playerDef, playerAcc, playerDodge,
-  playerCritChance, playerCritMult, buyPriceMul,
   poisonResistance, passiveRegenInterval, describeAttributePerks
 } from './player.js';
 import { getBodyMap, getAvailableAttacks, computeStrikeDamage } from './constants.js';
@@ -28,8 +27,8 @@ const EFFECT_LABELS = {
 };
 
 const INTERACTABLE_TYPES = new Set([
-  'stairs', 'sign', 'npc', 'castle', 'chest',
-  'book', 'well', 'home', 'shop_building', 'throne',
+  'sign', 'chest',
+  'book', 'well', 'home',
 ]);
 
 const $ = id => document.getElementById(id);
@@ -138,8 +137,7 @@ function computeUIData() {
     fedLabel: p.fed > 75 ? 'FULL' : p.fed > 40 ? 'FED' : p.fed > 15 ? 'HUNGRY' : 'STARVING',
     fedWarn:  p.fed <= 40,
 
-    // attributes
-    siz: p.siz, strength: p.strength, chem: p.chem, vib: p.vib, vis: p.vis, central: p.central, distributed: p.distributed,
+    // attributes (bridge values — retained for internal use, not displayed)
     gold: p.gold,
     slotsText: `${p.inventory.length}/${INV_SLOTS} · ${tWt}/${cap}wt`,
 
@@ -149,8 +147,6 @@ function computeUIData() {
     defVal:    playerDef(p),
     accVal:    playerAcc(p),
     dodgeText: Math.round(playerDodge(p)) + '%',
-    critChanceText: Math.round(playerCritChance(p)) + '%',
-    critDmgText:  '×' + playerCritMult(p).toFixed(2),
 
     // equipment
     wpnName: p.weapon.name,
@@ -755,44 +751,6 @@ function buildExamineStatGroupsHTML(target, playerCentral, fullDetail) {
 
   if (!fullDetail) {
     if (playerCentral < 4) return html;  // too low to perceive stat details
-  }
-
-  const showPhysical = fullDetail || playerCentral >= 4;
-  const showSenses   = fullDetail || playerCentral >= 6;
-  const showProc     = fullDetail || playerCentral >= 8;
-
-  // Physical
-  if (showPhysical && (target.siz > 0 || target.strength > 0)) {
-    html += `<div class="ov-section">PHYSICAL</div>`;
-    if (target.siz > 0)      html += `<div class="ov-row"><span class="ov-k">Size</span><span class="ov-v">${target.siz}</span></div>`;
-    if (target.strength > 0) html += `<div class="ov-row"><span class="ov-k">Strength</span><span class="ov-v">${target.strength}</span></div>`;
-  }
-
-  // Senses
-  if (showSenses) {
-    const senses = [];
-    if (target.chem > 0)  senses.push({name:'Chemical',  val:target.chem});
-    if (target.vib > 0)   senses.push({name:'Vibration', val:target.vib});
-    if (target.vis > 0)   senses.push({name:'Visual',    val:target.vis});
-    if (senses.length > 0) {
-      html += `<div class="ov-section">SENSES</div>`;
-      for (const s of senses) {
-        html += `<div class="ov-row"><span class="ov-k">${s.name}</span><span class="ov-v">${s.val}</span></div>`;
-      }
-    }
-  }
-
-  // Processing
-  if (showProc) {
-    const proc = [];
-    if (target.central > 0)      proc.push({name:'Central',     val:target.central});
-    if (target.distributed > 0)  proc.push({name:'Distributed', val:target.distributed});
-    if (proc.length > 0) {
-      html += `<div class="ov-section">PROCESSING</div>`;
-      for (const s of proc) {
-        html += `<div class="ov-row"><span class="ov-k">${s.name}</span><span class="ov-v">${s.val}</span></div>`;
-      }
-    }
   }
 
   // Blood status — gated by player Central for examined enemies

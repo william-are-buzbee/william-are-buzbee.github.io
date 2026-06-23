@@ -619,35 +619,36 @@ export function makeSurface(seed) {
     }
   }
 
-  // ---- SURFACE STAIRCASES ----
-  // SE staircase (mushroom zone)
-  {
-    const seX = Math.floor(W_SURF * 0.68);
-    const seY = Math.floor(H_SURF * 0.78);
-    const pos = findWalkableNear(grid, coverGrid, seX, seY, W_SURF, H_SURF);
-    coverGrid[pos.y][pos.x] = T.STAIRS_DOWN;
-    setFeature(LAYER_SURFACE, pos.x, pos.y, {
-      type: 'stairs', dir: 'down',
-      targetLayer: LAYER_UNDER,
-      targetX: pos.x, targetY: pos.y,
-      sourceX: pos.x, sourceY: pos.y,
-      label: 'A staircase descends into the mushroom-choked dark.',
-    });
-  }
-  // NW staircase (stone zone)
-  {
-    const nwX = Math.floor(W_SURF * 0.18);
-    const nwY = Math.floor(H_SURF * 0.15);
-    const pos = findWalkableNear(grid, coverGrid, nwX, nwY, W_SURF, H_SURF);
-    coverGrid[pos.y][pos.x] = T.STAIRS_DOWN;
-    setFeature(LAYER_SURFACE, pos.x, pos.y, {
-      type: 'stairs', dir: 'down',
-      targetLayer: 2,
-      targetX: pos.x, targetY: pos.y,
-      sourceX: pos.x, sourceY: pos.y,
-      label: 'Worn steps lead down into cold stone passages.',
-    });
-  }
+  // DORMANT: Underground layer transitions — reactivate when underground is reimplemented
+  // // ---- SURFACE STAIRCASES ----
+  // // SE staircase (mushroom zone)
+  // {
+  //   const seX = Math.floor(W_SURF * 0.68);
+  //   const seY = Math.floor(H_SURF * 0.78);
+  //   const pos = findWalkableNear(grid, coverGrid, seX, seY, W_SURF, H_SURF);
+  //   coverGrid[pos.y][pos.x] = T.STAIRS_DOWN;
+  //   setFeature(LAYER_SURFACE, pos.x, pos.y, {
+  //     type: 'stairs', dir: 'down',
+  //     targetLayer: LAYER_UNDER,
+  //     targetX: pos.x, targetY: pos.y,
+  //     sourceX: pos.x, sourceY: pos.y,
+  //     label: 'A staircase descends into the mushroom-choked dark.',
+  //   });
+  // }
+  // // NW staircase (stone zone)
+  // {
+  //   const nwX = Math.floor(W_SURF * 0.18);
+  //   const nwY = Math.floor(H_SURF * 0.15);
+  //   const pos = findWalkableNear(grid, coverGrid, nwX, nwY, W_SURF, H_SURF);
+  //   coverGrid[pos.y][pos.x] = T.STAIRS_DOWN;
+  //   setFeature(LAYER_SURFACE, pos.x, pos.y, {
+  //     type: 'stairs', dir: 'down',
+  //     targetLayer: 2,
+  //     targetX: pos.x, targetY: pos.y,
+  //     sourceX: pos.x, sourceY: pos.y,
+  //     label: 'Worn steps lead down into cold stone passages.',
+  //   });
+  // }
 
   // ---- Spawn monsters ----
   populateMonsters(grid, LAYER_SURFACE);

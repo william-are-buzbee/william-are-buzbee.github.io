@@ -7,7 +7,6 @@ export const T = {
   TOWN:20, CASTLE:21, BLACKSPIRE:22,
   STAIRS_DOWN:23, STAIRS_UP:24, SIGN:25, CHEST:26, BOOK:27, GATE:28,
   NPC:29, HOUSE:30, SHOP:31, INN:32, WELL:33, FARM:34,
-  THRONE:35,
 
   // --- Extended types ---
   // (id 36 retired — formerly DIRT_ROAD, now use DIRT)
@@ -107,7 +106,6 @@ export const TERRAIN_INFO = {
   [T.INN]:       {name:'inn',           sprite:'INN',      palette:'town',     walk:true,  cover:0,   terrainLayer:'cover', overlay:true},
   [T.WELL]:      {name:'well',          sprite:'WELL',     palette:'town',     walk:true,  cover:0,   terrainLayer:'cover', overlay:true},
   [T.FARM]:      {name:'farm',          sprite:'FARM',     palette:'wheat',    walk:true,  cover:0,   terrainLayer:'cover', overlay:true},
-  [T.THRONE]:    {name:'throne',        sprite:'STAIRS_UP',palette:'cave',     walk:true,  cover:0,   terrainLayer:'cover', overlay:true},
   [T.RUIN_WALL]: {name:'crumbled wall', sprite:'RUIN_WALL',palette:'ruin',    walk:false, cover:0,   terrainLayer:'cover', overlay:true},
   [T.WELL_TL]:   {name:'well',          sprite:'WELL_TL',  palette:'town',    walk:false, cover:0,   terrainLayer:'cover', overlay:true},
   [T.WELL_TR]:   {name:'well',          sprite:'WELL_TR',  palette:'town',    walk:false, cover:0,   terrainLayer:'cover', overlay:true},
@@ -206,7 +204,6 @@ const DEFAULT_GROUND_FOR_COVER = {
   [T.INN]:         T.GRASS,
   [T.WELL]:        T.GRASS,
   [T.FARM]:        T.GRASS,
-  [T.THRONE]:      T.CAVE_FLOOR,
   [T.RUIN_WALL]:   T.RUIN_FLOOR,
   [T.WELL_TL]:     T.GRASS,
   [T.WELL_TR]:     T.GRASS,

@@ -356,7 +356,7 @@ function levelCap(p){
   return 99;  // effectively uncapped
 }
 
-// Cursed bane (from Pacts book + Kingsbane weapon)
+// Cursed bane (from Pacts book)
 function cursedBaneMul(p, tags){
   let m = 1;
   if (p.perks && p.perks.cursed_bane && tags.includes('cursed')) m *= 1.25;
@@ -442,10 +442,7 @@ function describeAttributePerks(p){
     const avgAP = ((p.strength / 10 - 1) * (3 / 9));
     lines.push(`Strength ${p.strength}: blunt AP ~+${avgAP.toFixed(1)} avg`);
   }
-  // Central: crit damage contribution
-  if (p.central >= 20){
-    lines.push(`Central ${p.central}: crit dmg ×${(1.5 + p.strength*0.002 + p.central*0.002).toFixed(2)}`);
-  }
+  // Central: price discount
   if (p.central >= 20){
     const staple = Math.round((1 - buyPriceMul(p, PRICE_CAT.STAPLE)) * 100);
     const standard = Math.round((1 - buyPriceMul(p, PRICE_CAT.STANDARD)) * 100);
