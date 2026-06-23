@@ -7,7 +7,7 @@ import { tileSize, viewW, viewH, cycleZoom, setZoom, zoom } from './display.js';
 // LEGACY POPUP: modal.js still used by ground items, shops, NPC dialogue, books.
 // Migrate these features to HUD-native patterns, then remove this import.
 import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js';
-import { updateUI, hideHud, toggleStatusPanel, closeStatusPanel, isStatusPanelOpen } from './ui.js';
+import { updateUI, hideHud, toggleStatusFullMode } from './ui.js';
 import { canvas, ctx, resizeCanvas, render } from './rendering.js';
 
 import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks, eatAction } from './player-actions.js';
@@ -391,7 +391,7 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  // ── Overlay panel handling (inventory only — status is HUD-native) ──
+  // ── Overlay panel handling (inventory only) ──
   // LEGACY POPUP: inventory still uses overlay. Migrate to HUD-native pattern.
   const PANEL_KEYS = { i: 'inventory' };
   const kLow = ev.key.toLowerCase();
@@ -403,17 +403,11 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  // T key: toggle HUD-native status panel (non-blocking — game continues behind it)
+  // T key: toggle HUD bar display mode (minimal ↔ full)
   if (kLow === 't' && !ev.shiftKey && !isMapOpen()) {
     ev.preventDefault();
-    toggleStatusPanel();
-    return;
-  }
-
-  // Escape: close status panel if open (before checking other keys)
-  if (ev.key === 'Escape' && isStatusPanelOpen()) {
-    ev.preventDefault();
-    closeStatusPanel();
+    toggleStatusFullMode();
+    updateUI();
     return;
   }
 

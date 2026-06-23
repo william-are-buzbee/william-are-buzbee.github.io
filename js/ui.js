@@ -318,13 +318,21 @@ function applyToDOM(d) {
   // Sidebar panels have been removed from the DOM.
   // Update the minimal always-visible HUD instead.
   updateHud(d);
-  // Status panel refreshes if open — reads directly from state.player
-  _renderStatusPanel();
 }
 
 // ───────────────────────────────────────────────────────
 //  §4b  MINIMAL HUD  (zone HP + blood + food bars, top-right)
 // ───────────────────────────────────────────────────────
+
+// ── Status display mode toggle ──
+// false = minimal (bars hidden when all zones full — "no news is good news")
+// true  = full (all bars always visible regardless of health)
+// Toggled by the T key. Not saved — resets on reload.
+let statusFullMode = false;
+
+function toggleStatusFullMode() {
+  statusFullMode = !statusFullMode;
+}
 
 const _hudEl       = document.getElementById('hud');
 const _hudZones    = document.getElementById('hud-zones');
@@ -418,8 +426,9 @@ function updateHud(d) {
   }
 
   // Hide zone bars when everything is healthy — no news is good news
+  // In full mode (T key toggle), show all bars unconditionally.
   const anyDamaged = zones.some(z => z.destroyed || z.hp < z.maxHp);
-  _hudZones.style.display = anyDamaged ? '' : 'none';
+  _hudZones.style.display = (statusFullMode || anyDamaged) ? '' : 'none';
 
   // Food bar
   const fedPct = Math.max(0, Math.min(100, d.fedPct));
@@ -428,19 +437,20 @@ function updateHud(d) {
   _hudFoodNum.textContent = Math.round(state.player.fed) + '%';
 
   // Dim food bar when well-fed — it's only urgent information when low
+  // In full mode, always show at full opacity.
   const foodRow = _hudFoodBar.closest('.hud-row');
   if (foodRow) {
-    foodRow.style.opacity = d.fedWarn ? '1.0' : '0.5';
+    foodRow.style.opacity = (statusFullMode || d.fedWarn) ? '1.0' : '0.5';
   }
 
   // Blood bar (matches HP/food bar style)
   if (_hudBloodRow && _hudBloodBar && _hudBloodNum) {
-    if (p && p.blood != null && p.bloodMax > 0 && d.bloodStatus) {
+    if (p && p.blood != null && p.bloodMax > 0 && (d.bloodStatus || statusFullMode)) {
       _hudBloodRow.style.display = '';
       const bloodPct = Math.max(0, Math.min(100, (p.blood / p.bloodMax) * 100));
       _hudBloodBar.style.width = bloodPct + '%';
       _hudBloodBar.className = 'hud-bar-fill hp' + (bloodPct > 50 ? ' ok' : '');
-      _hudBloodNum.textContent = d.bloodStatus.label;
+      _hudBloodNum.textContent = d.bloodStatus ? d.bloodStatus.label : 'stable';
     } else {
       _hudBloodRow.style.display = 'none';
     }
@@ -456,129 +466,6 @@ function updateHud(d) {
 function hideHud() {
   if (_hudEl) _hudEl.classList.remove('show');
   _zoneCacheLen = -1;
-  // Close status panel when leaving gameplay
-  closeStatusPanel();
-}
-
-
-// ───────────────────────────────────────────────────────
-//  §4c  HUD-NATIVE STATUS PANEL (T key)
-// ───────────────────────────────────────────────────────
-// Replaces the old overlay-based status screen. Non-blocking — the game
-// continues behind it. Shows qualitative zone health and hunger only.
-// Positioned upper-right with the same gradient-fade visual language
-// as the log and zone bars.
-
-const _statusPanelEl = document.getElementById('status-panel');
-let _statusPanelOpen = false;
-
-function toggleStatusPanel() {
-  _statusPanelOpen ? closeStatusPanel() : openStatusPanel();
-}
-
-function openStatusPanel() {
-  _statusPanelOpen = true;
-  _renderStatusPanel();
-  if (_statusPanelEl) _statusPanelEl.classList.add('show');
-}
-
-function closeStatusPanel() {
-  _statusPanelOpen = false;
-  if (_statusPanelEl) _statusPanelEl.classList.remove('show');
-}
-
-function isStatusPanelOpen() {
-  return _statusPanelOpen;
-}
-
-// DESIGN NOTE: Qualitative health is a placeholder for true self-knowledge.
-// Physically, the creature should only know a zone's state if:
-//   1. Pain signals from that zone reach the CNS (neural pathway intact)
-//   2. The creature has enough integration capacity to process body-state
-//   3. Endocrine states (adrenaline) are only self-reportable with sufficient workspace
-// For now, all zones report unconditionally. Gate behind neural checks when
-// the ganglia system supports body-awareness queries.
-
-function _zoneHealthState(zone) {
-  if (zone.destroyed) return { label: 'destroyed', css: 'destroyed' };
-  if (zone.hp == null || zone.maxHp == null || zone.maxHp <= 0) return null;
-  const pct = (zone.hp / zone.maxHp) * 100;
-  if (pct >= 90) return null;               // healthy — invisible ("no news is good news")
-  if (pct >= 60) return { label: 'bruised',  css: 'bruised' };
-  if (pct >= 30) return { label: 'wounded',  css: 'wounded' };
-  if (pct >= 10) return { label: 'critical', css: 'critical' };
-  if (pct >= 1)  return { label: 'failing',  css: 'failing' };
-  return { label: 'destroyed', css: 'destroyed' };
-}
-
-function _isZoneBleeding(zone) {
-  if (zone.destroyed) return false;
-  if (zone.hp == null || zone.maxHp == null) return false;
-  return zone.hp < zone.maxHp * 0.5 && (zone.clotting || 0) < 1.0;
-}
-
-function _hungerState(fed) {
-  if (fed > 75) return { label: 'satiated',    css: 'ok' };
-  if (fed > 50) return { label: 'comfortable', css: 'comfortable' };
-  if (fed > 25) return { label: 'hungry',      css: 'hungry' };
-  if (fed > 10) return { label: 'famished',    css: 'famished' };
-  return { label: 'starving', css: 'starving' };
-}
-
-/** Readable zone label from the zone's own name field or formatted key. */
-function _statusZoneName(zone) {
-  if (zone.name) return zone.name;
-  return zone.key.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
-}
-
-/** Rebuild status panel HTML from current player state. */
-function _renderStatusPanel() {
-  if (!_statusPanelEl || !_statusPanelOpen) return;
-  const p = state.player;
-  if (!p) { _statusPanelEl.innerHTML = ''; return; }
-
-  let html = '<div class="sp-heading">condition</div>';
-
-  // Zone health — only show damaged/destroyed zones
-  const bodyMap = p.bodyMap || [];
-  let anyInjured = false;
-  for (const zone of bodyMap) {
-    const health = _zoneHealthState(zone);
-    if (!health) continue;  // healthy — skip
-    anyInjured = true;
-    const bleeding = _isZoneBleeding(zone);
-    html += `<div class="sp-zone">`;
-    html += `<span class="sp-zone-name">${_statusZoneName(zone)}</span>`;
-    html += `<span class="sp-state ${health.css}">${health.label}</span>`;
-    if (bleeding) html += `<span class="sp-bleed">BLEEDING</span>`;
-    html += `</div>`;
-  }
-
-  if (!anyInjured) {
-    html += `<div class="sp-none">No injuries.</div>`;
-  }
-
-  // Blood status — qualitative
-  if (p.blood != null && p.bloodMax > 0) {
-    const ratio = p.blood / p.bloodMax;
-    if (ratio < 0.75) {
-      let label, css;
-      if (ratio <= 0.25)      { label = 'critical blood loss'; css = 'critical'; }
-      else if (ratio <= 0.50) { label = 'weakened from bleeding'; css = 'wounded'; }
-      else                    { label = 'bleeding'; css = 'bruised'; }
-      html += `<div class="sp-zone"><span class="sp-zone-name">Blood</span><span class="sp-state ${css}">${label}</span></div>`;
-    }
-  }
-
-  // Separator + hunger (always shown)
-  html += `<hr class="sp-separator">`;
-  const hunger = _hungerState(p.fed);
-  html += `<div class="sp-hunger">`;
-  html += `<span class="sp-hunger-label">Hunger</span>`;
-  html += `<span class="sp-hunger-state ${hunger.css}">${hunger.label}</span>`;
-  html += `</div>`;
-
-  _statusPanelEl.innerHTML = html;
 }
 
 
@@ -965,7 +852,5 @@ export {
   monsterAt,
   chebyshev,
   hideHud,
-  toggleStatusPanel,
-  closeStatusPanel,
-  isStatusPanelOpen,
+  toggleStatusFullMode,
 };
