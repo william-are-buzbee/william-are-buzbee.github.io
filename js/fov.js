@@ -36,7 +36,7 @@
 
 import { worlds, covers, state } from './state.js';
 import { inBounds, getCover } from './world-state.js';
-import { T, tileBlocksVision, tileHasVisionPenalty } from './terrain.js';
+import { T, tileBlocksVision, tileHasVisionPenalty, tileSightlineOpacity } from './terrain.js';
 
 // Ambient terrain sensing — constants and the player body-map accessor.
 // getBodyMap is defined in constants.js (enemy-ai.js and combat.js both import
@@ -45,6 +45,7 @@ import {
   AMBIENT_VISUAL_COEFF, AMBIENT_VIB_COEFF,
   LAYER_SURFACE, LAYER_META,
   getBodyMap, getVisualConfig,
+  OCCLUSION_BUDGET_COEFF, BINOCULAR_DEPTH_BONUS,
 } from './constants.js';
 
 // Time-of-day phase for the ambient visual light modifier.
@@ -108,33 +109,109 @@ function treeHash(tx, ty, vx, vy) {
   return (h >>> 0) / 4294967296;
 }
 
+// ==================== SIGHTLINE OPACITY ACCUMULATION ====================
+// Replaces the probabilistic tree transparency system for the player's
+// per-eye visual field.  Each tile along a ray from the observer to a target
+// contributes its sightlineOpacity.  When accumulated opacity exceeds the
+// observer's occlusion budget (derived from eye acuity), the ray terminates.
+//
+// Module-level cache: populated by the player's computeFOV call so that
+// updatePlayerFOV can apply the lower monocular budget during tile
+// classification without re-marching every ray.
+let _opacityCache = null; // Map<string, number> | null — "x,y" → accumulated opacity
+
+/** Return the most recent opacity cache (populated by computeFOV with a budget). */
+export function getOpacityCache() { return _opacityCache; }
+
+/**
+ * Bresenham ray-march from (ox,oy) to (wx,wy), summing sightline opacity
+ * of INTERMEDIATE tiles only (origin and destination excluded).
+ * Returns the total intermediate opacity along the ray.
+ *
+ * @param {number} layer
+ * @param {number} ox, oy — origin
+ * @param {number} wx, wy — destination
+ * @returns {number} accumulated sightline opacity of intermediate tiles
+ */
+function _intermediateRayOpacity(layer, ox, oy, wx, wy) {
+  // Same tile or adjacent — no intermediates
+  if (ox === wx && oy === wy) return 0;
+
+  let dx = Math.abs(wx - ox), dy = Math.abs(wy - oy);
+  let sx = ox < wx ? 1 : -1, sy = oy < wy ? 1 : -1;
+  let err = dx - dy;
+  let cx = ox, cy = oy;
+  let accumulated = 0;
+
+  while (true) {
+    const e2 = 2 * err;
+    if (e2 > -dy) { err -= dy; cx += sx; }
+    if (e2 <  dx) { err += dx; cy += sy; }
+
+    // Reached destination — stop (destination is not counted as intermediate)
+    if (cx === wx && cy === wy) break;
+
+    // Out of bounds — ray blocked (treat as wall)
+    if (!inBounds(layer, cx, cy)) return Infinity;
+
+    // Hard blocker — shouldn't normally happen since shadowcast skips tiles
+    // behind walls, but safety check
+    const ground = worlds[layer][cy][cx];
+    const cover  = getCover(layer, cx, cy);
+    if (tileBlocksVision(ground, cover)) return Infinity;
+
+    accumulated += tileSightlineOpacity(ground, cover);
+  }
+
+  return accumulated;
+}
+
 /**
  * Compute the set of tiles visible from (ox, oy) on the given layer.
  * Full circular FOV — no directional filtering.
  * Used by enemies and as the base computation for cone FOV.
  *
- * When `per` is provided, tree-cover tiles are probabilistically transparent:
- * each tree independently rolls against the PER-based chance during the
- * shadowcast. A failed roll makes the tree cast a shadow like a wall.
+ * Two modes of tree/cover handling (mutually exclusive):
+ *
+ * 1. Legacy tree transparency (`per` provided, no `occlusionBudget`):
+ *    Each tree independently rolls against the PER-based chance during the
+ *    shadowcast. A failed roll makes the tree cast a shadow like a wall.
+ *
+ * 2. Sightline opacity accumulation (`occlusionBudget` provided):
+ *    Each tile along a ray adds its sightlineOpacity. When accumulated
+ *    opacity exceeds the budget, the ray terminates. Populates the
+ *    module-level _opacityCache so callers can query per-tile opacity.
  *
  * @param {number} layer   — layer index
  * @param {number} ox      — origin x
  * @param {number} oy      — origin y
  * @param {number} radius  — vision radius in tiles
- * @param {number} [per]   — viewer's PER stat (omit to skip tree rolls)
+ * @param {number} [per]   — viewer's PER stat (legacy tree rolls)
+ * @param {number} [occlusionBudget] — max accumulated opacity before ray dies
  * @returns {Set<string>}  — set of "x,y" keys for all visible tiles
  */
-export function computeFOV(layer, ox, oy, radius, per) {
+export function computeFOV(layer, ox, oy, radius, per, occlusionBudget) {
   const visible = new Set();
   // Origin is always visible
   visible.add(`${ox},${oy}`);
 
-  // Precompute the transparency chance once (null if no PER → trees never block)
-  const treeChance = per != null ? treeTransparencyChance(per) : null;
+  // Determine which cover-handling mode to use
+  const useOpacityBudget = occlusionBudget != null && occlusionBudget > 0;
+  const treeChance = (!useOpacityBudget && per != null)
+    ? treeTransparencyChance(per)
+    : null;
+
+  // Opacity cache — only populated when using sightline opacity accumulation
+  const opacityMap = useOpacityBudget ? new Map() : null;
+  if (opacityMap) opacityMap.set(`${ox},${oy}`, 0);
 
   for (const oct of OCTANTS) {
-    castOctant(layer, ox, oy, radius, 1, 1.0, 0.0, oct, visible, treeChance);
+    castOctant(layer, ox, oy, radius, 1, 1.0, 0.0, oct, visible,
+               treeChance, useOpacityBudget ? occlusionBudget : 0, opacityMap);
   }
+
+  // Store opacity cache at module level for updatePlayerFOV to read
+  if (opacityMap) _opacityCache = opacityMap;
 
   return visible;
 }
@@ -151,12 +228,19 @@ export function computeFOV(layer, ox, oy, radius, per) {
  * @param {Set<string>} visible — accumulator
  * @param {number|null} treeChance — probability (0–1) of seeing through a tree
  *                                    tile, or null to skip tree rolls entirely
+ * @param {number} occlusionBudget — max accumulated sightline opacity before
+ *                                    the ray terminates (0 = disabled)
+ * @param {Map<string,number>|null} opacityMap — "x,y" → total accumulated
+ *                                    opacity to reach this tile (populated when
+ *                                    occlusionBudget > 0)
  */
-function castOctant(layer, ox, oy, radius, row, startSlope, endSlope, oct, visible, treeChance) {
+function castOctant(layer, ox, oy, radius, row, startSlope, endSlope, oct, visible,
+                    treeChance, occlusionBudget, opacityMap) {
   if (startSlope < endSlope) return;
 
   const [xx, xy, yx, yy] = oct;
   let newStart = startSlope;
+  const useBudget = occlusionBudget > 0;
 
   for (let r = row; r <= radius; r++) {
     let blocked = false;
@@ -179,20 +263,50 @@ function castOctant(layer, ox, oy, radius, row, startSlope, endSlope, oct, visib
 
       if (!inBounds(layer, wx, wy)) continue;
 
-      // This tile is visible (the tile itself is always revealed, even if it blocks)
-      visible.add(`${wx},${wy}`);
-
-      // Check if this tile blocks vision
+      // Check if this tile blocks vision (hard blockers: walls, non-walkable cover)
       const ground = worlds[layer][wy][wx];
       const cover  = getCover(layer, wx, wy);
       let isBlocking = tileBlocksVision(ground, cover);
 
-      // Probabilistic tree transparency: if this tile has a vision penalty
-      // (trees/mushroom forest), check the deterministic spatial hash to
-      // decide if it blocks this sightline. Same viewer position always
-      // produces the same pattern — no accumulation from standing still.
-      if (!isBlocking && treeChance != null && tileHasVisionPenalty(ground, cover)) {
-        isBlocking = treeHash(wx, wy, ox, oy) >= treeChance;
+      // ── Sightline opacity accumulation (replaces tree transparency for player) ──
+      if (useBudget && !isBlocking) {
+        // Ray-march from origin to this tile: sum intermediate tile opacities
+        const intermediateOpacity = _intermediateRayOpacity(layer, ox, oy, wx, wy);
+        const tileOpacity = tileSightlineOpacity(ground, cover);
+        const totalOpacity = intermediateOpacity + tileOpacity;
+        const tileKey = `${wx},${wy}`;
+
+        if (intermediateOpacity >= occlusionBudget) {
+          // Budget exhausted before reaching this tile — not visible
+          // Still need to inform the shadowcast this column is opaque so
+          // tiles behind are also excluded.
+          isBlocking = true;
+          // Don't add to visible or opacity map — tile is hidden
+        } else {
+          // Tile is visible (budget not yet exhausted on arrival)
+          visible.add(tileKey);
+          if (opacityMap) opacityMap.set(tileKey, totalOpacity);
+
+          // If total opacity (including this tile) exceeds budget, this tile
+          // blocks further vision along this angular slice.
+          if (totalOpacity >= occlusionBudget) {
+            isBlocking = true;
+          }
+        }
+      } else if (!useBudget) {
+        // ── Legacy path: tile is always visible; tree transparency via hash ──
+        visible.add(`${wx},${wy}`);
+
+        // Probabilistic tree transparency: if this tile has a vision penalty
+        // (trees/mushroom forest), check the deterministic spatial hash to
+        // decide if it blocks this sightline. Same viewer position always
+        // produces the same pattern — no accumulation from standing still.
+        if (!isBlocking && treeChance != null && tileHasVisionPenalty(ground, cover)) {
+          isBlocking = treeHash(wx, wy, ox, oy) >= treeChance;
+        }
+      } else {
+        // Hard-blocking tile with budget enabled — tile itself is visible
+        visible.add(`${wx},${wy}`);
       }
 
       if (blocked) {
@@ -210,7 +324,8 @@ function castOctant(layer, ox, oy, radius, row, startSlope, endSlope, oct, visib
           // Hit a wall — recurse with the remaining open arc above this wall,
           // then mark this wall as the new shadow boundary.
           blocked = true;
-          castOctant(layer, ox, oy, radius, r + 1, startSlope, (col + 0.5) / (r - 0.5), oct, visible, treeChance);
+          castOctant(layer, ox, oy, radius, r + 1, startSlope, (col + 0.5) / (r - 0.5), oct, visible,
+                     treeChance, occlusionBudget, opacityMap);
           newStart = rightSlope;
         }
       }
@@ -429,15 +544,29 @@ export function updatePlayerFOV() {
     : 0;
   const visualRadius = Math.max(identRange, fullEyeRange);
 
+  // ── Occlusion budgets from eye acuity ──
+  // Binocular rays get a depth bonus (stereoscopic separation of cover from
+  // target). Monocular rays use the base budget. The shadowcast runs with the
+  // higher binocular budget; monocular tiles are post-filtered against the
+  // lower budget using the per-tile opacity cache.
+  const acuity = eyeConfig ? eyeConfig.acuity : 0;
+  const monocularBudget = acuity * OCCLUSION_BUDGET_COEFF;
+  const binocularBudget = monocularBudget * BINOCULAR_DEPTH_BONUS;
+
   // ── Awareness bubble (always binocular, radius 1) ──
   const awareR = awarenessRadius(p);
-  const awareFOV = computeFOV(layer, p.x, p.y, awareR); // no tree rolls
+  const awareFOV = computeFOV(layer, p.x, p.y, awareR); // no tree rolls, no budget
 
   // ── Full visual field shadowcast ──
-  // One shadowcast for the entire visual range, then classify by eye cones.
+  // One shadowcast for the entire visual range using the binocular budget
+  // (the more generous budget). Monocular tiles are filtered afterward.
+  _opacityCache = null;
   const fullFOV = visualRadius > 0
-    ? computeFOV(layer, p.x, p.y, visualRadius, p.per)
+    ? computeFOV(layer, p.x, p.y, visualRadius, null, binocularBudget)
     : new Set();
+
+  // Read the opacity cache produced by the shadowcast
+  const opacityMap = _opacityCache;
 
   // ── Classify tiles by eye coverage ──
   const binocular = new Set();
@@ -467,6 +596,20 @@ export function updatePlayerFOV() {
       if (inLeft && inRight) {
         binocular.add(key);
       } else if (inLeft || inRight) {
+        // Monocular tile — check against the lower monocular budget.
+        // The shadowcast used the binocular budget, so some tiles may be
+        // visible binocularly but not monocularly.
+        if (opacityMap && monocularBudget > 0) {
+          const tileOpacity = opacityMap.get(key);
+          // If opacity data is missing (shouldn't happen) or exceeds
+          // monocular budget, exclude from monocular set.
+          if (tileOpacity != null && tileOpacity >= monocularBudget) {
+            // Tile is beyond monocular budget — not visible in monocular zone.
+            // It will be visible only if it's also in the binocular zone
+            // (already handled above).
+            continue;
+          }
+        }
         monocular.add(key);
       }
       // else: in shadowcast LOS but outside both eye cones — not visible

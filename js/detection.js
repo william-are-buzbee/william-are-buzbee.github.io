@@ -3,7 +3,7 @@
 // The sensory pipeline: per-zone detection, visual, SNR, uncertainty.
 // Split from enemy-ai.js — zero behavior change.
 
-import { state, groundItems } from './state.js';
+import { state, worlds, groundItems } from './state.js';
 import { getBodyMap,
          CHEM_RANGE_COEFF, VIB_GROUND_RANGE_COEFF, VIB_AIR_RANGE_COEFF, VIS_RANGE_COEFF,
          MAX_DETECTION_DISTANCE,
@@ -17,13 +17,16 @@ import { getBodyMap,
          computeBleedPenalty, computeStrikeDamage, getPathways,
          getAvailableAttacks, checkNeuralDeath, hasLocomotion,
          BURST_COEFF, BLOOD_DEATH_THRESHOLD, ARMOR_PER_STRUCTURAL_KG,
-         selectHitZone } from './constants.js';
+         selectHitZone,
+         MOTION_CONCEALMENT_REDUCTION, BODY_PLAN_HEIGHT_COEFF,
+       } from './constants.js';
 import { currentTimePhase } from './time-cycle.js';
 import { hasLOS } from './fov.js';
-import { chebyshev } from './world-state.js';
+import { chebyshev, getCover } from './world-state.js';
 import { stealthDetectChance, rollHit } from './combat.js';
 import { roll100 } from './rng.js';
 import { creatureViewRadius } from './player.js';
+import { tileConcealmentData } from './terrain.js';
 import { dist, directionToward, getCreatureMass, getPlayerDiet, WATER_TILES, isWaterTile,
          getNearbyCreatures } from './ai-utils.js';
 
@@ -243,6 +246,48 @@ function _isActivelyTracking(detector, target) {
     return detector.threatSource === target;
 }
 
+// ==================== LOCAL CONCEALMENT ====================
+// Cover on the target's tile partially hides creatures standing on it.
+// This reduces the visual signal before SNR computation. Does NOT affect
+// terrain visibility (you see the tile, but the creature is harder to spot).
+// Only applies to the VISUAL channel — chemical/vibration are unaffected.
+
+/**
+ * Compute effective concealment for a creature on its current tile.
+ * Size-dependent: cover hides more of a small creature than a large one.
+ * Motion-dependent: moving through cover disturbs it, reducing concealment.
+ *
+ * @param {object} target — the creature being observed
+ * @returns {number} concealment factor 0–1 (0 = no concealment, 1 = fully hidden)
+ */
+function computeEffectiveConcealment(target) {
+  const layer = target.layer != null ? target.layer : state.player.layer;
+  if (!worlds[layer]) return 0;
+
+  const ground = worlds[layer][target.y]?.[target.x];
+  const cover = getCover(layer, target.x, target.y);
+  const coverData = tileConcealmentData(ground, cover);
+  if (!coverData || coverData.concealment <= 0) return 0;
+
+  // Size-dependent: how much of the creature does the cover actually hide?
+  const mass = getCreatureMass(target);
+  const creatureHeight = Math.pow(mass, 1/3) * BODY_PLAN_HEIGHT_COEFF;
+  const coverRatio = creatureHeight > 0
+    ? Math.min(1.0, coverData.heightClass / creatureHeight)
+    : 1.0;
+  let concealment = coverData.concealment * coverRatio;
+
+  // Motion reduces concealment: grass rustling, branches moving, etc.
+  // Check if the creature moved this turn by comparing current vs previous position.
+  const isMoving = (target.prevX != null && target.prevY != null &&
+                    (target.prevX !== target.x || target.prevY !== target.y));
+  if (isMoving) {
+    concealment *= MOTION_CONCEALMENT_REDUCTION;
+  }
+
+  return concealment;
+}
+
 // --- Line of Sight ---
 // Uses hasLOS from fov.js. Forests do NOT block NPC LOS in this pass
 // (no per parameter → tree transparency is skipped, only walls block).
@@ -280,15 +325,25 @@ function canDetect(detector, target) {
     if (channelsSeen.has('vibrationAir')) senses.push('vibration_air');
   }
 
-  // Visual — cone + line of sight + light
+  // Visual — cone + line of sight + light + local concealment
   const visRange = getVisualRange(detector, target);
-  if (d <= visRange && hasLineOfSight(detector, target)) {
+  if (visRange > 0 && d <= visRange && hasLineOfSight(detector, target)) {
     const inCone = isInVisionCone(detector, target);
     const isTrackedThreat = _isActivelyTracking(detector, target);
     if (inCone || isTrackedThreat) {
-        senses.push('visual');
-        const visSNR = d > 0 ? visRange / d : visRange * 10;
-        if (visSNR > bestSNR) bestSNR = visSNR;
+        // Local concealment: cover on the target's tile reduces visual signal.
+        // Signal reduction scales the effective range (cube-root relationship).
+        // Only affects the visual channel — chemical/vibration are unaffected.
+        const concealment = computeEffectiveConcealment(target);
+        const effectiveVisRange = concealment > 0
+          ? visRange * Math.cbrt(1.0 - concealment)
+          : visRange;
+
+        if (d <= effectiveVisRange) {
+          senses.push('visual');
+          const visSNR = d > 0 ? effectiveVisRange / d : effectiveVisRange * 10;
+          if (visSNR > bestSNR) bestSNR = visSNR;
+        }
     }
   }
 
@@ -1031,6 +1086,8 @@ export {
   getBestChemicalAirborne, getEffectiveVisual, getDominantSenseChannel,
   // Visual detection
   getVisualRange, facingToAngle, isInVisionCone, hasLineOfSight,
+  // Local concealment
+  computeEffectiveConcealment,
   // Master detection
   canDetect, getDetectionRange,
   // Legacy vision

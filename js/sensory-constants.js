@@ -81,3 +81,25 @@ export const MARKER_MIN_RADIUS = 0.15;   // fraction of tile size for smallest c
 export const MARKER_MAX_RADIUS = 0.45;   // fraction of tile size for largest creatures
 export const MARKER_MASS_MIN   = 3;      // kg — at or below this → minimum marker
 export const MARKER_MASS_MAX   = 250;    // kg — at or above this → maximum marker
+
+// ==================== VISUAL OCCLUSION CONSTANTS ====================
+// Per-ray sightline opacity accumulation and local concealment modifiers.
+// See Visual-Occlusion-Design.md for full specification.
+
+// Occlusion budget = acuity × OCCLUSION_BUDGET_COEFF.
+// Tuned so acuity 3 → budget ~1.35 (2–3 dense forest tiles before cutoff),
+//          acuity 5 → budget ~2.25 (4–5 dense forest tiles).
+export const OCCLUSION_BUDGET_COEFF      = 0.45;
+
+// Binocular zone rays get a depth bonus — stereoscopic separation of
+// "cover at 3 tiles" from "target at 5 tiles."
+export const BINOCULAR_DEPTH_BONUS       = 1.4;
+
+// Motion reduces concealment: a moving creature retains only this fraction
+// of its cover's concealment benefit (grass rustling reveals movement).
+export const MOTION_CONCEALMENT_REDUCTION = 0.35;
+
+// Creature height proxy: (totalMass)^(1/3) × this coefficient.
+// Tuned so hare (5 kg) ≈ 0.31, meso-pred (22 kg) ≈ 0.50,
+//        apex (90 kg) ≈ 0.81, cave-crab (200 kg) ≈ 1.05.
+export const BODY_PLAN_HEIGHT_COEFF      = 0.18;

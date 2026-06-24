@@ -88,9 +88,12 @@ export const TERRAIN_INFO = {
                   allowedCover:[T.FOREST,T.MUSHFOREST,T.WHEAT,T.BOULDER,T.ROCK_OUTCROP,T.RUIN_WALL,T.RUIN_PILLAR]},
 
   // ---- COVER types ----
-  [T.FOREST]:    {name:'forest',        sprite:'FOREST',   palette:'forest',   walk:true,  cover:45,  terrainLayer:'cover', overlay:true, visionPenalty:true},
-  [T.MUSHFOREST]:{name:'mushroom forest',sprite:'MUSHFOREST',palette:'mushforest',walk:true,cover:45, terrainLayer:'cover', overlay:true, noRotate:true, visionPenalty:true},
-  [T.WHEAT]:     {name:'wheat',         sprite:'WHEAT',    palette:'wheat',    walk:true,  cover:20,  terrainLayer:'cover', overlay:true},
+  [T.FOREST]:    {name:'forest',        sprite:'FOREST',   palette:'forest',   walk:true,  cover:45,  terrainLayer:'cover', overlay:true, visionPenalty:true,
+                  sightlineOpacity:0.5, localConcealment:0.25, coverHeightClass:0.7},
+  [T.MUSHFOREST]:{name:'mushroom forest',sprite:'MUSHFOREST',palette:'mushforest',walk:true,cover:45, terrainLayer:'cover', overlay:true, noRotate:true, visionPenalty:true,
+                  sightlineOpacity:0.5, localConcealment:0.25, coverHeightClass:0.7},
+  [T.WHEAT]:     {name:'wheat',         sprite:'WHEAT',    palette:'wheat',    walk:true,  cover:20,  terrainLayer:'cover', overlay:true,
+                  sightlineOpacity:0.05, localConcealment:0.6, coverHeightClass:0.7},
   [T.TOWN]:      {name:'town',          sprite:'TOWN',     palette:'town',     walk:true,  cover:0,   terrainLayer:'cover', overlay:true},
   [T.CASTLE]:    {name:'castle',        sprite:'CASTLE',   palette:'castle',   walk:true,  cover:0,   terrainLayer:'cover', overlay:true},
   [T.BLACKSPIRE]:{name:'Blackspire Keep',sprite:'BLACKSPIRE',palette:'castle', walk:true,  cover:0,   terrainLayer:'cover', overlay:true},
@@ -255,6 +258,32 @@ export function tileBlocksVision(ground, coverType){
 export function tileHasVisionPenalty(ground, coverType){
   if (!coverType) return false;
   return !!terrainInfo(coverType).visionPenalty;
+}
+
+// ==================== SIGHTLINE OPACITY & CONCEALMENT ====================
+// Accessors for the visual occlusion system (per-ray opacity accumulation
+// and per-tile local concealment).  Values live on the TERRAIN_INFO entries.
+
+/** Get sightline opacity for a tile.  Cover type is the primary carrier;
+ *  ground types default to 0.0 (open terrain never degrades sightlines). */
+export function tileSightlineOpacity(ground, coverType) {
+  if (coverType) {
+    const ci = terrainInfo(coverType);
+    if (ci.sightlineOpacity != null) return ci.sightlineOpacity;
+  }
+  return 0.0;
+}
+
+/** Get local concealment data for the target's tile.
+ *  Returns { concealment, heightClass } or null if no concealment. */
+export function tileConcealmentData(ground, coverType) {
+  if (coverType) {
+    const ci = terrainInfo(coverType);
+    if (ci.localConcealment > 0) {
+      return { concealment: ci.localConcealment, heightClass: ci.coverHeightClass || 0 };
+    }
+  }
+  return null;
 }
 
 // ==================== FOOD TILE CLASSIFICATION (I-C) ====================
