@@ -60,10 +60,13 @@ export function log(text, category = 'system') {
 
   logEntries.push(entry);
 
-  // Render to DOM — uniform style, no per-category classes
+  // Render to DOM — uniform style, no per-category classes.
+  // data-category is read by the MutationObserver in index.html
+  // for tab filtering and per-category muting.
   if (logEl) {
     const div = document.createElement('div');
     div.textContent = entry.text;
+    div.dataset.category = entry.category;
     logEl.appendChild(div);
     logEl.scrollTop = logEl.scrollHeight;
   }

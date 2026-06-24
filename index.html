@@ -1249,41 +1249,25 @@
       events: ['interaction', 'movement']
     };
 
-    // ── Category tagging hook ──
-    // Modules that wrap their log() import push the category here before
-    // the DOM element is appended. The MutationObserver reads and clears it.
-    // Messages without a pending category get tagged 'unknown' and show
-    // everywhere (safe default until all callers set the hook).
-    window._pendingLogCatQueue = [];
-
+    // ── Filter logic ──
     function shouldShow(cat) {
-      // 'unknown' messages (from modules that don't set the hook yet):
-      // show everywhere so nothing is silently hidden.
-      if (cat === 'unknown') return true;
-      // Mute check (global, applied on top of tab filter)
       if (muted[cat]) return false;
-      // Tab check
       if (activeTab === 'all') return true;
       var allowed = TAB_CATS[activeTab];
       if (!allowed) return true;
       return allowed.indexOf(cat) !== -1;
     }
 
-    // ── MutationObserver: tag & filter each new log entry ──
+    // ── MutationObserver: filter each new log entry ──
+    // log.js sets data-category on every element before appending.
+    // The observer applies the current tab + mute filter on insertion.
     var observer = new MutationObserver(function(mutations) {
       for (var i = 0; i < mutations.length; i++) {
         var added = mutations[i].addedNodes;
         for (var j = 0; j < added.length; j++) {
           var node = added[j];
           if (node.nodeType !== 1) continue; // elements only
-          if (!node.dataset.category) {
-            var cat = window._pendingLogCatQueue.length > 0
-              ? window._pendingLogCatQueue.shift()
-              : 'unknown';
-            node.dataset.category = cat;
-          }
-          // Apply active filter to the newly inserted element
-          node.style.display = shouldShow(node.dataset.category) ? '' : 'none';
+          node.style.display = shouldShow(node.dataset.category || 'unknown') ? '' : 'none';
         }
       }
     });
