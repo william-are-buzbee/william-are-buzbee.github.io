@@ -3,13 +3,26 @@ import { state, worlds, covers, groundItems } from './state.js';
 import { LAYER_UNDER, BIOME, SNR_FULL_RENDER,
          SPECIES_DISPLAY_CONFIDENCE, MARKER_MIN_RADIUS, MARKER_MAX_RADIUS,
          MARKER_MASS_MIN, MARKER_MASS_MAX, SCENT_FLOOR, getBodyMap } from './constants.js';
-import { tileSize, viewW, viewH, zoom } from './display.js';
+import { tileSize, viewW, viewH, zoom, getSpritePack } from './display.js';
 import { T, terrainInfo } from './terrain.js';
 import { spriteCache, tintedSprite, tintedMonsterSprite, COLOR_PALETTES } from './sprites.js';
+import { spriteCache32, tintedSprite32, tintedMonsterSprite32 } from './sprites-32.js';
 import { inBounds, isTownCell, monsterAt, getCover } from './world-state.js';
 import { updateUI } from './ui.js';
 import { drawTimeTint } from './time-cycle.js';
 import { getGroundScentNear, MOLECULAR_CLASSES } from './scent.js';
+
+// ---- Sprite pack dispatch ----
+// Delegates to the active pack (16 or 32) based on display.js state.
+function getSprite(name) {
+  return getSpritePack() === 32 ? spriteCache32[name] : spriteCache[name];
+}
+function getTinted(name, pal) {
+  return getSpritePack() === 32 ? tintedSprite32(name, pal) : tintedSprite(name, pal);
+}
+function getTintedMon(name, color) {
+  return getSpritePack() === 32 ? tintedMonsterSprite32(name, color) : tintedMonsterSprite(name, color);
+}
 
 export const canvas = document.getElementById('viewport');
 export const ctx = canvas.getContext('2d');
@@ -142,10 +155,10 @@ function render(){
         ctx.save();
         ctx.translate(px + TILE/2, py + TILE/2);
         ctx.rotate(rotVariant * Math.PI/2);
-        ctx.drawImage(tintedSprite(groundSpriteName, groundInfo.palette), -TILE/2, -TILE/2, TILE, TILE);
+        ctx.drawImage(getTinted(groundSpriteName, groundInfo.palette), -TILE/2, -TILE/2, TILE, TILE);
         ctx.restore();
       } else {
-        ctx.drawImage(tintedSprite(groundSpriteName, groundInfo.palette), px, py, TILE, TILE);
+        ctx.drawImage(getTinted(groundSpriteName, groundInfo.palette), px, py, TILE, TILE);
       }
 
       // ---- Ground decorations (skip at ×1 for performance/clarity) ----
@@ -326,7 +339,7 @@ function render(){
       // ---- Draw COVER (overlay) ----
       if (cover){
         const coverInfo = terrainInfo(cover);
-        ctx.drawImage(tintedSprite(coverInfo.sprite, coverInfo.palette), px, py, TILE, TILE);
+        ctx.drawImage(getTinted(coverInfo.sprite, coverInfo.palette), px, py, TILE, TILE);
       }
 
       // ---- Draw GROUND ITEM indicator ----
@@ -338,11 +351,11 @@ function render(){
         const giStack = giLayer[tileKey];
         if (giStack && giStack.length > 0) {
           const topItem = groundItemPriority(giStack);
-          if (topItem && topItem.kind === 'corpse' && spriteCache['CORPSE']) {
+          if (topItem && topItem.kind === 'corpse' && getSprite('CORPSE')) {
             // Draw corpse sprite at half-opacity so it's visible but subdued
             ctx.save();
             ctx.globalAlpha = 0.7;
-            ctx.drawImage(spriteCache['CORPSE'], px, py, TILE, TILE);
+            ctx.drawImage(getSprite('CORPSE'), px, py, TILE, TILE);
             ctx.restore();
           } else {
             // Default gold dot for non-corpse items
@@ -428,7 +441,7 @@ function render(){
         if (creature.tint) {
           tintColor = creature.tint.startsWith('#') ? creature.tint : (BIOME[creature.tint] && BIOME[creature.tint].tint);
         }
-        const spr = tintColor ? tintedMonsterSprite(creature.spr, tintColor) : spriteCache[creature.spr];
+        const spr = tintColor ? getTintedMon(creature.spr, tintColor) : getSprite(creature.spr);
         if (spr) ctx.drawImage(spr, spx, spy, TILE, TILE);
         // Facing indicator
         if (creature.facing) {
@@ -599,7 +612,7 @@ function drawEntityAtTile(wx, wy, px, py, layer){
     if (mon.tint){
       tintColor = mon.tint.startsWith('#') ? mon.tint : (BIOME[mon.tint] && BIOME[mon.tint].tint);
     }
-    const spr = tintColor ? tintedMonsterSprite(mon.spr, tintColor) : spriteCache[mon.spr];
+    const spr = tintColor ? getTintedMon(mon.spr, tintColor) : getSprite(mon.spr);
     if (spr) ctx.drawImage(spr, px, py, TILE, TILE);
 
     // Prompt G: facing indicator overlay
@@ -626,8 +639,8 @@ function drawEntityAtTile(wx, wy, px, py, layer){
     // Apply creature color palette if set
     const palEntry = COLOR_PALETTES[state.player.colorPalette];
     const pspr = palEntry
-      ? tintedMonsterSprite(sprKey, palEntry.color)
-      : spriteCache[sprKey];
+      ? getTintedMon(sprKey, palEntry.color)
+      : getSprite(sprKey);
     ctx.drawImage(pspr, px, py, TILE, TILE);
     if (state.player.hitFlash > 0){
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
