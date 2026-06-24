@@ -62,6 +62,12 @@ const _groundScent = {};
 // airborneScent[layer] = Map<"x,y", { ...8 classes }>
 const _airborneScent = {};
 
+// Self-shadow maps — track ONLY the player's own emission with identical
+// transport physics. Subtracted at detection time so the player never
+// smells their own scent trail or deposits.
+const _selfGroundScent = {};
+const _selfAirborneScent = {};
+
 function _getGroundMap(layer) {
   if (!_groundScent[layer]) _groundScent[layer] = new Map();
   return _groundScent[layer];
@@ -70,6 +76,16 @@ function _getGroundMap(layer) {
 function _getAirborneMap(layer) {
   if (!_airborneScent[layer]) _airborneScent[layer] = new Map();
   return _airborneScent[layer];
+}
+
+function _getSelfGroundMap(layer) {
+  if (!_selfGroundScent[layer]) _selfGroundScent[layer] = new Map();
+  return _selfGroundScent[layer];
+}
+
+function _getSelfAirborneMap(layer) {
+  if (!_selfAirborneScent[layer]) _selfAirborneScent[layer] = new Map();
+  return _selfAirborneScent[layer];
 }
 
 // ==================== SCENT TRANSPORT BLOCKING ====================
@@ -253,6 +269,37 @@ function _emitCreatureScent(creature, layer) {
     if (frac > 0) aEntry[cls] += airAmount * frac;
   }
   aEntry.hemolymph += bloodAmount * 0.3; // less blood aerosolizes than deposits
+
+  // ── Self-shadow deposit (player only) ──
+  // Mirror the exact same emission into shadow maps so detection can subtract it.
+  // Must include the blood/hemolymph component — otherwise the subtraction leaves
+  // a hemolymph residual after bleeding stops.
+  if (creature === state.player) {
+    const sgMap = _getSelfGroundMap(layer);
+    let sgEntry = sgMap.get(key);
+    if (!sgEntry) {
+      sgEntry = _emptyGroundScent();
+      sgMap.set(key, sgEntry);
+    }
+    for (const cls of MOLECULAR_CLASSES) {
+      const frac = profile[cls] || 0;
+      if (frac > 0) sgEntry[cls] += groundAmount * frac;
+    }
+    sgEntry.hemolymph += bloodAmount;
+    sgEntry.age = 0;
+
+    const saMap = _getSelfAirborneMap(layer);
+    let saEntry = saMap.get(key);
+    if (!saEntry) {
+      saEntry = _emptyScent();
+      saMap.set(key, saEntry);
+    }
+    for (const cls of MOLECULAR_CLASSES) {
+      const frac = profile[cls] || 0;
+      if (frac > 0) saEntry[cls] += airAmount * frac;
+    }
+    saEntry.hemolymph += bloodAmount * 0.3;
+  }
 }
 
 // ==================== GROUND LAYER UPDATE ====================
@@ -282,6 +329,26 @@ function _updateGroundLayer(layer) {
   }
 
   for (const key of toRemove) gMap.delete(key);
+
+  // ── Self-shadow ground decay (identical physics) ──
+  const sgMap = _getSelfGroundMap(layer);
+  const sgRemove = [];
+  for (const [key, scent] of sgMap) {
+    const comma = key.indexOf(',');
+    const x = +key.substring(0, comma);
+    const y = +key.substring(comma + 1);
+
+    const mods = _getScentTerrainMods(layer, x, y);
+    const decay = mods.groundDecay;
+
+    for (const cls of MOLECULAR_CLASSES) scent[cls] *= decay;
+    scent.age++;
+
+    if (!MOLECULAR_CLASSES.some(cls => scent[cls] >= SCENT_FLOOR)) {
+      sgRemove.push(key);
+    }
+  }
+  for (const key of sgRemove) sgMap.delete(key);
 }
 
 // ==================== AIRBORNE LAYER UPDATE ====================
@@ -368,6 +435,70 @@ function _updateAirborneLayer(layer) {
 
   // Swap
   _airborneScent[layer] = next;
+
+  // ── Self-shadow airborne transport (identical physics) ──
+  const selfCurrent = _getSelfAirborneMap(layer);
+  const selfNext = new Map();
+
+  for (const [key, scent] of selfCurrent) {
+    const comma = key.indexOf(',');
+    const x = +key.substring(0, comma);
+    const y = +key.substring(comma + 1);
+
+    const mods = _getScentTerrainMods(layer, x, y);
+    const tileAdvFrac = advFraction * mods.advectionMod;
+    const tileSpreadFrac = SPREAD_RATE * mods.spreadMod;
+
+    const nbrs = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        const nx = x + dx, ny = y + dy;
+        if (inBounds(layer, nx, ny) && !_blocksScent(layer, nx, ny)) {
+          nbrs.push(`${nx},${ny}`);
+        }
+      }
+    }
+
+    for (const ch of MOLECULAR_CLASSES) {
+      const val = scent[ch];
+      if (val < SCENT_FLOOR) continue;
+
+      let remaining = val;
+
+      const advAmt = val * tileAdvFrac;
+      remaining -= advAmt;
+      const dwx = x + windOfs[0], dwy = y + windOfs[1];
+      const dwKey = `${dwx},${dwy}`;
+      if (inBounds(layer, dwx, dwy) && !_blocksScent(layer, dwx, dwy)) {
+        _addToMap(selfNext, dwKey, ch, advAmt);
+      } else {
+        remaining += advAmt;
+      }
+
+      const spreadTot = val * tileSpreadFrac;
+      remaining -= spreadTot;
+      if (nbrs.length > 0) {
+        const per = spreadTot / nbrs.length;
+        for (const nKey of nbrs) _addToMap(selfNext, nKey, ch, per);
+      } else {
+        remaining += spreadTot;
+      }
+
+      if (remaining > 0) _addToMap(selfNext, key, ch, remaining);
+    }
+  }
+
+  const selfRemove = [];
+  for (const [key, scent] of selfNext) {
+    for (const cls of MOLECULAR_CLASSES) scent[cls] *= AIRBORNE_DECAY_RATE;
+    if (!MOLECULAR_CLASSES.some(cls => scent[cls] >= SCENT_FLOOR)) {
+      selfRemove.push(key);
+    }
+  }
+  for (const key of selfRemove) selfNext.delete(key);
+
+  _selfAirborneScent[layer] = selfNext;
 }
 
 /** Add a value to a class on a tile in a scent map, creating the entry if needed. */
@@ -378,6 +509,21 @@ function _addToMap(map, key, channel, amount) {
     map.set(key, entry);
   }
   entry[channel] += amount;
+}
+
+/**
+ * Return a new scent vector with the self-shadow subtracted.
+ * Values are clamped to 0 — the shadow should never exceed the real value,
+ * but floating-point drift could produce tiny negatives.
+ */
+function _subtractSelf(real, shadow) {
+  if (!shadow) return real;
+  const result = {};
+  for (const cls of MOLECULAR_CLASSES) {
+    result[cls] = Math.max(0, (real[cls] || 0) - (shadow[cls] || 0));
+  }
+  if (real.age != null) result.age = real.age;
+  return result;
 }
 
 // ==================== SCENT INTERPRETATION ====================
@@ -510,7 +656,9 @@ export function performSniff() {
 
   // 3. Airborne creature scent
   if (bestAirborne > 0) {
-    const aScent = _getAirborneMap(layer).get(key);
+    const rawAir = _getAirborneMap(layer).get(key);
+    const selfAir = _getSelfAirborneMap(layer).get(key);
+    const aScent = rawAir ? _subtractSelf(rawAir, selfAir) : null;
     const airThreshold = SCENT_FLOOR / bestAirborne;
     const descriptors = aScent ? _describeScent(aScent, airThreshold) : [];
     if (descriptors.length > 0) {
@@ -523,7 +671,10 @@ export function performSniff() {
   // 4. Ground scent
   if (bestContact > 0) {
     const gMap = _getGroundMap(layer);
-    const gScent = gMap.get(key);
+    const sgMap = _getSelfGroundMap(layer);
+    const rawGround = gMap.get(key);
+    const selfGround = sgMap.get(key);
+    const gScent = rawGround ? _subtractSelf(rawGround, selfGround) : null;
     const contactThreshold = SCENT_FLOOR / bestContact;
     const descriptors = gScent ? _describeScent(gScent, contactThreshold) : [];
     if (descriptors.length > 0) {
@@ -537,8 +688,15 @@ export function performSniff() {
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           if (dx === 0 && dy === 0) continue;
-          const adj = gMap.get(`${p.x + dx},${p.y + dy}`);
-          if (adj && adj.age < freshestAge) {
+          const adjKey = `${p.x + dx},${p.y + dy}`;
+          const adjRaw = gMap.get(adjKey);
+          if (!adjRaw) continue;
+          // Subtract self-shadow from adjacent tile too
+          const adjSelf = sgMap.get(adjKey);
+          const adj = _subtractSelf(adjRaw, adjSelf);
+          // Only consider adjacent tile if it still has detectable scent after subtraction
+          if (!MOLECULAR_CLASSES.some(cls => (adj[cls] || 0) >= contactThreshold)) continue;
+          if (adj.age < freshestAge) {
             freshestAge = adj.age;
             freshestDir = _offsetToCompass(dx, dy);
           }
@@ -569,6 +727,7 @@ export function performSniff() {
 export function getGroundScentNear(layer, cx, cy, radius) {
   const gMap = _getGroundMap(layer);
   if (gMap.size === 0) return null;
+  const sgMap = _getSelfGroundMap(layer);
   const r2 = radius * radius;
   const result = new Map();
   for (const [key, scent] of gMap) {
@@ -576,7 +735,14 @@ export function getGroundScentNear(layer, cx, cy, radius) {
     const x = +key.substring(0, comma);
     const y = +key.substring(comma + 1);
     const dx = x - cx, dy = y - cy;
-    if (dx * dx + dy * dy <= r2) result.set(key, scent);
+    if (dx * dx + dy * dy <= r2) {
+      const selfScent = sgMap.get(key);
+      const filtered = _subtractSelf(scent, selfScent);
+      // Only include if something remains above floor after self-subtraction
+      if (MOLECULAR_CLASSES.some(cls => (filtered[cls] || 0) >= SCENT_FLOOR)) {
+        result.set(key, filtered);
+      }
+    }
   }
   return result.size > 0 ? result : null;
 }
@@ -655,7 +821,9 @@ function _detectPlayerScent() {
 
   // ── Overwhelming airborne plume ──
   if (bestAirborne > 0) {
-    const aScent = _getAirborneMap(layer).get(key);
+    const rawAir = _getAirborneMap(layer).get(key);
+    const selfAir = _getSelfAirborneMap(layer).get(key);
+    const aScent = rawAir ? _subtractSelf(rawAir, selfAir) : null;
     if (aScent && _totalConcentration(aScent) >= INVOLUNTARY_THRESHOLD && _shouldLog('involAir')) {
       const cls = _dominantClass(aScent);
       const src = state.windSpeed > 0 ? ` from the ${COMPASS_NAMES[state.windDirection]}` : '';
@@ -665,7 +833,9 @@ function _detectPlayerScent() {
 
   // ── Overwhelming ground deposit underfoot ──
   if (bestContact > 0) {
-    const gScent = _getGroundMap(layer).get(key);
+    const rawGround = _getGroundMap(layer).get(key);
+    const selfGround = _getSelfGroundMap(layer).get(key);
+    const gScent = rawGround ? _subtractSelf(rawGround, selfGround) : null;
     if (gScent && _totalConcentration(gScent) >= INVOLUNTARY_THRESHOLD && _shouldLog('involGround')) {
       const cls = _dominantClass(gScent);
       log(`The ground reeks beneath you — ${_CLASS_ALERT[cls] || 'something overwhelming'}.`, LOG_CATEGORIES.SENSING);
