@@ -15,7 +15,7 @@ import { playerAcc, playerDodge, playerDef,
          stealthBonus, poisonResistance } from './player.js';
 import { monDodge, monAcc, monDamage } from './monsters.js';
 import { inBounds, chebyshev, monsterAt, isTownCell, getCover } from './world-state.js';
-import { log } from './log.js';
+import { log, LOG_CATEGORIES } from './log.js';
 import { placeItem, generateItemId } from './ground-items.js';
 
 // Forward reference — set by main.js to break circular dep
@@ -50,7 +50,7 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
     hitZone.hp = 0;
     hitZone.destroyed = true;
 
-    log(`${entityName}'s ${hitZone.name} is destroyed.`, 'crit');
+    log(`${entityName}'s ${hitZone.name} is destroyed.`, LOG_CATEGORIES.COMBAT);
 
     // Blood system — destruction dump + severance burst
     if (entity.blood != null && entity.bloodMax > 0) {
@@ -80,9 +80,9 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
     // Step 1 — Vital zone destruction (torso)
     if (hitZone.vital) {
       if (entity.isPlayer) {
-        log(`Something vital tears loose inside you. Everything stops.`, 'dead');
+        log(`Something vital tears loose inside you. Everything stops.`, LOG_CATEGORIES.COMBAT);
       } else {
-        log(`The ${entityName}'s body gives out. It collapses.`, 'dead');
+        log(`The ${entityName}'s body gives out. It collapses.`, LOG_CATEGORIES.COMBAT);
       }
       entity.deathCause = 'vital';
       return true; // caller handles death
@@ -93,15 +93,15 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
       const headDestroyed = hitZone.key === 'head';
       if (entity.isPlayer) {
         if (headDestroyed) {
-          log(`A flash of nothing. Then nothing.`, 'dead');
+          log(`A flash of nothing. Then nothing.`, LOG_CATEGORIES.COMBAT);
         } else {
-          log(`Your limbs stop answering. The world blurs. Silence.`, 'dead');
+          log(`Your limbs stop answering. The world blurs. Silence.`, LOG_CATEGORIES.COMBAT);
         }
       } else {
         if (headDestroyed) {
-          log(`The ${entityName}'s body seizes and falls. It doesn't get up.`, 'dead');
+          log(`The ${entityName}'s body seizes and falls. It does not get up.`, LOG_CATEGORIES.COMBAT);
         } else {
-          log(`The ${entityName} shudders, limbs twitching without coordination. It goes still.`, 'dead');
+          log(`The ${entityName} shudders, limbs twitching without coordination. It goes still.`, LOG_CATEGORIES.COMBAT);
         }
       }
       entity.deathCause = 'neural';
@@ -111,9 +111,9 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
     // Step 3 — Blood loss death (from dump + burst)
     if (entity.blood != null && entity.blood <= entity.bloodMax * BLOOD_DEATH_THRESHOLD) {
       if (entity.isPlayer) {
-        log(`Everything narrows. Fades. Goes still.`, 'dead');
+        log(`Everything narrows. Fades. Goes still.`, LOG_CATEGORIES.COMBAT);
       } else {
-        log(`The ${entityName} collapses. Its wounds finally emptied it.`, 'dead');
+        log(`The ${entityName} collapses. Its wounds finally emptied it.`, LOG_CATEGORIES.COMBAT);
       }
       entity.deathCause = 'blood';
       return true; // caller handles death
@@ -122,13 +122,13 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
     // Step 4 — Locomotion check
     if (hitZone.locomotion && !hasLocomotion(bodyMap)) {
       entity.immobilized = true;
-      log(`${entityName} collapses, unable to move.`, 'warn');
+      log(`${entityName} collapses, unable to move.`, LOG_CATEGORIES.COMBAT);
     }
 
     // Step 5 — Attack loss
     if (hitZone.attacks && hitZone.attacks.length > 0) {
       for (const atk of hitZone.attacks) {
-        log(`${entityName}'s ${atk.name} is gone.`, 'warn');
+        log(`${entityName}'s ${atk.name} is gone.`, LOG_CATEGORIES.COMBAT);
       }
     }
 
@@ -136,9 +136,9 @@ function resolveZoneDamage(entity, hitZone, dmg, entityName, bodyMap) {
     const senseLosses = checkSenseLoss(bodyMap, hitZone);
     for (const sl of senseLosses) {
       if (sl.type === 'lost') {
-        log(`${entityName} can no longer ${sl.verb}.`, 'warn');
+        log(`${entityName} can no longer ${sl.verb}.`, LOG_CATEGORIES.COMBAT);
       } else {
-        log(`${entityName}'s ${sl.sense} weakens.`, 'muted');
+        log(`${entityName}'s ${sl.sense} weakens.`, LOG_CATEGORIES.COMBAT);
       }
     }
   }
@@ -154,12 +154,12 @@ function rollHit(acc, dodge){
 function playerAttack(mon){
   const player = state.player
   // Break stealth
-  if (state.player.stealth) endStealth('You strike while undetected.');
+  if (state.player.stealth) endStealth('You strike from concealment.');
 
   const acc = playerAcc(player);
   const mdodge = monDodge(mon);
   if (!rollHit(acc, mdodge)){
-    log(`You miss ${mon.name}.`, 'muted');
+    log(`You miss ${mon.name}.`, LOG_CATEGORIES.COMBAT);
     mon.wasAttacked = true;
     mon.alerted = true;
     mon.lastSeenX = state.player.x; mon.lastSeenY = state.player.y;
@@ -262,31 +262,31 @@ function playerAttack(mon){
   // Build zone contact log message — naturalistic, no numbers
   if (contactedZones.length === 1) {
     const zn = contactedZones[0].name;
-    log(`You ${verb} ${mon.name}'s ${zn}${resistNote}.`, 'hit');
+    log(`You ${verb} ${mon.name}'s ${zn}${resistNote}.`, LOG_CATEGORIES.COMBAT);
   } else if (contactedZones.length === 2) {
     const names = contactedZones.map(z => z.name).join(' and ');
-    log(`You ${verb} across ${mon.name}'s ${names}${resistNote}.`, 'hit');
+    log(`You ${verb} across ${mon.name}'s ${names}${resistNote}.`, LOG_CATEGORIES.COMBAT);
   } else if (contactedZones.length >= 3) {
     const last = contactedZones[contactedZones.length - 1].name;
     const rest = contactedZones.slice(0, -1).map(z => z.name).join(', ');
-    log(`Your ${verb} catches ${mon.name}'s ${rest}, and ${last}${resistNote}.`, 'hit');
+    log(`Your ${verb} catches ${mon.name}'s ${rest}, and ${last}${resistNote}.`, LOG_CATEGORIES.COMBAT);
   } else {
-    log(`You ${verb} ${mon.name}${resistNote}.`, 'hit');
+    log(`You ${verb} ${mon.name}${resistNote}.`, LOG_CATEGORIES.COMBAT);
   }
 
   // Elemental bonus
   if (state.player.weapon.elem && mon.hp > 0){
     const emul = resistMult(mon.tags, state.player.weapon.elem);
     if (emul === 0){
-      log(`  ${state.player.weapon.elem}: no effect.`, 'muted');
+      log(`${state.player.weapon.elem}: no effect.`, LOG_CATEGORIES.COMBAT);
     } else {
       const ebase = state.player.weapon.elemBonus + randi(3);
       const edmg = Math.max(1, Math.round(ebase * emul));
       // Prompt H: no creature-wide HP decrement; elemental damage enters zone pipeline
       totalDmg += edmg;
-      if (emul >= 1.4) log(`  The ${state.player.weapon.elem} burns deep.`, 'hit');
-      else if (emul <= 0.6) log(`  The ${state.player.weapon.elem} barely takes hold.`, 'hit');
-      else log(`  ${state.player.weapon.elem} damage.`, 'hit');
+      if (emul >= 1.4) log(`The ${state.player.weapon.elem} burns deep.`, LOG_CATEGORIES.COMBAT);
+      else if (emul <= 0.6) log(`The ${state.player.weapon.elem} barely takes hold.`, LOG_CATEGORIES.COMBAT);
+      else log(`${state.player.weapon.elem} damage.`, LOG_CATEGORIES.COMBAT);
     }
   }
 
@@ -324,15 +324,15 @@ function playerAttack(mon){
       const cent = state.player.central || 0;
       if (cent >= 60) {
         // Tier 3 player: detailed bleed info
-        if (bloodRatio < 0.25) log(`${mon.name}'s movements are sluggish. Blood loss.`, 'muted');
-        else if (bloodRatio < 0.50) log(`${mon.name} is bleeding heavily — it's weakening.`, 'muted');
-        else log(`${mon.name} bleeds from its wounds.`, 'muted');
+        if (bloodRatio < 0.25) log(`${mon.name}'s movements are sluggish. Blood loss.`, LOG_CATEGORIES.COMBAT);
+        else if (bloodRatio < 0.50) log(`${mon.name} is bleeding heavily. It weakens.`, LOG_CATEGORIES.COMBAT);
+        else log(`${mon.name} bleeds from its wounds.`, LOG_CATEGORIES.COMBAT);
       } else if (cent >= 30) {
         // Moderate centralization
-        log(`${mon.name} bleeds from its wounds.`, 'muted');
+        log(`${mon.name} bleeds from its wounds.`, LOG_CATEGORIES.COMBAT);
       } else {
         // Low centralization: generic
-        log(`The creature is wounded.`, 'muted');
+        log(`The creature is wounded.`, LOG_CATEGORIES.COMBAT);
       }
     }
   }
@@ -412,7 +412,7 @@ function killMonster(mon){
   const gold = Math.round(randRange(mon.goldRange[0], mon.goldRange[1]));
   state.player.xp += xp;
   state.player.gold += gold;
-  log(`${mon.name} falls.`, 'dead');
+  log(`${mon.name} falls.`, LOG_CATEGORIES.COMBAT);
   if (mon.isBoss){
     state.player.defeatedBoss = true;
     setTimeout(() => { if (_onVictoryCallback) _onVictoryCallback(); }, 500);
@@ -429,7 +429,7 @@ function checkLevelUp(){
     const oldHpMax = state.player.hpMax;
     state.player.hpMax = deriveHP(player);
     // NO heal on level up per spec — just log max HP gain
-    log(`You feel hardier. Your body can take more punishment.`, 'system');
+    log(`Your body hardens. You can withstand more.`, LOG_CATEGORIES.SYSTEM);
   }
 }
 
@@ -446,19 +446,19 @@ function inCombatProximity(){
 function toggleStealth(){
   const player = state.player;
   if (state.player.stealth){ endStealth('You step into the open.'); return; }
-  if (inCombatProximity()){ log('Too close to alert enemies.', 'muted'); return; }
+  if (inCombatProximity()){ log('Too close to alerted creatures.', LOG_CATEGORIES.COMBAT); return; }
   state.player.stealth = true;
   if (!state.player.effects.find(e=>e.type==='stealth')){
     state.player.effects.push({type:'stealth', turns:999});
   }
-  log('You blend into the shadows...', 'muted');
+  log('You lower your profile.', LOG_CATEGORIES.COMBAT);
   render();
 }
 function endStealth(msg){
   const player = state.player;
   state.player.stealth = false;
   state.player.effects = state.player.effects.filter(e => e.type !== 'stealth');
-  if (msg) log(msg, 'muted');
+  if (msg) log(msg, LOG_CATEGORIES.COMBAT);
 }
 
 // Monster stealth-detection chance (lower = harder to spot player)

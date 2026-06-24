@@ -17,7 +17,7 @@ import { state, worlds, monsters } from './state.js';
 import { inBounds, getCover } from './world-state.js';
 import { T, terrainInfo, tileBlocksVision, isWaterGround } from './terrain.js';
 import { getBodyMap, SCENT_PROFILES } from './constants.js';
-import { log } from './log.js';
+import { log, LOG_CATEGORIES } from './log.js';
 import {
   GROUND_EMISSION_BASE, AIRBORNE_EMISSION_BASE, BLOOD_EMISSION_MULT,
   AIRBORNE_DECAY_RATE, ADVECTION_RATE, SPREAD_RATE, SCENT_FLOOR,
@@ -496,15 +496,15 @@ export function performSniff() {
 
   // No transducers at all — nothing to sniff with.
   if (bestContact <= 0 && bestAirborne <= 0) {
-    log('You have no functioning chemical transducers.', 'muted');
+    log('You have no functioning chemical transducers.', LOG_CATEGORIES.SENSING);
     return;
   }
 
   // 1. Local terrain volatiles (always available — you breathe the air you stand in)
-  log(_localTerrainVolatiles(layer, p.x, p.y), 'system');
+  log(_localTerrainVolatiles(layer, p.x, p.y), LOG_CATEGORIES.SENSING);
 
   // 2. Wind
-  log(_windDescription(), 'muted');
+  log(_windDescription(), LOG_CATEGORIES.SENSING);
 
   let detectedScent = false;
 
@@ -516,7 +516,7 @@ export function performSniff() {
     if (descriptors.length > 0) {
       detectedScent = true;
       const src = state.windSpeed > 0 ? ` from the ${COMPASS_NAMES[state.windDirection]}` : '';
-      log(`Carried on the air${src}: ${descriptors.join(', ')}.`, 'warn');
+      log(`Carried on the air${src}: ${descriptors.join(', ')}.`, LOG_CATEGORIES.SENSING);
     }
   }
 
@@ -545,16 +545,16 @@ export function performSniff() {
         }
       }
       const dirHint = freshestDir ? `, trail freshens toward the ${freshestDir}` : '';
-      log(`${freshness} ground traces: ${descriptors.join(', ')}${dirHint}.`, 'muted');
+      log(`${freshness} ground traces: ${descriptors.join(', ')}${dirHint}.`, LOG_CATEGORIES.SENSING);
     }
   }
 
   // 5. Nothing on the wind or the ground
   if (!detectedScent) {
     if (bestAirborne > 0) {
-      log('No creature scent on the wind.', 'muted');
+      log('No creature scent on the wind.', LOG_CATEGORIES.SENSING);
     } else {
-      log('You detect nothing of note.', 'muted');
+      log('You detect nothing of note.', LOG_CATEGORIES.SENSING);
     }
   }
 }
@@ -659,7 +659,7 @@ function _detectPlayerScent() {
     if (aScent && _totalConcentration(aScent) >= INVOLUNTARY_THRESHOLD && _shouldLog('involAir')) {
       const cls = _dominantClass(aScent);
       const src = state.windSpeed > 0 ? ` from the ${COMPASS_NAMES[state.windDirection]}` : '';
-      log(`A powerful scent hits you${src} — ${_CLASS_ALERT[cls] || 'something overwhelming'}.`, 'warn');
+      log(`A powerful scent hits you${src} — ${_CLASS_ALERT[cls] || 'something overwhelming'}.`, LOG_CATEGORIES.SENSING);
     }
   }
 
@@ -668,7 +668,7 @@ function _detectPlayerScent() {
     const gScent = _getGroundMap(layer).get(key);
     if (gScent && _totalConcentration(gScent) >= INVOLUNTARY_THRESHOLD && _shouldLog('involGround')) {
       const cls = _dominantClass(gScent);
-      log(`The ground reeks beneath you — ${_CLASS_ALERT[cls] || 'something overwhelming'}.`, 'warn');
+      log(`The ground reeks beneath you — ${_CLASS_ALERT[cls] || 'something overwhelming'}.`, LOG_CATEGORIES.SENSING);
     }
   }
 }

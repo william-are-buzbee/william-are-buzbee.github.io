@@ -4,7 +4,7 @@ import { state } from './state.js';
 import { SPECIES_TEMPLATES } from './constants.js';
 import { freshPlayer } from './player.js';
 import { initWorld } from './world-logic.js';
-import { log, logEl } from './log.js';
+import { log, logEl, clearLog, LOG_CATEGORIES } from './log.js';
 import { render } from './rendering.js';
 import { spriteCache, COLOR_PALETTES, tintedMonsterSprite } from './sprites.js';
 import { getRegionName } from './ui.js';
@@ -101,11 +101,10 @@ function beginGame(){
   initWorld(Math.floor(Math.random()*999999));
   document.getElementById('species-screen').style.display = 'none';
   state.gameState = 'play';
-  logEl.innerHTML = '';
+  clearLog();
 
   const sp = SPECIES_TEMPLATES[state.selectedSpecies];
-  log(`You awaken as a ${sp.displayName}. The land stretches before you.`, 'system');
-  log('Explore carefully. Danger in every shadow.', 'system');
+  log(`You awaken as a ${sp.displayName}.`, LOG_CATEGORIES.SYSTEM);
   updatePlayerFOV();
   render();
 }

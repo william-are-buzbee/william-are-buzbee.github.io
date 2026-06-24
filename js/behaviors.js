@@ -17,7 +17,7 @@ import { DMG, getBodyMap, getAvailableAttacks, selectHitZone,
 import { rand, randi, roll100 } from './rng.js';
 import { monAcc, monDodge, monDamage, monCritChance, monCritMult, DEFAULT_WANDER_PROFILE } from './monsters.js';
 import { chebyshev } from './world-state.js';
-import { log } from './log.js';
+import { log, LOG_CATEGORIES } from './log.js';
 import { endStealth, stealthDetectChance, rollHit } from './combat.js';
 import { placeItem, generateItemId } from './ground-items.js';
 import { playerDef, playerDodge, poisonResistance } from './player.js';
@@ -512,7 +512,7 @@ function performNPCAttack(attacker, defender) {
     // Fallback: direct HP damage
     defender.hp = Math.max(0, defender.hp - dmg);
     if (defender.hp <= 0) {
-      log(`The ${attacker.name} kills the ${defender.name}.`, 'muted');
+      log(`The ${attacker.name} kills the ${defender.name}.`, LOG_CATEGORIES.COMBAT);
       placeItem(state.player.layer, defender.x, defender.y, {
         id:       generateItemId(),
         kind:     'corpse',
@@ -581,7 +581,7 @@ function performNPCAttack(attacker, defender) {
     }
 
     if (defender.hp <= 0) {
-      log(`The ${attacker.name} kills the ${defender.name}.`, 'muted');
+      log(`The ${attacker.name} kills the ${defender.name}.`, LOG_CATEGORIES.COMBAT);
       // Drop a corpse for the predator (or others) to eat
       placeItem(state.player.layer, defender.x, defender.y, {
         id:       generateItemId(),
@@ -869,7 +869,7 @@ function monsterMelee(mon){
   const acc = monAcc(mon);
   const dodge = playerDodge(player);
   if (!rollHit(acc, dodge)){
-    log(`${mon.name} misses.`, 'muted');
+    log(`${mon.name} misses.`, LOG_CATEGORIES.COMBAT);
     return;
   }
   let base = monDamage(mon) + randi(3);
@@ -924,20 +924,20 @@ function monsterMelee(mon){
 
   if (contactedZones.length === 1) {
     const zn = contactedZones[0].name;
-    if (crit) log(`${mon.name} CRITS — ${verb} your ${zn}! ${dmg} ${mon.dmgType}.`, 'crit');
-    else log(`${mon.name} ${verb} your ${zn}. ${dmg} ${mon.dmgType}.`, 'dmg');
+    if (crit) log(`${mon.name} ${verb} your ${zn} hard. ${dmg} ${mon.dmgType}.`, LOG_CATEGORIES.COMBAT);
+    else log(`${mon.name} ${verb} your ${zn}. ${dmg} ${mon.dmgType}.`, LOG_CATEGORIES.COMBAT);
   } else if (contactedZones.length === 2) {
     const names = contactedZones.map(z => z.name).join(' and ');
-    if (crit) log(`${mon.name} CRITS — ${verb} your ${names}! ${dmg} ${mon.dmgType}.`, 'crit');
-    else log(`${mon.name}'s attack catches your ${names}. ${dmg} ${mon.dmgType}.`, 'dmg');
+    if (crit) log(`${mon.name} ${verb} deep into your ${names}. ${dmg} ${mon.dmgType}.`, LOG_CATEGORIES.COMBAT);
+    else log(`${mon.name}'s attack catches your ${names}. ${dmg} ${mon.dmgType}.`, LOG_CATEGORIES.COMBAT);
   } else if (contactedZones.length >= 3) {
     const last = contactedZones[contactedZones.length - 1].name;
     const rest = contactedZones.slice(0, -1).map(z => z.name).join(', ');
-    if (crit) log(`${mon.name} CRITS — slams into your ${rest}, and ${last}! ${dmg} ${mon.dmgType}.`, 'crit');
-    else log(`${mon.name} crashes into you — hits your ${rest}, and ${last}. ${dmg} ${mon.dmgType}.`, 'dmg');
+    if (crit) log(`${mon.name} drives into your ${rest}, and ${last}. ${dmg} ${mon.dmgType}.`, LOG_CATEGORIES.COMBAT);
+    else log(`${mon.name} crashes into your ${rest}, and ${last}. ${dmg} ${mon.dmgType}.`, LOG_CATEGORIES.COMBAT);
   } else {
-    if (crit) log(`${mon.name} CRITS — ${verb}! ${dmg} ${mon.dmgType}.`, 'crit');
-    else log(`${mon.name} ${verb}. ${dmg} ${mon.dmgType}.`, 'dmg');
+    if (crit) log(`${mon.name} ${verb} with full force. ${dmg} ${mon.dmgType}.`, LOG_CATEGORIES.COMBAT);
+    else log(`${mon.name} ${verb}. ${dmg} ${mon.dmgType}.`, LOG_CATEGORIES.COMBAT);
   }
 
   // ─── Distribute damage across contacted zones ───
@@ -968,11 +968,11 @@ function monsterMelee(mon){
         flatDmg: 1,
       });
       const stacks = state.player.effects.filter(e => e.type === 'poison').length;
-      if (stacks === 1) log('You are poisoned!', 'warn');
-      else log(`Poison stacks! (×${stacks})`, 'warn');
+      if (stacks === 1) log('You are poisoned.', LOG_CATEGORIES.COMBAT);
+      else log(`Poison stacks. (×${stacks})`, LOG_CATEGORIES.COMBAT);
     }
   }
-  if (state.player.stealth) endStealth('Your cover is blown!');
+  if (state.player.stealth) endStealth('Your cover is blown.');
 }
 
 // Resolve zone damage on the player.
@@ -988,7 +988,7 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
     hitZone.hp = 0;
     hitZone.destroyed = true;
 
-    log(`Your ${hitZone.name} is destroyed!`, 'crit');
+    log(`Your ${hitZone.name} is destroyed.`, LOG_CATEGORIES.COMBAT);
 
     const player = state.player;
     if (player.blood != null && player.bloodMax > 0) {
@@ -1011,7 +1011,7 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
 
     // Death checks — vital → neural → blood
     if (hitZone.vital) {
-      log(`Something vital tears loose inside you. Everything stops.`, 'dead');
+      log(`Something vital tears loose inside you. Everything stops.`, LOG_CATEGORIES.COMBAT);
       state.player.hp = 0;
       state.player.deathCause = 'vital';
       return;
@@ -1020,9 +1020,9 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
     if (checkNeuralDeath(bodyMap)) {
       const headDestroyed = hitZone.key === 'head';
       if (headDestroyed) {
-        log(`A flash of nothing. Then nothing.`, 'dead');
+        log(`A flash of nothing. Then nothing.`, LOG_CATEGORIES.COMBAT);
       } else {
-        log(`Your limbs stop answering. The world blurs. Silence.`, 'dead');
+        log(`Your limbs stop answering. The world blurs. Silence.`, LOG_CATEGORIES.COMBAT);
       }
       state.player.hp = 0;
       state.player.deathCause = 'neural';
@@ -1030,7 +1030,7 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
     }
 
     if (player.blood != null && player.blood <= player.bloodMax * BLOOD_DEATH_THRESHOLD) {
-      log(`Everything narrows. Fades. Goes still.`, 'dead');
+      log(`Everything narrows. Fades. Goes still.`, LOG_CATEGORIES.COMBAT);
       state.player.hp = 0;
       state.player.deathCause = 'blood';
       return;
@@ -1038,21 +1038,21 @@ function resolvePlayerZoneDamage(hitZone, dmg, bodyMap) {
 
     if (hitZone.locomotion && !hasLocomotion(bodyMap)) {
       state.player.immobilized = true;
-      log(`You collapse, unable to move.`, 'warn');
+      log(`You collapse, unable to move.`, LOG_CATEGORIES.COMBAT);
     }
 
     if (hitZone.attacks && hitZone.attacks.length > 0) {
       for (const atk of hitZone.attacks) {
-        log(`Your ${atk.name} is gone.`, 'warn');
+        log(`Your ${atk.name} is gone.`, LOG_CATEGORIES.COMBAT);
       }
     }
 
     const senseLosses = checkSenseLoss(bodyMap, hitZone);
     for (const sl of senseLosses) {
       if (sl.type === 'lost') {
-        log(`You can no longer ${sl.verb}.`, 'warn');
+        log(`You can no longer ${sl.verb}.`, LOG_CATEGORIES.COMBAT);
       } else {
-        log(`Your ${sl.sense} weakens.`, 'muted');
+        log(`Your ${sl.sense} weakens.`, LOG_CATEGORIES.COMBAT);
       }
     }
   }

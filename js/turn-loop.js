@@ -18,7 +18,7 @@ import { computePlayerPerception } from './detection.js';
 import { isWalkable, terrainInfo } from './terrain.js';
 import { playerDef, playerDodge, poisonResistance, passiveRegenInterval } from './player.js';
 import { inBounds, monsterAt, isTownCell, getCover } from './world-state.js';
-import { log } from './log.js';
+import { log, LOG_CATEGORIES } from './log.js';
 import { render } from './rendering.js';
 import { fedDrainFor } from './player-actions.js';
 import { advanceTick } from './time-cycle.js';
@@ -290,7 +290,7 @@ function endPlayerTurn(action){
     state.player.fedProgress = 0;
   }
   if (state.player.fed === 15 && !state.player._warnedHungry){
-    log('You grow hungry.', 'warn'); state.player._warnedHungry = true;
+    log('You grow hungry.', LOG_CATEGORIES.ENVIRONMENT); state.player._warnedHungry = true;
   }
   if (state.player.fed > 15) state.player._warnedHungry = false;
 
@@ -302,12 +302,12 @@ function endPlayerTurn(action){
       state.player.hp -= 1;
       if (state.player.hp <= 0){
         state.player.hp = 0;
-        log('You collapse from starvation.', 'dead');
+        log('You collapse from starvation.', LOG_CATEGORIES.ENVIRONMENT);
         state.player.deathCause = 'starvation';
         if (_onPlayerDeathCallback) _onPlayerDeathCallback();
         return;
       }
-      log('Starvation wears you down.', 'warn');
+      log('Starvation weakens you.', LOG_CATEGORIES.ENVIRONMENT);
     }
   } else {
     state.player.starveTurns = 0;
@@ -337,10 +337,10 @@ function endPlayerTurn(action){
       const flatDmg = Math.max(0, Math.round((e.flatDmg || 1) * reduction));
       const totalPoisonDmg = Math.max(1, pctDmg + flatDmg);
       state.player.hp -= totalPoisonDmg;
-      log(`Poison bites. [-${totalPoisonDmg} HP]`, 'dmg');
+      log(`Toxin damage. [-${totalPoisonDmg} HP]`, LOG_CATEGORIES.COMBAT);
       if (state.player.hp <= 0){
         state.player.hp = 0;
-        log('The venom claims you.', 'dead');
+        log('The venom claims you.', LOG_CATEGORIES.COMBAT);
         state.player.deathCause = 'poison';
         if (_onPlayerDeathCallback) _onPlayerDeathCallback();
         return;

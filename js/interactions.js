@@ -11,7 +11,7 @@ import { INV_SLOTS, carryCapacity, totalWeight, overWeight, bagFull, addItem,
 import { monDodge, monAcc, monDamage, spawnMonster } from './monsters.js';
 import { inBounds, monsterAt, chebyshev, getFeature, setFeature, fkey,
          getCover, setCover } from './world-state.js';
-import { log } from './log.js';
+import { log, LOG_CATEGORIES } from './log.js';
 import { openModal, closeModal, showModal, modalEl } from './modal.js';
 import { updateUI, interactable, adjacentFeature, effectLabel } from './ui.js';
 import { render } from './rendering.js';
@@ -30,7 +30,7 @@ function useAction(){
   const adj = adjacentFeature();
   if (adj){ interact(adj.f, adj.x, adj.y); return; }
   if (tryWellInteract()) return;
-  log('Nothing to use here.', 'muted');
+  log('Nothing to use here.', LOG_CATEGORIES.INTERACTION);
 }
 
 // ---- Well quadrant interaction ----
@@ -103,9 +103,9 @@ function interact(f, x, y){
 function pickUpBook(f, x, y){
   const player = state.player;
   const result = addItem(player, {kind:'book', key:f.bookKey});
-  if (result === 'full'){ log('Your bag is full.', 'warn'); return; }
-  if (result === 'heavy'){ log("It's too heavy to carry.", 'warn'); return; }
-  log(`You pick up "${BOOKS[f.bookKey].name}".`, 'book');
+  if (result === 'full'){ log('Your bag is full.', LOG_CATEGORIES.INTERACTION); return; }
+  if (result === 'heavy'){ log("It's too heavy to carry.", LOG_CATEGORIES.INTERACTION); return; }
+  log(`You pick up "${BOOKS[f.bookKey].name}".`, LOG_CATEGORIES.INTERACTION);
   delete features[state.player.layer][fkey(x,y)];
   // Clear cover, keep ground
   setCover(state.player.layer, x, y, 0);
@@ -138,7 +138,7 @@ function openBook(bookKey, fromInventory, invIdx){
         state.player.hpMax = deriveHP(player);
         state.player.hp += (state.player.hpMax - old);
       }
-      log(`You read "${b.name}". ${b.summary}`, 'crit');
+      log(`You read "${b.name}". ${b.summary}`, LOG_CATEGORIES.INTERACTION);
       if (invIdx != null) state.player.inventory.splice(invIdx, 1);
       closeModal();
     };
@@ -176,7 +176,7 @@ function openChest(f, x, y){
     </div>`;
   } else if (c.type === 'gold'){
     state.player.gold += c.amount;
-    log(`${c.amount} gold.`, 'gold');
+    log(`${c.amount} gold.`, LOG_CATEGORIES.INTERACTION);
     consumeFeature(x,y);
     return;
   }
@@ -192,13 +192,13 @@ function openChest(f, x, y){
       else if (c.type === 'potion')item = {kind:'potion', key:c.key};
       if (item){
         const result = addItem(player, item);
-        if (result === 'full'){ log('Your bag is full.', 'warn'); return; }
-        if (result === 'heavy'){ log("It's too heavy to carry.", 'warn'); return; }
+        if (result === 'full'){ log('Your bag is full.', LOG_CATEGORIES.INTERACTION); return; }
+        if (result === 'heavy'){ log("It's too heavy to carry.", LOG_CATEGORIES.INTERACTION); return; }
         const name = c.type === 'weapon' ? findWeapon(c.key).name
                    : c.type === 'armor'  ? findArmor(c.key).name
                    : c.type === 'food'   ? FOOD[c.key].name
                    : POTIONS[c.key].name;
-        log(`Took ${name}.`, 'hit');
+        log(`Took ${name}.`, LOG_CATEGORIES.INTERACTION);
       }
       consumeFeature(x,y);
     } else consumeFeature(x,y);
@@ -523,7 +523,7 @@ function readBook(idx){
   if (!it || it.kind !== 'book') return;
   const b = BOOKS[it.key];
   if (state.player.central < b.intReq){
-    log(`You can't make sense of it. (Central ${b.intReq}+ required)`, 'warn');
+    log(`You can't make sense of it. (Central ${b.intReq}+ required)`, LOG_CATEGORIES.INTERACTION);
     return;
   }
   openBook(it.key, true, idx);

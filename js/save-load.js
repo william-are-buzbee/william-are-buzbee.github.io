@@ -8,7 +8,7 @@ import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, SPECIES_TEMPLATES, initBo
 import { findWeapon, findArmor } from './items.js';
 import { WANDER_PROFILES, DEFAULT_WANDER_PROFILE } from './monsters.js';
 import { render } from './rendering.js';
-import { log } from './log.js';
+import { log, LOG_CATEGORIES } from './log.js';
 import { updatePlayerFOV } from './fov.js';
 
 const SAVE_KEY = 'overworld_zero_save';
@@ -926,7 +926,7 @@ export async function tryResume() {
   try {
     updatePlayerFOV();  // compute FOV before first render
     render();
-    log('Game resumed.', 'system');
+    log('Game resumed.', LOG_CATEGORIES.SYSTEM);
   } catch (err) {
     console.error('[Save] Render after load failed:', err);
     return false;

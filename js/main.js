@@ -24,7 +24,7 @@ window.scentAt = debugScentAt;
 window.scentStats = debugScentStats;
 import { setOnVictoryCallback, toggleStealth } from './combat.js';
 import { useAction, showHelp, readBook } from './interactions.js';
-import { log } from './log.js';
+import { log, LOG_CATEGORIES } from './log.js';
 import { openCharGen, renderCharGen, randomizeAttrs, beginGame, onPlayerDeath, onVictory } from './chargen.js';
 import { hasSave, tryResume, deleteSave, migrateFromLocalStorage } from './save-load.js';
 import { isMapOpen, toggleMap, closeMap, markCurrentCell } from './worldmap.js';
@@ -205,7 +205,7 @@ const ACTION_MAP = {
 // ── Look mode helpers ──
 function enterLookMode() {
   state.lookMode = true;
-  log('Look where?', 'muted');
+  log('Look where?', LOG_CATEGORIES.SYSTEM);
   updateUI();
 }
 function exitLookMode() {
@@ -224,7 +224,7 @@ function articleFor(name) {
 function lookAtTile(tx, ty) {
   const layer = state.player.layer;
   if (!inBounds(layer, tx, ty)) {
-    log('Nothing but void.', 'system');
+    log('Nothing but void.', LOG_CATEGORIES.INTERACTION);
     return;
   }
 
@@ -260,7 +260,7 @@ function lookAtTile(tx, ty) {
     parts.push('Nothing else here.');
   }
 
-  log(parts.join(' '), 'system');
+  log(parts.join(' '), LOG_CATEGORIES.INTERACTION);
 }
 
 // ==================== RIGHT-CLICK TILE INSPECTION → LOG ====================
@@ -273,7 +273,7 @@ function inspectTile(tx, ty) {
 
   // Out-of-bounds: nothing to see
   if (!inBounds(layer, tx, ty)) {
-    log("You can't see that area.", 'system');
+    log("You can't see that area.", LOG_CATEGORIES.INTERACTION);
     return;
   }
 
@@ -288,7 +288,7 @@ function inspectTile(tx, ty) {
 
   // ── Unexplored / not visible ──
   if (fovActive && !inBinocular && !inMonocular && !inExplored) {
-    log("You can't see that area.", 'system');
+    log("You can't see that area.", LOG_CATEGORIES.INTERACTION);
     return;
   }
 
@@ -297,7 +297,7 @@ function inspectTile(tx, ty) {
     const ground = worlds[layer]?.[ty]?.[tx];
     const coverType = covers[layer]?.[ty]?.[tx] || 0;
     const gName = coverType ? terrainInfo(coverType).name : terrainInfo(ground).name;
-    log(`You recall ${gName} there.`, 'system');
+    log(`You recall ${gName} there.`, LOG_CATEGORIES.INTERACTION);
     return;
   }
 
@@ -347,7 +347,7 @@ function inspectTile(tx, ty) {
     parts.push('Nothing else here.');
   }
 
-  log(parts.join(' '), 'system');
+  log(parts.join(' '), LOG_CATEGORIES.INTERACTION);
 }
 
 function handleLookDirection(dx, dy) {
@@ -383,7 +383,7 @@ document.addEventListener('keydown', (ev) => {
   if (state.lookMode) {
     ev.preventDefault();
     const kLow = ev.key.toLowerCase();
-    if (ev.key === 'Escape') { exitLookMode(); log('Cancelled.', 'muted'); return; }
+    if (ev.key === 'Escape') { exitLookMode(); log('Cancelled.', LOG_CATEGORIES.SYSTEM); return; }
     const dir = DIR_MAP[kLow];
     if (dir) { handleLookDirection(dir[0], dir[1]); return; }
     if (SELF_KEYS.has(kLow)) { handleLookSelf(); return; }

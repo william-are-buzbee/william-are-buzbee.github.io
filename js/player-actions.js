@@ -8,7 +8,7 @@ import { restHealAmount, foodFedMul, INV_SLOTS, defaultWeight, deriveHP, addItem
 import { getItems, removeItem, placeItem, generateItemId } from './ground-items.js';
 import { NPCS, TOWNS } from './npcs.js';
 import { inBounds, monsterAt, getFeature, isImpassable, getCover } from './world-state.js';
-import { log } from './log.js';
+import { log, LOG_CATEGORIES } from './log.js';
 import { updateUI } from './ui.js';
 import { playerAttack } from './combat.js';
 import { endPlayerTurn } from './enemy-ai.js';
@@ -37,7 +37,7 @@ function dirName(dx, dy){
 function attemptMove(dx, dy){
   const player = state.player; 
   const nx = state.player.x + dx, ny = state.player.y + dy;
-  if (!inBounds(state.player.layer, nx, ny)){ log('The world ends here.', 'muted'); return; }
+  if (!inBounds(state.player.layer, nx, ny)){ log('The world ends here.', LOG_CATEGORIES.MOVEMENT); return; }
   if (isImpassable(state.player.layer, nx, ny)) return;
 
   // Instant turn check — if pressing a direction we're not facing, roll for free turn.
@@ -69,23 +69,23 @@ function attemptMove(dx, dy){
   }
   const ground = worlds[state.player.layer][ny][nx];
   const cover = getCover(state.player.layer, nx, ny);
-  if (!isWalkable(ground, cover)){ log(`Blocked by ${terrainName(ground, cover)}.`, 'muted'); return; }
+  if (!isWalkable(ground, cover)){ log(`Blocked by ${terrainName(ground, cover)}.`, LOG_CATEGORIES.MOVEMENT); return; }
   state.player.x = nx; state.player.y = ny;
   state.player.movedThisTurn = true;  // Prompt L-A
   const f = getFeature(state.player.layer, nx, ny);
   if (f){
-    if (f.type === 'sign') log('A signpost — press R to read.', 'muted');
-    else if (f.type === 'npc'){ const n=NPCS[f.npcKey]; log(`${n.name} stands here. Press R.`, 'muted'); }
-    else if (f.type === 'town') log(`Gates of ${TOWNS[f.townKey].name}. Press R to enter.`, 'muted');
-    else if (f.type === 'castle') log(`${f.name}. Press R.`, 'muted');
-    else if (f.type === 'stairs') log(`Stairs ${f.dir}. Press R.`, 'muted');
-    else if (f.type === 'chest') log('A chest. Press R.', 'muted');
-    else if (f.type === 'book') log('A book. Press R to pick up.', 'muted');
-    else if (f.type === 'gate') log('Town gate. Press R to leave.', 'muted');
-    else if (f.type === 'shop_building') log(`${f.name}. Press R to enter.`, 'muted');
-    else if (f.type === 'well') log('A well. Press R.', 'muted');
-    else if (f.type === 'home') log('A home. Press R to knock.', 'muted');
-    else if (f.type === 'throne') log('A throne of bone and crowns.', 'warn');
+    if (f.type === 'sign') log('A signpost. Press R to read.', LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'npc'){ const n=NPCS[f.npcKey]; log(`${n.name} stands here. Press R.`, LOG_CATEGORIES.INTERACTION); }
+    else if (f.type === 'town') log(`Gates of ${TOWNS[f.townKey].name}. Press R to enter.`, LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'castle') log(`${f.name}. Press R.`, LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'stairs') log(`Stairs ${f.dir}. Press R.`, LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'chest') log('A chest. Press R.', LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'book') log('A book. Press R to pick up.', LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'gate') log('Town gate. Press R to leave.', LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'shop_building') log(`${f.name}. Press R to enter.`, LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'well') log('A well. Press R.', LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'home') log('A home. Press R to knock.', LOG_CATEGORIES.INTERACTION);
+    else if (f.type === 'throne') log('A throne of bone and crowns.', LOG_CATEGORIES.INTERACTION);
   }
   endPlayerTurn('move');
 }
@@ -100,14 +100,14 @@ function restAction(){
     const hungerReduction = 1 - (state.player.siz * 0.005);
     const hungerCost = randomRound(actual * hungerReduction);
     state.player.fed -= Math.min(hungerCost, state.player.fed);
-    if (actual > 0) log(`You rest. [+${actual} HP · -${hungerCost} FED]`, 'muted');
-    else log('You wait.', 'muted');
+    if (actual > 0) log(`You rest. [+${actual} HP · -${hungerCost} FED]`, LOG_CATEGORIES.SYSTEM);
+    else log('You wait.', LOG_CATEGORIES.SYSTEM);
   } else if (state.player.fed <= 0){
-    log('You cannot rest on an empty stomach.', 'warn');
+    log('Cannot rest while starving.', LOG_CATEGORIES.SYSTEM);
   } else if (state.player.hp >= state.player.hpMax){
-    log('You wait.', 'muted');
+    log('You wait.', LOG_CATEGORIES.SYSTEM);
   } else {
-    log('You rest briefly.', 'muted');
+    log('You rest briefly.', LOG_CATEGORIES.SYSTEM);
   }
   endPlayerTurn('rest');
 }
@@ -129,8 +129,8 @@ function eatBest(){
     })
     .filter(Boolean);
 
-  if (!edibles.length){ log('You have no food.', 'warn'); return; }
-  if (deficit <= 0){ log('Your belly is full.', 'muted'); return; }
+  if (!edibles.length){ log('You have no food.', LOG_CATEGORIES.INTERACTION); return; }
+  if (deficit <= 0){ log('Already satiated.', LOG_CATEGORIES.INTERACTION); return; }
 
   // Prefer regular food over corpses
   const food    = edibles.filter(e => !e.isCorpse).sort((a,b) => a.fed - b.fed);
@@ -156,7 +156,7 @@ function eatItem(idx){
   const gain = Math.round(f.fed * foodFedMul(player));
   state.player.fed = Math.min(FED_MAX, state.player.fed + gain);
   const gained = state.player.fed - before;
-  log(`You eat ${f.name}. [+${gained} FED]`, 'hit');
+  log(`You eat ${f.name}. [+${gained} FED]`, LOG_CATEGORIES.INTERACTION);
   state.player.inventory.splice(idx, 1);
   endPlayerTurn('rest');
 }
@@ -167,7 +167,7 @@ function eatCorpseFromInv(idx){
   const before = state.player.fed;
   state.player.fed = Math.min(FED_MAX, state.player.fed + it.nutrition);
   const gained = state.player.fed - before;
-  log(`You eat the ${it.name}. [+${gained} FED]`, 'hit');
+  log(`You eat the ${it.name}. [+${gained} FED]`, LOG_CATEGORIES.INTERACTION);
   state.player.inventory.splice(idx, 1);
   endPlayerTurn('rest');
 }
@@ -180,13 +180,13 @@ function usePotion(idx){
   if (p.heal){
     const heal = Math.min(state.player.hpMax - state.player.hp, p.heal);
     state.player.hp += heal;
-    log(`You drink the ${p.name}. [+${heal} HP]`, 'hit');
+    log(`You drink the ${p.name}. [+${heal} HP]`, LOG_CATEGORIES.INTERACTION);
   }
   if (p.cure){
     const before = state.player.effects.length;
     state.player.effects = state.player.effects.filter(e => e.type !== p.cure);
-    if (state.player.effects.length < before) log(`The ${p.cure} subsides.`, 'hit');
-    else log(`The ${p.name} tastes bitter.`, 'muted');
+    if (state.player.effects.length < before) log(`The ${p.cure} subsides.`, LOG_CATEGORIES.INTERACTION);
+    else log(`The ${p.name} tastes bitter.`, LOG_CATEGORIES.INTERACTION);
   }
   state.player.inventory.splice(idx, 1);
   endPlayerTurn('rest');
@@ -225,7 +225,7 @@ function dropItem(idx){
   }
   placeItem(state.player.layer, state.player.x, state.player.y, groundObj);
   state.player.inventory.splice(idx, 1);
-  log(`Dropped ${name}.`, 'muted');
+  log(`Dropped ${name}.`, LOG_CATEGORIES.INTERACTION);
   endPlayerTurn('rest');
 }
 
@@ -242,10 +242,10 @@ function equipWeaponFromInv(idx) {
     if (state.player.inventory.length < INV_SLOTS) {
       state.player.inventory.push(oldItem);
     } else {
-      log(`Left ${findWeapon(oldKey).name} behind — no room.`, 'muted');
+      log(`No room. ${findWeapon(oldKey).name} left behind.`, LOG_CATEGORIES.INTERACTION);
     }
   }
-  log(`Equipped ${w.name}.`, 'hit');
+  log(`Equipped ${w.name}.`, LOG_CATEGORIES.INTERACTION);
   updateUI();
 }
 
@@ -264,10 +264,10 @@ function equipArmorFromInv(idx) {
     if (state.player.inventory.length < INV_SLOTS) {
       state.player.inventory.push(oldItem);
     } else {
-      log(`Left ${findArmor(oldKey).name} behind — no room.`, 'muted');
+      log(`No room. ${findArmor(oldKey).name} left behind.`, LOG_CATEGORIES.INTERACTION);
     }
   }
-  log(`Donned ${a.name}.`, 'hit');
+  log(`Donned ${a.name}.`, LOG_CATEGORIES.INTERACTION);
   updateUI();
 }
 
@@ -275,7 +275,7 @@ function turnInPlace(dx, dy){
   if (state.facing.dx === dx && state.facing.dy === dy) return;
   state.facing.dx = dx;
   state.facing.dy = dy;
-  log(`You turn ${dirName(dx, dy)}.`, 'muted');
+  log(`You turn ${dirName(dx, dy)}.`, LOG_CATEGORIES.MOVEMENT);
   endPlayerTurn('turn');
 }
 
@@ -285,14 +285,14 @@ function turnInPlace(dx, dy){
 function lookAtGround(){
   const items = getItems(state.player.layer, state.player.x, state.player.y);
   if (!items.length){
-    log('Nothing on the ground.', 'muted');
+    log('Nothing on the ground.', LOG_CATEGORIES.INTERACTION);
     return;
   }
   if (items.length === 1){
-    log(`On the ground: ${items[0].name}.`, 'muted');
+    log(`On the ground: ${items[0].name}.`, LOG_CATEGORIES.INTERACTION);
   } else {
     const names = items.map(it => it.name).join(', ');
-    log(`On the ground: ${names}.`, 'muted');
+    log(`On the ground: ${names}.`, LOG_CATEGORIES.INTERACTION);
   }
   updateUI();
 }
@@ -303,7 +303,7 @@ function pickUpFromGround(){
   const layer = state.player.layer;
   const items = getItems(layer, px, py);
   if (!items.length){
-    log('Nothing to pick up.', 'muted');
+    log('Nothing to pick up.', LOG_CATEGORIES.INTERACTION);
     return;
   }
   if (items.length === 1){
@@ -330,10 +330,10 @@ function pickUpGroundItem(groundItem, layer, x, y){
     invItem.nutrition = groundItem.nutrition || 0;
   }
   const result = addItem(state.player, invItem);
-  if (result === 'full'){ log('Your bag is full.', 'warn'); return; }
-  if (result === 'heavy'){ log("Too heavy to carry.", 'warn'); return; }
+  if (result === 'full'){ log('Your bag is full.', LOG_CATEGORIES.INTERACTION); return; }
+  if (result === 'heavy'){ log("Too heavy to carry.", LOG_CATEGORIES.INTERACTION); return; }
   removeItem(layer, x, y, groundItem.id);
-  log(`Picked up ${groundItem.name}.`, 'hit');
+  log(`Picked up ${groundItem.name}.`, LOG_CATEGORIES.INTERACTION);
   endPlayerTurn('rest');
 }
 
@@ -403,7 +403,7 @@ function eatCorpseFromGround(groundItem, layer, x, y){
   state.player.fed = Math.min(FED_MAX, state.player.fed + (groundItem.nutrition || 0));
   const gained = state.player.fed - before;
   removeItem(layer, x, y, groundItem.id);
-  log(`You eat the ${groundItem.name}. [+${gained} FED]`, 'hit');
+  log(`You eat the ${groundItem.name}. [+${gained} FED]`, LOG_CATEGORIES.INTERACTION);
   endPlayerTurn('rest');
 }
 
