@@ -3,7 +3,7 @@
 // NO game logic lives here — only delegation.
 
 import { state, worlds, covers } from './state.js';
-import { tileSize, viewW, viewH, cycleZoom, setZoom, zoom } from './display.js';
+import { tileSize, viewW, viewH, cycleZoom, setZoom, zoom, toggleSpritePack, getSpritePack } from './display.js';
 // LEGACY POPUP: modal.js still used by ground items, shops, NPC dialogue, books.
 // Migrate these features to HUD-native patterns, then remove this import.
 import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js';
@@ -460,6 +460,15 @@ document.addEventListener('keydown', (ev) => {
   if (ev.key === ']') { ev.preventDefault(); cycleUIZoom(1); return; }
   if (ev.key === '[') { ev.preventDefault(); cycleUIZoom(-1); return; }
 
+  // P key: toggle sprite pack (16px ↔ 32px)
+  if (kLow === 'p' && !ev.shiftKey) {
+    ev.preventDefault();
+    const pack = toggleSpritePack();
+    render();
+    log('Sprite pack: ' + pack + 'px', LOG_CATEGORIES.SYSTEM);
+    return;
+  }
+
   // L key: enter look mode
   if (kLow === 'l') {
     ev.preventDefault();
@@ -671,3 +680,9 @@ window.addEventListener('resize', () => {
 window.setZoom = (idx) => { if (setZoom(idx)) { resizeCanvas(); render(); updateZoomLabel(); } };
 window.zoom = zoom;
 window.uiZoom = () => UI_ZOOM_LEVELS[_uiZoomIndex];
+
+// ==================== SPRITE PACK DEBUG ====================
+//   spritePack()     → current pack (16 or 32)
+//   togglePack()     → switch pack and re-render
+window.spritePack = getSpritePack;
+window.togglePack = () => { const p = toggleSpritePack(); render(); return p; };
