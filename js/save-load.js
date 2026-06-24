@@ -8,7 +8,14 @@ import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, SPECIES_TEMPLATES, initBo
 import { findWeapon, findArmor } from './items.js';
 import { WANDER_PROFILES, DEFAULT_WANDER_PROFILE } from './monsters.js';
 import { render } from './rendering.js';
-import { log, LOG_CATEGORIES } from './log.js';
+import { log as _rawLog, LOG_CATEGORIES } from './log.js';
+
+// Wrap log() to tag DOM elements with categories for log tab/mute filtering.
+// See index.html inline script for the MutationObserver that reads the queue.
+function log(text, category) {
+  if (window._pendingLogCatQueue) window._pendingLogCatQueue.push(category || 'system');
+  _rawLog(text, category);
+}
 import { updatePlayerFOV } from './fov.js';
 
 const SAVE_KEY = 'overworld_zero_save';
