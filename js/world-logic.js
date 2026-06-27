@@ -3,10 +3,8 @@ import { state, worlds, covers, features, monsters, activateLayer } from './stat
 import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, LAYER_META, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H, DORMANT_RADIUS,
          SPAWN_DENSITY_SMALL_HERB, SPAWN_DENSITY_LARGE_HERB, SPAWN_DENSITY_MESO_PRED,
          SPAWN_DENSITY_AMBUSH_PRED, SPAWN_DENSITY_APEX_PRED,
-         SPAWN_SPACING_MESO, SPAWN_SPACING_AMBUSH, SPAWN_SPACING_APEX,
-         SPAWN_SPACING_LARGE_HERB,
-         SPAWN_CLUSTER_SIZE, SPAWN_CLUSTER_RADIUS, SPAWN_CLUSTER_SPACING,
-         SPAWN_VIABILITY_RADIUS, SPAWN_VIABILITY_MIN, SPAWN_MAX_ATTEMPTS } from './constants.js';
+         SPAWN_CLUSTER_SIZE, SPAWN_CLUSTER_RADIUS,
+         SPAWN_VIABILITY_RADIUS, SPAWN_VIABILITY_MIN } from './constants.js';
 import { T, isWalkable, isCover } from './terrain.js';
 import { rand, randi, choice } from './rng.js';
 // DISABLED — town removed (was used for initScholarInventory)
@@ -341,20 +339,6 @@ function isSpawnViable(x, y, habitatDef) {
   return false;
 }
 
-// ---- Spacing check ----
-// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-// Returns true if (x, y) respects minimum distance from all existing
-// creatures in the provided array. Uses Chebyshev distance (max of dx, dy).
-// This runs once at world generation, not per turn — performance is not critical.
-function respectsSpacing(x, y, placed, minSpacing) {
-  for (let i = 0; i < placed.length; i++) {
-    const dx = Math.abs(x - placed[i].x);
-    const dy = Math.abs(y - placed[i].y);
-    if (Math.max(dx, dy) < minSpacing) return false;
-  }
-  return true;
-}
-
 // ---- Check whether any water tile exists within `dist` of (cx, cy) ----
 function hasNearbyWater(cx, cy, dist) {
   const grid = worlds[LAYER_SURFACE];
@@ -501,75 +485,31 @@ export function spawnMonstersInWorld(){
     shuffleArray(habitatTiles[key]);
   }
 
-  // Track placed creatures per species for spacing checks
-  const placed = {};
-  for (const key of speciesKeys) {
-    placed[key] = [];
-  }
-
   // Track all spawned wolves/dire_wolves for pair bonding
   const spawnedWolves = [];
 
   // ==================================================================
-  // PHASE 1: Apex predators (dire_wolf / C2)
+  // PHASES 1–3: Predators and large herbivores
   // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-  // Fewest individuals, largest spacing requirements. Placed first.
+  // Iterate shuffled habitat tiles, place on viable spots until target
+  // reached. No spacing enforcement — map is small enough that sparse
+  // density ratios handle distribution. Predators placed first so their
+  // lower targets are always met before tiles are exhausted.
   // ==================================================================
-  {
-    const key = 'dire_wolf';
+  for (const key of ['dire_wolf', 'ambush_pred', 'wolf', 'cave_crab']) {
     const target = targetPop[key];
     const tiles = habitatTiles[key];
     const hab = SPAWN_HABITAT[key];
     let spawned = 0;
-    let attempts = 0;
-    let tileIdx = 0;
 
-    while (spawned < target && attempts < SPAWN_MAX_ATTEMPTS && tileIdx < tiles.length) {
-      const { x, y } = tiles[tileIdx++];
-      attempts++;
-
+    for (let i = 0; i < tiles.length && spawned < target; i++) {
+      const { x, y } = tiles[i];
       if (!isSpawnViable(x, y, hab)) continue;
-      if (!respectsSpacing(x, y, placed[key], SPAWN_SPACING_APEX)) continue;
 
       const m = placeCreature(key, x, y);
       if (m) {
-        placed[key].push({ x, y });
-        spawnedWolves.push(m);
+        if (key === 'wolf' || key === 'dire_wolf') spawnedWolves.push(m);
         spawned++;
-        attempts = 0; // reset attempt counter on success
-      }
-    }
-
-    console.log(`[Spawn] Apex predator (dire_wolf): ${spawned}/${target} placed (${habitatCount[key]} habitat tiles)`);
-  }
-
-  // ==================================================================
-  // PHASE 2: Ambush predators (C6) and meso-predators (C1)
-  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-  // Moderate numbers, moderate spacing. No cross-species spacing check —
-  // a C1 near a C2 is fine (they coexist in real ecosystems).
-  // ==================================================================
-  for (const [key, spacing] of [['ambush_pred', SPAWN_SPACING_AMBUSH], ['wolf', SPAWN_SPACING_MESO]]) {
-    const target = targetPop[key];
-    const tiles = habitatTiles[key];
-    const hab = SPAWN_HABITAT[key];
-    let spawned = 0;
-    let attempts = 0;
-    let tileIdx = 0;
-
-    while (spawned < target && attempts < SPAWN_MAX_ATTEMPTS && tileIdx < tiles.length) {
-      const { x, y } = tiles[tileIdx++];
-      attempts++;
-
-      if (!isSpawnViable(x, y, hab)) continue;
-      if (!respectsSpacing(x, y, placed[key], spacing)) continue;
-
-      const m = placeCreature(key, x, y);
-      if (m) {
-        placed[key].push({ x, y });
-        if (key === 'wolf') spawnedWolves.push(m);
-        spawned++;
-        attempts = 0; // reset attempt counter on success
       }
     }
 
@@ -577,42 +517,10 @@ export function spawnMonstersInWorld(){
   }
 
   // ==================================================================
-  // PHASE 3: Large herbivores (cave_crab / C4)
-  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-  // Individual placement with loose spacing. No clustering.
-  // ==================================================================
-  {
-    const key = 'cave_crab';
-    const target = targetPop[key];
-    const tiles = habitatTiles[key];
-    const hab = SPAWN_HABITAT[key];
-    let spawned = 0;
-    let attempts = 0;
-    let tileIdx = 0;
-
-    while (spawned < target && attempts < SPAWN_MAX_ATTEMPTS && tileIdx < tiles.length) {
-      const { x, y } = tiles[tileIdx++];
-      attempts++;
-
-      if (!isSpawnViable(x, y, hab)) continue;
-      if (!respectsSpacing(x, y, placed[key], SPAWN_SPACING_LARGE_HERB)) continue;
-
-      const m = placeCreature(key, x, y);
-      if (m) {
-        placed[key].push({ x, y });
-        spawned++;
-        attempts = 0;
-      }
-    }
-
-    console.log(`[Spawn] Large herbivore (cave_crab): ${spawned}/${target} placed (${habitatCount[key]} habitat tiles)`);
-  }
-
-  // ==================================================================
   // PHASE 4: Small herbivores in clusters (hare / C3)
   // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-  // Most numerous, clustered. Pick cluster centers with spacing between
-  // centers, then scatter individuals within cluster radius on valid tiles.
+  // Most numerous, clustered. Pick cluster centers from viable habitat
+  // tiles, then scatter individuals within cluster radius.
   // ==================================================================
   {
     const key = 'hare';
@@ -624,19 +532,12 @@ export function spawnMonstersInWorld(){
 
     const clusterCenters = [];
     let totalSpawned = 0;
-    let centerAttempts = 0;
-    let tileIdx = 0;
 
-    // Place cluster centers
-    while (clusterCenters.length < clusterCount && centerAttempts < SPAWN_MAX_ATTEMPTS && tileIdx < tiles.length) {
-      const { x, y } = tiles[tileIdx++];
-      centerAttempts++;
-
+    // Pick cluster centers from viable habitat tiles
+    for (let i = 0; i < tiles.length && clusterCenters.length < clusterCount; i++) {
+      const { x, y } = tiles[i];
       if (!isSpawnViable(x, y, hab)) continue;
-      if (!respectsSpacing(x, y, clusterCenters, SPAWN_CLUSTER_SPACING)) continue;
-
       clusterCenters.push({ x, y });
-      centerAttempts = 0; // reset on success
     }
 
     // Populate each cluster

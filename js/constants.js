@@ -227,30 +227,15 @@ export const SPAWN_DENSITY_MESO_PRED   = [100, 150]; // C1 — meso-predator (wo
 export const SPAWN_DENSITY_AMBUSH_PRED = [120, 180]; // C6 — ambush predator (ambush_pred)
 export const SPAWN_DENSITY_APEX_PRED   = [350, 500]; // C2 — apex predator (dire_wolf)
 
-// ---- Spacing minimums (tiles between same-species predators) ----
-// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-export const SPAWN_SPACING_MESO   = 18;  // C1 min distance from nearest C1
-export const SPAWN_SPACING_AMBUSH = 18;  // C6 min distance from nearest C6
-export const SPAWN_SPACING_APEX   = 35;  // C2 min distance from nearest C2
-
 // ---- Prey clustering (small herbivores) ----
 // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
 export const SPAWN_CLUSTER_SIZE    = [3, 6];  // C3 individuals per cluster
 export const SPAWN_CLUSTER_RADIUS  = 6;       // tiles from cluster center
-export const SPAWN_CLUSTER_SPACING = 20;      // min distance between cluster centers
-
-// ---- Large herbivore loose spacing ----
-// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-export const SPAWN_SPACING_LARGE_HERB = 12;   // C4 loose spacing between individuals
 
 // ---- Viability check ----
 // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
 export const SPAWN_VIABILITY_RADIUS = 6;  // check this radius around spawn point
 export const SPAWN_VIABILITY_MIN    = 6;  // need at least this many habitat tiles in radius
-
-// ---- Placement attempt limits ----
-// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-export const SPAWN_MAX_ATTEMPTS = 50;  // per-creature placement attempts before giving up
 
 // ==================== GAMEPLAY FORMULA CONSTANTS ====================
 // Stat scale: 1-100 range (scaled from legacy 1-10).
