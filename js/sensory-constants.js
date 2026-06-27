@@ -21,7 +21,10 @@ export const CONTACT_AREA_COEFF     = 0.15;  // contact area per kg of locomotio
 
 // Visual detectability
 export const VIS_SIZE_COEFF    = 1.0;   // visual detectability per cube-root-kg
-export const VIS_MOVEMENT_MULT = 3.0;   // moving creatures are 3x more visible
+// DEPRECATED — motion's effect on visual detection is now handled entirely by
+// MOTION_SIGNAL_MOVING / MOTION_SIGNAL_STILL in detection.js (Visual Detection
+// Pass 1). Retained for reference only. Do not use.
+// export const VIS_MOVEMENT_MULT = 3.0;
 
 // Default contact area fraction (fallback if no locomotion zones tagged)
 export const DEFAULT_CONTACT_FRACTION = 0.15;
@@ -94,13 +97,13 @@ export const MARKER_MASS_MAX   = 250;    // kg — at or above this → maximum 
 // for playability, but must remain dramatic enough that stillness is a
 // meaningful survival strategy.
 export const MOTION_SIGNAL_MOVING        = 3.5;    // moving creature signal multiplier
-export const MOTION_SIGNAL_STILL         = 0.25;   // stationary creature signal multiplier
+export const MOTION_SIGNAL_STILL         = 0.45;   // stationary creature signal multiplier (was 0.25 — too harsh at short range)
 
 // Background contrast: how different the creature's integument looks
 // from the terrain it's standing on.
-export const CONTRAST_FLOOR              = 0.10;   // minimum contrast even at perfect match
-export const BRIGHTNESS_CONTRAST_WEIGHT  = 1.5;    // brightness difference weight (luminance dominates)
-export const HUE_MISMATCH_PENALTY        = 0.30;   // additional contrast from categorical hue mismatch
+export const CONTRAST_FLOOR              = 0.08;   // minimum contrast even at perfect match (was 0.10)
+export const BRIGHTNESS_CONTRAST_WEIGHT  = 3.5;    // brightness difference weight — luminance dominates (was 1.5)
+export const HUE_MISMATCH_PENALTY        = 0.50;   // additional contrast from categorical hue mismatch (was 0.30)
 
 // Bleed contrast: cyan blood against dark red flora is maximum contrast.
 // Wounds are beacons. More bleeding = more visible, up to saturation.

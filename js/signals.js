@@ -9,7 +9,7 @@ import {
   CHEM_MASS_COEFF, CHEM_PREDATOR_MULT, CHEM_ACTIVITY_MULT, CHEM_WOUND_COEFF,
   VIB_GROUND_COEFF, VIB_AIR_BASELINE_COEFF, VIB_AIR_ACTIVITY_COEFF, VIB_AIR_COMBAT_BONUS,
   VIB_WATER_COEFF, VIB_WATER_IDLE_COEFF, CONTACT_AREA_COEFF, DEFAULT_CONTACT_FRACTION,
-  VIS_SIZE_COEFF, VIS_MOVEMENT_MULT,
+  VIS_SIZE_COEFF,
   getBodyMap,
 } from './constants.js';
 
@@ -112,13 +112,12 @@ function computeVisualDetectability(creature) {
   const mass = creature.totalMass || 0;
   if (mass <= 0) return 0;
 
-  // Size component — cube root of mass as proxy for visual cross-section
+  // Size component — cube root of mass as proxy for visual cross-section.
+  // This is the creature's passive visual profile — how large it appears.
+  // Motion's effect on detectability is handled entirely by
+  // MOTION_SIGNAL_MOVING / MOTION_SIGNAL_STILL in detection.js (Visual
+  // Detection Pass 1), not here in the emission signal.
   let detectability = Math.pow(mass, 0.33) * VIS_SIZE_COEFF;
-
-  // Movement component — moving things are dramatically easier to detect
-  if (creature.movedThisTurn) {
-    detectability *= VIS_MOVEMENT_MULT;
-  }
 
   return detectability;
 }

@@ -21,7 +21,7 @@ import { getBodyMap,
          selectHitZone,
          MOTION_CONCEALMENT_REDUCTION, BODY_PLAN_HEIGHT_COEFF,
          // Visual Detection Pass 1 — motion and contrast
-         MOTION_SIGNAL_STILL,
+         MOTION_SIGNAL_MOVING, MOTION_SIGNAL_STILL,
          CONTRAST_FLOOR, BRIGHTNESS_CONTRAST_WEIGHT, HUE_MISMATCH_PENALTY,
          BLEED_CONTRAST_BONUS, BLEED_VISUAL_SATURATION,
          getIntegument,
@@ -261,10 +261,13 @@ function getVisualRange(detector, target) {
   if (detectability <= 0 || sensitivity <= 0 || light <= 0) return 0;
 
   // ── Motion factor (Visual Detection Pass 1) ──
-  // Still creatures get a dramatic reduction — temporal change detection
-  // (motion pathway) is fast and involuntary; spatial pattern recognition
-  // (static pathway) is slow and effortful.
-  if (!_isTargetMoving(target)) {
+  // Motion is now handled entirely here. The base signal from signals.js is
+  // the creature's passive visual profile (size only, no motion multiplier).
+  // Moving creatures fire temporal change detection (fast, involuntary).
+  // Stationary creatures require spatial pattern recognition (slow, effortful).
+  if (_isTargetMoving(target)) {
+    detectability *= MOTION_SIGNAL_MOVING;
+  } else {
     detectability *= MOTION_SIGNAL_STILL;
   }
 
