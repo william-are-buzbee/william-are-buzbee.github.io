@@ -10,7 +10,7 @@ Reference document for creature design, biome logic, and world-building. These a
 
 **Intensity:** ~60-70% of Earth. The world feels like perpetual late afternoon — warm-toned, dim, soft shadows. Not dark, but no harsh midday glare. Night is genuinely dark due to low ambient light.
 
-**Spectrum:** Yellow-orange peak (slightly cooler than Sol). Photosynthetic organisms evolve pigments that absorb blue, green, and violet, reflecting reds, deep browns, and near-blacks. "Plant" life trends dark: deep red-brown canopies, near-black trunks, dark olive-to-maroon undergrowth. Chemotrophic organisms (which don't photosynthesize) may actually be *lighter* in color than photosynthetic ones — their pigmentation comes from mineral chemistry, not light absorption.
+**Spectrum:** Yellow-orange peak (slightly cooler than Sol). Photosynthetic organisms evolve pigments that absorb blue, green, and violet, reflecting reds and deep browns. The raw photosynthetic pigment is deep red-violet; under the amber starlight, this shifts to the deep crimson and dark red-brown the player sees. Trunks are not photosynthetic — they're mineral-impregnated structural material tinted by local chemistry (iron-red, copper-green, manganese-dark). Chemotrophic organisms (which don't photosynthesize) may actually be *lighter* in color than photosynthetic ones — their pigmentation comes from mineral chemistry, not light absorption. See the Color Interpretation Guide section for the three-layer color model (material × starlight × creature perception) and specific hex values.
 
 **Consistency:** Very steady. The star barely fluctuates. No boom-bust energy cycles. Evolution favors efficiency over resilience: slow metabolisms, long lifespans, complex symbioses, minimal waste. Sudden disruptions (like the demigod's wipes) are catastrophic precisely because nothing evolved to handle them.
 
@@ -167,9 +167,28 @@ Descended from photosynthetic microbial mats. Scaled up into large sessile organ
 
 **Growth habit — broad and low, not tall.** Earth trees grow tall because direct sunlight creates intense vertical competition — being one meter higher than your neighbor shades them out. This planet's dim star and thick atmosphere produce diffuse light from all angles. The advantage of height is reduced. The advantage of being *broad* — maximizing surface area to catch light from every direction — is increased. The dominant photosynthetic flora is structurally between a tree fern and a Carboniferous club moss: short trunks (3-8 meters, not 30), broad spreading canopies of fractal fronds radiating outward. Walking through a forest feels more like walking through a room with a dark, low ceiling than standing among tall columns with a distant canopy overhead.
 
-**Color — dark.** The yellow-orange star means photosynthetic pigments absorb blue, green, and violet aggressively. Flora reflects reds, deep browns, and near-blacks. Fronds are deep maroon to near-black. No bright green anywhere. The trunks are built from mineral-impregnated structural material — dense, heavy, more ceramic-like than woody. Trunk color depends on local mineral incorporation: iron-red, copper-green, manganese-dark.
+**Color — the photosynthetic anchor.**
 
-**Ground cover** is mat-forming: low, continuous photosynthetic surfaces carpeting the ground between the tree-ferns. Not individual grass blades — continuous dark mats, like moss scaled up. Dark red-brown to near-black.
+The color of living photosynthetic tissue is the visual anchor of this world. Understanding it requires separating three layers:
+
+1. **Material color (color in a vacuum):** The photosynthetic pigments absorb blue, green, and violet aggressively under any light. The material itself — the actual tissue — is deep red-violet. This is the base pigment. In neutral white light, a frond would look deep crimson-maroon. There is no green anywhere in the photosynthetic flora. The trunks are separate — built from mineral-impregnated structural material (dense, ceramic-like, not woody), colored by whatever minerals are locally incorporated: iron-red, copper-green, manganese-dark. Trunk color varies by region; frond/mat color does not.
+
+2. **Environmental modification (what light does to it):** The yellow-orange star warms and dims everything. The deep red-violet pigment, lit by amber starlight, shifts darker and browner. Under full open-sky illumination, living photosynthetic surface appears deep red-brown — still visibly red, but warmer and darker than the raw pigment. Under forest canopy shade (low ceiling, 3-8m), the same material darkens further to near-black. The amount of light reaching the surface is the primary driver of apparent brightness. A frond catching open sky looks deep crimson. The same frond under canopy shadow looks almost black.
+
+3. **Perceptual interpretation (what the animal sees):** The creatures on this planet evolved under this dim star. Their visual transducers compensate by amplifying the signal — brightening the visual field to extract usable contrast from a dark world. What the player sees on screen is this post-perceptual version: the creature's visual system has brightened a near-black world into something navigable. The raw reflected light is much darker than what's rendered. The warm brown tones of the ground, the visible crimson of the trees — these are the creature's interpretation, not the "true" color of the surface under raw starlight.
+
+**In-game reference colors (what the player's creature perceives):**
+- Living photosynthetic surface (fronds, tree canopy): deep crimson-red. Game hex: forest fg `#6a2c24`.
+- Forest floor under canopy: near-black with red undertone. Game hex: forest bg `#2e160e`.
+- Open-ground photosynthetic mats (grassland): warm red-brown, noticeably lighter than forest floor. Game hex: plains fg `#7a4c38` on bg `#342818`.
+
+**Ground cover** is mat-forming: low, continuous photosynthetic surfaces carpeting the ground. Not individual grass blades — continuous mats, like moss scaled up. But the ground is NOT uniform red, and it is NOT the same color as the living canopy above it. The ground surface is a mix of:
+
+- **Living photosynthetic mat** — the red-spectrum anchor. Darkest and most red where actively growing in shade.
+- **Dead and decomposing mat material** — when the photosynthetic pigment breaks down in dead tissue, the underlying structural chemistry shows through. Dead mat trends browner, warmer, and lighter than living mat. The organic detritus layer is amber-brown, not red.
+- **Mineral substrate showing through** — the mat doesn't cover everything. Patches of exposed soil and mineral substrate break up the photosynthetic surface. Soil color depends on local chemistry (iron-rich = red-brown, copper-rich = greenish-brown, manganese = dark purple-brown).
+
+The result: open grassland ground is a mix of living dark-red mat, dead amber-brown detritus, and mineral substrate, producing an overall warm brown tone with scattered reddish accent. It's visibly different from the deep crimson of the tree canopy. Forest floor is darker overall (shade) but has the same material mix at lower brightness.
 
 **The "forest" biome is a dark, wet, low-ceilinged fern swamp.** Standing water between trunks, saturated soil, dark fronds overhead, spore haze in the dim amber light. More flooded mangrove bog than temperate woodland.
 
@@ -190,6 +209,45 @@ Descended from chemotrophic microbial mats. Scaled up into the fungal-zone produ
 **Texture — mineral and geological.** The surfaces are layered, crusty, mineralized. More like calcium buildup or geological deposit than anything obviously organic. Some of it looks almost like stone until you notice it's grown since you were last here.
 
 **The "fungal" biome is an open, mounded mineral flat.** No canopy — the amber sky is visible overhead, light hitting the ground directly. The landscape is warm brown rock and soil with purple-dark (or blue-green, or rusty) colony structures growing on and out of it. Mounds rise from the ground, bracket shelves project from rock faces, thin fruiting spires reach upward. The ground between mounds is a continuous mat network — the colony spreading between its visible structures. Walking through a fungal zone, the player is walking *on top of* the organism.
+
+#### Regional Mineral Chemistry — Surface and Underground Connected
+
+The planet's active interior continuously pushes reduced minerals upward through the crust. These minerals enter the surface soil through groundwater percolation, but the path is indirect — groundwater moves laterally through aquifers, surface processes rework the soil, and erosion and deposition redistribute material. The surface soil chemistry at any given point is a mix of local bedrock weathering, transported sediment, deep percolation, and organic accumulation. It reflects local geology, but not as a simple vertical projection of what's below.
+
+**Mineral zones** are regions of relatively uniform mineral chemistry in the soil and substrate. They're created by the underlying geology — a volcanic island has zones of different composition depending on what rock types are present, what minerals the geological activity is pushing upward, and how surface water distributes dissolved minerals.
+
+**Zone scale:** Mineral zones vary in size the way real geology does — no single uniform scale. Some examples:
+
+- A large basaltic region might span 200-500+ tiles across, setting the default iron-rich chemistry for an entire island flank.
+- A copper sulfide deposit surfaces over maybe 40-150 tiles, creating a distinct chemical pocket within the larger iron-rich region.
+- A hydrothermal vent or hot spring enriches the soil in a small intense patch, maybe 15-40 tiles across, with chemistry quite different from the surrounding area.
+- A stream carrying mineral-rich water from a deep source creates a narrow corridor of enriched soil along its banks, perhaps 5-15 tiles wide but running for hundreds of tiles along the water's path.
+- The transition between zones is gradual — 10-30 tiles of blending where soil chemistry shifts from one dominant mineral to another.
+
+The variation itself matters. A single island might have 3-6 major mineral zones of different sizes, with smaller pockets and corridors within them. The landscape is a patchwork, not a grid. Some zones are large and dominant, others are small anomalies. This produces a world that doesn't feel tiled or procedurally uniform.
+
+**How mineral zones affect flora:**
+
+**Photosynthetic flora — fronds are constant, structural tissue varies.** The photosynthetic pigment in fronds absorbs the same wavelengths regardless of soil chemistry. Fronds are dark red-violet everywhere. But the structural tissue — trunks, stalks, root-mass, the scaffolding that holds the fronds up — is built from whatever minerals are locally available. Flora can't choose which minerals to absorb; it takes what's in the groundwater and incorporates it into structural compounds. The result:
+
+- Iron-rich zone: trunks incorporate iron oxides → warm red-brown to rust-colored structural tissue
+- Copper-rich zone: trunks incorporate copper compounds → greenish to verdigris-tinted structural tissue
+- Manganese-rich zone: trunks incorporate manganese oxides → very dark, near-black structural tissue
+- Mixed or depleted zone: minimal mineral incorporation → pale, fibrous, more "woody" structural tissue (the default on mineral-poor substrate)
+
+The frond canopy overhead looks the same everywhere (dark crimson). The trunks below vary. Walking through a forest, you might not notice the fronds changing (they don't), but you'd notice the trunks shifting from reddish to greenish as you cross a geological boundary. The ground mat color shifts too — the mat incorporates the same minerals as the trunks, subtly tinting the ground layer.
+
+**Chemotrophic flora — color IS chemistry.** Already described above. Chemotrophic organisms process specific minerals and take on their color. In manganese zones: purple to violet-black. In copper zones: blue-green to turquoise. In iron zones: rusty ochre. The chemotrophic color is a direct, honest signal of what mineral is being metabolized.
+
+**The surface-underground relationship is suggestive, not reliable.** Surface soil chemistry and deep underground mineral chemistry are shaped by different processes on different timescales. Deep minerals percolate upward through fracture networks and groundwater, but those paths are lateral as much as vertical — a copper vein at depth might enrich surface soil kilometers away, or not reach the surface at all. Surface soil is also reworked by erosion, sediment transport, volcanic ash, and organic accumulation. The mineral signature of surface soil is a mix of local bedrock weathering, transported sediment, and deep percolation — not a clean readout of what's directly below.
+
+On a tectonically active archipelago, this decoupling is even stronger. The surface geology might be from a completely different episode than the deep mineral veins.
+
+Near active geological features — hot springs, volcanic vents, seeps that breach the surface — the correlation is stronger. Minerals are being actively pushed up and deposited locally. Copper-green trunks near a hot spring probably do indicate copper chemistry nearby, including underground. But copper-green trunks on a hillside three kilometers away might mean copper washed in via groundwater from a completely unrelated source.
+
+The player who treats trunk color as geological certainty will sometimes be wrong. The player who treats it as a suggestive hint — worth investigating but not proof — will be right more often. This is how real geological prospecting works.
+
+**What the player sees:** Walking across a volcanic island, the forest canopy is uniformly dark crimson overhead. But the forest floor and the trunks change. A region of reddish-brown trunks gives way to a stretch of greenish trunks. The ground mats shift subtly in tone. The player who's paying attention notices: the soil chemistry changed. This is primarily atmospheric variety that prevents forests from feeling monotone. Near active geological features (hot springs, vents), the trunk color might also hint at what's underground — but the hint is unreliable elsewhere.
 
 #### Flora and the Animal Clades
 
@@ -225,9 +283,11 @@ Consequences:
 
 ## Summary — What the Player Sees
 
+**Important: what the player "sees" is three layers deep.** The raw material colors of this world are very dark — the dim star produces a near-black landscape in absolute terms. The player never sees raw color. They see the creature's perceptual interpretation: a visual system evolved under this star, brightening and contrast-enhancing a dark world into something navigable. The warm brown grounds, the visible crimson trees, the amber-gold water highlights — these are post-perceptual. The "true" world in raw reflected light is much darker than what's on screen.
+
 A dim, amber-lit world of islands and shallow seas. Soft light, mild temperatures, damp air. Three independent lineages of life — microbial-descended flora (the producers) and two unrelated animal clades (the consumers) — overlap everywhere.
 
-The photosynthetic zones are dark, low, and wet: fern-swamp forests with near-black fronds, mineral-encrusted trunks rising from standing water, spore haze drifting in amber light, continuous dark mats carpeting the ground. The chemotrophic zones are open and mounded: warm brown rock with purple-dark (or blue-green, or rusty) colony structures growing on and out of it, bracket shelves on rock faces, thin fruiting spires, mat networks spreading across the ground. Both types of zone are *alive* in different ways — the forest is full of individual rooted organisms, the fungal zone is one or a few vast colonial organisms.
+The photosynthetic zones use a palette anchored in deep red — the photosynthetic pigment — but the ground is NOT the same shade as the living canopy. Forests are low-ceilinged fern swamps: crimson fronds and mineral-encrusted trunks over a near-black floor. Open grasslands are warmer and browner — a mix of living red mat, dead amber-brown detritus, and exposed mineral substrate, producing an overall warm brown tone with red accent. The visual variety comes from light exposure (shade darkens dramatically), decomposition state (dead material shifts browner), and mineral substrate (local chemistry tints the ground). The chemotrophic zones provide the strongest color contrast: open mineral flats with purple, blue-green, or rusty-ochre colony structures depending on local chemistry. These zones look distinctly different from the red-spectrum photosynthetic areas.
 
 Both animal clades are present in every biome. Body plans are experimental and varied — familiar roles (predator, prey, grazer) but unfamiliar shapes, distinctly alien but still believable. Clade A descendants are readable: they commit to behavioral states, they have personality, they remember, they can be learned and outplayed through understanding. Clade B descendants are manageable: they run parallel behaviors, they synchronize with nearby kin, they're lethal in home territory and weaker outside it, and they're controlled through spatial awareness rather than behavioral prediction.
 
@@ -241,9 +301,9 @@ Ice and cold are alien on this planet. Creatures adapted to frozen environments 
 
 | Decision | Constrained by |
 |---|---|
-| Biome color palettes | Star spectrum (yellow-orange) + crustal chemistry (mixed metallic) + flora pigmentation |
+| Biome color palettes | Star spectrum (yellow-orange) + crustal chemistry (mixed metallic) + flora pigmentation + three-layer color model (see Color Interpretation Guide) |
 | Flora form factor | Dim diffuse light (broad/low, not tall) + no insect pollinators (spore-based, no flowers) |
-| Flora color | Star spectrum (photosynthetic flora = dark red-brown to near-black) + mineral substrate (chemotrophic flora = mineral-tinted) |
+| Flora color | Star spectrum (photosynthetic pigment = deep red-violet in vacuum, shifted darker/browner by amber starlight, brightened by creature perception) + mineral substrate (chemotrophic flora = mineral-tinted). Three-layer model: material × starlight × perception. |
 | Biome identity and placement | Which flora type dominates, determined by local mineral chemistry and light availability |
 | Creature body plans | Two ancestral animal clades + Cambrian-level divergence + archipelago isolation |
 | Creature materials (armor, shells) | Water mineral concentration (moderate) + pH (neutral, both calcium and metallic biology) |
@@ -258,6 +318,56 @@ Ice and cold are alien on this planet. Creatures adapted to frozen environments 
 | Day/night visual feel | Dim star + thick atmosphere = warm amber baseline, genuinely dark nights |
 | Sound-based detection | Slightly thick atmosphere = sound carries further |
 | Fire mechanics | Normal oxygen = fire behaves as expected |
+| Trunk color variation | Regional mineral chemistry — iron zones produce red-brown trunks, copper zones produce greenish trunks, manganese zones produce near-black trunks. Frond color is constant (photosynthetic pigment). |
+| Surface-underground connection | Surface trunk color reflects local surface soil chemistry. Correlation with deep underground mineral zones is suggestive near active geological features, unreliable elsewhere. |
+| Mineral zone scale | Varies by geology: large basaltic regions (200-500+ tiles), mineral deposits (40-150 tiles), hydrothermal patches (15-40 tiles), mineral stream corridors (5-15 tiles wide). Transitions are gradual (10-30 tiles). |
+
+---
+
+## Color Interpretation Guide
+
+**The three-layer model — apply this to all visual design decisions:**
+
+```
+What the player sees = material color × environmental modification × perceptual interpretation
+```
+
+**Layer 1 — Material color (color in a vacuum):** The actual pigment or surface chemistry of the object. Photosynthetic tissue is deep red-violet. Mineral-impregnated trunk material varies by local chemistry. Dead organic material is amber-brown. Soil is mineral-tinted. This is the "true" color under neutral white light.
+
+**Layer 2 — Environmental modification:** The yellow-orange star shifts everything warmer and darker. Shade from canopy darkens further. Moisture changes reflectance (wet surfaces are darker and slightly more reflective). Atmospheric haze at distance washes out contrast. This is physics acting on the material.
+
+**Layer 3 — Perceptual interpretation:** The creature's visual transducers evolved under this star. They compensate for the dim light by amplifying signal — brightening the visual field. What's rendered on screen is this post-perceptual version. The raw world is much darker. The creature sees a brighter, more contrast-enhanced version of reality.
+
+**Current game hex colors (layer 3 — what the creature perceives, what's on screen):**
+
+Terrain palettes (each has bg = base fill, fg = foreground detail, mid = midtone detail):
+```
+Plains/grassland:   bg #342818   fg #7a4c38   mid #583a28    (warm brown with red-brown accent)
+Forest:             bg #2e160e   fg #6a2c24   mid #4a2018    (near-black floor, deep crimson features)
+Mud:                bg #2c2010   fg #7a5c28   mid #54401c    (dark to warm amber-brown)
+Dirt:               bg #362a14   fg #7e6840   mid #5e482c    (warm brown-gold)
+Rock:               bg #3a3228   fg #a89a84   mid #786c58    (dark gray-brown with light warm gray detail)
+Beach:              bg #403628   fg #a89474   mid #786a50    (medium brown with light tan detail)
+Water:              bg #302a1c   fg #b09868   mid #6e5c3c    (dark with amber-gold wave marks — brackish, mineral-rich)
+Deep water:         bg #221c14   fg #786a50   mid #443a28    (very dark with muted amber)
+Mushroom/fungal:    bg #241c30   fg #806898   mid #583c68    (dark purple — mineral chemistry visible)
+```
+
+Creature tint colors (species body color — also layer 3, post-perceptual):
+```
+Meso-predator:      #5a4a40    (warm medium brown — generalist, moderate match to most terrain)
+Apex predator:      #3a302a    (very dark brown, nearly black — forest specialist)
+Large herbivore:    #4a5040    (olive-greenish brown — amphibious, muddy coastal match)
+Small herbivore:    #7a8070    (light gray-green — currently too light for background matching; review when implementing visual detection)
+Ambush predator:    #5a5048    (dark warm gray-brown — close to forest floor values)
+```
+
+**Key relationships:**
+- The apex predator (`#3a302a`) is very close to the forest bg (`#2e160e`). It should be hard to see in forest. This is correct.
+- The ambush predator (`#5a5048`) is moderately close to forest floor tones. Combined with stillness and cover, it should be nearly invisible in its habitat.
+- The meso-predator (`#5a4a40`) is a generalist brown — decent but not perfect match anywhere. Visible if you're looking, easy to miss if you're not.
+- The small herbivore (`#7a8070`) is currently the lightest creature — it stands out against most terrain. This may be intentional (prey animals are visible when moving) or may need revisiting for the visual detection system.
+- Cyan blood (the planet's oxygen-carrier chemistry) against any of these backgrounds is extremely high contrast. Wounds are beacons.
 
 ---
 
@@ -268,6 +378,10 @@ When designing creatures, biomes, or environments, include this file so the chat
 - Flora is NOT descended from either animal clade — it's a separate, older lineage
 - Photosynthetic flora: dark, fern-like, broad/low canopy, spore-reproducing, no flowers
 - Chemotrophic flora: mounded colonies, bracket shelving, fruiting spires, mineral-colored
+- **Three-layer color model:** material color (pigment/chemistry in vacuum) × environmental modification (starlight, shade, moisture) × perceptual interpretation (creature's visual system brightening a dark world). What the player sees on screen is layer 3. The raw world is much darker.
+- The photosynthetic anchor is deep red-violet pigment. Ground is NOT uniform red — it's a mix of living mat, dead detritus, and mineral substrate producing warm brown tones with red accent. Trees/fronds are the most visibly red element.
+- Chemotrophic zones provide the strongest color contrast (purple, blue-green, ochre depending on mineral chemistry)
+- Regional mineral zones create visual variation: photosynthetic fronds are constant dark red everywhere, but trunks vary by local surface soil mineral incorporation (iron-red, copper-green, manganese-dark). Surface chemistry loosely correlates with underground chemistry near active geological features, but the relationship is not reliable.
 - What colors are physically justified (dark photosynthetic life, mineral-tinted chemotrophic life, metallic vs calcium animal structures)
 - Why biomes differ (which flora type dominates, driven by mineral chemistry)
 - Why underground is rich (geothermal + chemotrophic flora + both animal clades)
