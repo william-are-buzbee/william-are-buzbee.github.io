@@ -824,48 +824,24 @@ function assessThreatLevel(creature, target, detInfo) {
   return 0;
 }
 
-/** Detect threats in range using per-zone detection (Prompt P). */
+/** Detect threats in range using already-built detectionInfo (Prompt P).
+ *  Reuses results from buildAllDetectionInfo — no duplicate canDetect calls. */
 function detectThreats(creature) {
   const threats = [];
 
-  // Check player
-  const player = state.player;
-  if (player && player.hp > 0) {
-    const result = canDetect(creature, player);
-    if (result.detected) {
-      const detInfo = (creature.detectionInfo || []).find(d => d.entity === player);
-      const threatLevel = assessThreatLevel(creature, player, detInfo || null);
-      if (threatLevel > 0) {
-        threats.push({
-          source: player,
-          distance: result.distance,
-          threatLevel: threatLevel,
-          senses: result.senses,
-          bestSNR: result.bestSNR,
-        });
-      }
-    }
-  }
+  for (const info of (creature.detectionInfo || [])) {
+    const target = info.entity;
+    if (!target || target.hp <= 0) continue;
 
-  // Check other creatures (Prompt R: spatial grid narrows candidates)
-  const nearby = getNearbyCreatures(creature.x, creature.y);
-  for (const other of nearby) {
-    if (other === creature) continue;
-    if (other.hp <= 0) continue;
-
-    const result = canDetect(creature, other);
-    if (result.detected) {
-      const detInfo = (creature.detectionInfo || []).find(d => d.entity === other);
-      const threatLevel = assessThreatLevel(creature, other, detInfo || null);
-      if (threatLevel > 0) {
-        threats.push({
-          source: other,
-          distance: result.distance,
-          threatLevel: threatLevel,
-          senses: result.senses,
-          bestSNR: result.bestSNR,
-        });
-      }
+    const threatLevel = assessThreatLevel(creature, target, info);
+    if (threatLevel > 0) {
+      threats.push({
+        source: target,
+        distance: info.distance,
+        threatLevel: threatLevel,
+        senses: info.senses || [],
+        bestSNR: info.bestSNR || 0,
+      });
     }
   }
 
@@ -999,40 +975,23 @@ function getAdjacentPrey(creature) {
   return best;
 }
 
-/** Detect prey using sense-specific detection (L-B). Predators only. */
+/** Detect prey using already-built detectionInfo. Predators only.
+ *  Reuses results from buildAllDetectionInfo — no duplicate canDetect calls. */
 function detectPrey(creature) {
   if (creature.diet !== 'predator') return;
 
   creature.detectedPrey = [];
 
-  // Scan NPC creatures (Prompt R: spatial grid narrows candidates)
-  const nearby = getNearbyCreatures(creature.x, creature.y);
-  for (const other of nearby) {
-    if (other === creature) continue;
-    if (other.hp <= 0) continue;
-    if (!isViablePrey(creature, other)) continue;
+  for (const info of (creature.detectionInfo || [])) {
+    const target = info.entity;
+    if (!target || target.hp <= 0) continue;
+    if (!isViablePrey(creature, target)) continue;
 
-    const result = canDetect(creature, other);
-    if (result.detected) {
-      creature.detectedPrey.push({
-        target: other,
-        distance: result.distance,
-        senses: result.senses,
-      });
-    }
-  }
-
-  // Scan player
-  const player = state.player;
-  if (player && player.hp > 0 && isViablePrey(creature, player)) {
-    const result = canDetect(creature, player);
-    if (result.detected) {
-      creature.detectedPrey.push({
-        target: player,
-        distance: result.distance,
-        senses: result.senses,
-      });
-    }
+    creature.detectedPrey.push({
+      target: target,
+      distance: info.distance,
+      senses: info.senses || [],
+    });
   }
 
   // Sort by distance (nearest first)
