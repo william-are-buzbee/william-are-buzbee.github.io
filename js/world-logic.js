@@ -745,3 +745,65 @@ export function initWorld(seed){
     }
   }
 }
+
+// ==================== DEBUG: DORMANCY DIAGNOSTICS ====================
+// Call from F12 console:  debugDormancy()
+// Safe to leave in — only runs when explicitly called.
+window.debugDormancy = function() {
+  const p = state.player;
+  const layer = p.layer;
+  const mons = monsters[layer] || [];
+  const alive = mons.filter(m => m.hp > 0);
+
+  let dormant = 0, active = 0, uninit = 0;
+  const speciesCounts = {};
+  const buckets = { within40: 0, ring40_45: 0, beyond45: 0 };
+
+  for (const m of alive) {
+    // Dormancy status
+    if (m._dormant === true) dormant++;
+    else if (m._dormant === false) active++;
+    else uninit++;  // undefined — never initialized, THIS IS THE BUG
+
+    // Per-species count
+    speciesCounts[m.key] = (speciesCounts[m.key] || 0) + 1;
+
+    // Distance bucket
+    const dx = m.x - p.x;
+    const dy = m.y - p.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist <= 40) buckets.within40++;
+    else if (dist <= 45) buckets.ring40_45++;
+    else buckets.beyond45++;
+  }
+
+  console.log('%c═══ DORMANCY REPORT ═══', 'font-weight:bold; font-size:14px');
+  console.log(`Layer ${layer} — ${alive.length} alive creatures`);
+  console.log(`  dormant:  ${dormant}`);
+  console.log(`  active:   ${active}`);
+  if (uninit > 0) {
+    console.log(`  %cUNINIT:   ${uninit} ← BUG — these have no _dormant field`, 'color:red; font-weight:bold');
+  } else {
+    console.log(`  uninit:   0 ✓`);
+  }
+  console.log(`Distance from player (${p.x}, ${p.y}):`);
+  console.log(`  ≤40 tiles (ACTIVE_RADIUS):   ${buckets.within40}`);
+  console.log(`  40–45 (hysteresis ring):      ${buckets.ring40_45}`);
+  console.log(`  >45 (DORMANT_RADIUS):         ${buckets.beyond45}`);
+  console.log('Species breakdown:');
+  for (const [key, count] of Object.entries(speciesCounts).sort((a,b) => b[1] - a[1])) {
+    console.log(`  ${key}: ${count}`);
+  }
+
+  // Flag the problem states
+  if (uninit > 0) {
+    console.log('%c⚠ Creatures with undefined _dormant are treated as active by the turn loop — this is the performance bug.', 'color:red');
+  }
+  if (alive.length > 1000) {
+    console.log('%c⚠ >1000 creatures — likely double-spawning (old populateMonsters + new spawnMonstersInWorld).', 'color:red');
+  }
+  if (active > 100) {
+    console.log('%c⚠ >100 active creatures — too many running AI per turn.', 'color:orange');
+  }
+  return { total: alive.length, dormant, active, uninit, species: speciesCounts, buckets };
+};
