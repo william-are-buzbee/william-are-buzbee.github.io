@@ -10,9 +10,9 @@ All alien fauna originates from two ancient genetic lineages. One lineage has a 
 
 Over millions of years, these two lineages evolved and radiated into every niche available to them. They became apex carnivores and small herbivores; wading grazers and ambush predators. 
 
-They colonized sub-terranian forests fueled by chemical energy from the planetary core. They claimed the abyssal depths and the vast expanse of the open ocean. They spread across intricate archipelagos, speciating into diverse forms. 
+They colonized sub-terranian forests fueled by chemical energy and photosynthetic energy. They claimed the abyssal depths of the deep sea and vast expanses of open ocean. They spread across intricate archipelagos, speciating into diverse forms. 
 
-This is when the game begins. You play as an alien creature trying to survive in this world. Except, you're different- you can mutate. Sprout new limbs, change your size, grow new organs, reconfigure your metabolism and even alter your cognitive architecture in this deep and alien videogame. 
+This is when the game begins. You play as an alien creature trying to survive in this world. Except, you're different- you can mutate. Sprout new limbs, change your size, grow new organs, reconfigure your metabolism and even alter your cognitive architecture in this realistic yet alien videogame. 
 
 ---------
 
