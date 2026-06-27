@@ -418,8 +418,12 @@ function render(){
 
       // Skip if already rendered as a visible entity (binocular or monocular) —
       // drawEntityAtTile handled it in the tile loop above.
-      if (fovVisible && fovVisible.has(`${creature.x},${creature.y}`)) continue;
-      if (fovMonocular && fovMonocular.has(`${creature.x},${creature.y}`)) continue;
+      // Exception: _visualFOV entries are low-confidence visual detections on
+      // FOV tiles that were NOT drawn by drawEntityAtTile (they need blob rendering).
+      if (!sensed._visualFOV) {
+        if (fovVisible && fovVisible.has(`${creature.x},${creature.y}`)) continue;
+        if (fovMonocular && fovMonocular.has(`${creature.x},${creature.y}`)) continue;
+      }
 
       // Convert world position to viewport position
       const svx = creature.x - ox;
@@ -608,27 +612,40 @@ function drawEntityAtTile(wx, wy, px, py, layer){
   const S = TILE / 32;
   const mon = monsterAt(wx, wy, layer);
   if (mon){
-    let tintColor = null;
-    if (mon.tint){
-      tintColor = mon.tint.startsWith('#') ? mon.tint : (BIOME[mon.tint] && BIOME[mon.tint].tint);
-    }
-    const spr = tintColor ? getTintedMon(mon.spr, tintColor) : getSprite(mon.spr);
-    if (spr) ctx.drawImage(spr, px, py, TILE, TILE);
+    // ── Visual Detection Pass 1: visual detection gate ──
+    // If the visual detection system is active (_visuallyDetected exists),
+    // only draw creatures that passed the high-confidence visual check.
+    // Low-confidence visual detections are handled by the sensedCreatures
+    // blob rendering loop. Creatures that failed detection entirely
+    // are invisible — they blend into their background.
+    const vd = state.player._visuallyDetected;
+    if (vd && !vd.has(mon)) {
+      // Creature not visually detected at high confidence — skip drawing.
+      // (May still render as a blob via sensedCreatures if partially detected.)
+    } else {
+      // Normal rendering — creature is clearly visible
+      let tintColor = null;
+      if (mon.tint){
+        tintColor = mon.tint.startsWith('#') ? mon.tint : (BIOME[mon.tint] && BIOME[mon.tint].tint);
+      }
+      const spr = tintColor ? getTintedMon(mon.spr, tintColor) : getSprite(mon.spr);
+      if (spr) ctx.drawImage(spr, px, py, TILE, TILE);
 
-    // Prompt G: facing indicator overlay
-    if (mon.facing) {
-      drawFacingIndicator(ctx, px, py, TILE, mon.facing);
-    }
+      // Prompt G: facing indicator overlay
+      if (mon.facing) {
+        drawFacingIndicator(ctx, px, py, TILE, mon.facing);
+      }
 
-    if (mon.hitFlash > 0){
-      ctx.fillStyle = 'rgba(255,255,255,0.28)';
-      ctx.fillRect(px, py, TILE, TILE);
-      mon.hitFlash--;
-    }
-    // Prompt G.3: enemy health bars removed — player assesses condition via examine
-    if (mon.alerted){
-      ctx.fillStyle = '#d4a050';
-      ctx.fillRect(px+TILE-Math.round(4*S), py+Math.round(2*S), Math.round(2*S), Math.round(4*S));
+      if (mon.hitFlash > 0){
+        ctx.fillStyle = 'rgba(255,255,255,0.28)';
+        ctx.fillRect(px, py, TILE, TILE);
+        mon.hitFlash--;
+      }
+      // Prompt G.3: enemy health bars removed — player assesses condition via examine
+      if (mon.alerted){
+        ctx.fillStyle = '#d4a050';
+        ctx.fillRect(px+TILE-Math.round(4*S), py+Math.round(2*S), Math.round(2*S), Math.round(4*S));
+      }
     }
   }
 

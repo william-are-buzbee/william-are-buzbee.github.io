@@ -14,11 +14,17 @@ import { getBodyMap,
          DIET_CONF_MIN, DIET_CONF_FULL, SPECIES_CONF_MIN, SPECIES_CONF_FULL,
          CONDITION_CONF_MIN, CONDITION_CONF_FULL, DIET_DECISION_THRESHOLD,
          ASSESS_INTEGRATION_THRESHOLD,
+         SPECIES_DISPLAY_CONFIDENCE,
          computeBleedPenalty, computeStrikeDamage, getPathways,
          getAvailableAttacks, checkNeuralDeath, hasLocomotion,
          BURST_COEFF, BLOOD_DEATH_THRESHOLD, ARMOR_PER_STRUCTURAL_KG,
          selectHitZone,
          MOTION_CONCEALMENT_REDUCTION, BODY_PLAN_HEIGHT_COEFF,
+         // Visual Detection Pass 1 — motion and contrast
+         MOTION_SIGNAL_STILL,
+         CONTRAST_FLOOR, BRIGHTNESS_CONTRAST_WEIGHT, HUE_MISMATCH_PENALTY,
+         BLEED_CONTRAST_BONUS, BLEED_VISUAL_SATURATION,
+         getIntegument,
        } from './constants.js';
 import { currentTimePhase } from './time-cycle.js';
 import { hasLOS } from './fov.js';
@@ -26,7 +32,7 @@ import { chebyshev, getCover } from './world-state.js';
 import { stealthDetectChance, rollHit } from './combat.js';
 import { roll100 } from './rng.js';
 import { creatureViewRadius } from './player.js';
-import { tileConcealmentData } from './terrain.js';
+import { tileConcealmentData, getTerrainVisual } from './terrain.js';
 import { dist, directionToward, getCreatureMass, getPlayerDiet, WATER_TILES, isWaterTile,
          getNearbyCreatures } from './ai-utils.js';
 
@@ -199,11 +205,89 @@ function getDominantSenseChannel(creature) {
 
 // ==================== VISUAL DETECTION ====================
 
+// ── Motion & Contrast Helpers (Visual Detection Pass 1) ──
+// Motion state: temporal change detection (fast, involuntary) vs
+// spatial pattern recognition (slow, effortful).
+// The existing VIS_MOVEMENT_MULT in signals.js boosts moving creature
+// signal. MOTION_SIGNAL_STILL applies the reduction for stationary
+// creatures — the dominant factor in most detection scenarios.
+
+/**
+ * Is the target currently moving? Checks movedThisTurn (NPC AI flag)
+ * or prevX/prevY comparison (fallback, used by concealment system).
+ */
+function _isTargetMoving(target) {
+  // AI-tracked flag (set in runCreatureAI for NPCs)
+  if (target.movedThisTurn != null) return target.movedThisTurn;
+  // Fallback: previous-position comparison (works for player and NPCs)
+  if (target.prevX != null && target.prevY != null) {
+    return target.prevX !== target.x || target.prevY !== target.y;
+  }
+  // No motion data available — assume stationary (conservative)
+  return false;
+}
+
+/**
+ * Compute background contrast factor for a target on its current tile.
+ * Measures the difference between the creature's integument reflectance
+ * and the terrain's visual properties. High contrast = easier to detect.
+ * Returns a multiplier: ~0.1 (perfect match) to ~1.0+ (maximum contrast).
+ *
+ * Bleed bonus: exposed cyan blood on dark red flora is maximum contrast.
+ * Any wound makes you a target.
+ */
+function _computeContrastFactor(target) {
+  const integument = getIntegument(target);
+  if (!integument) return 1.0;  // no integument data → fully visible (legacy creatures)
+
+  const layer = target.layer != null ? target.layer : state.player.layer;
+  if (!worlds[layer]) return 1.0;
+
+  const ground = worlds[layer][target.y]?.[target.x];
+  if (ground == null) return 1.0;
+  const cover = getCover(layer, target.x, target.y);
+  const terrainVis = getTerrainVisual(ground, cover);
+
+  // Brightness difference: luminance dominates edge detection
+  const brightnessDiff = Math.abs(integument.brightness - terrainVis.brightness);
+  // Hue mismatch: categorical — a brown creature on gray rock stands out
+  const hueMatch = (integument.hue === terrainVis.hue) ? 0.0 : HUE_MISMATCH_PENALTY;
+
+  let contrast = CONTRAST_FLOOR + brightnessDiff * BRIGHTNESS_CONTRAST_WEIGHT + hueMatch;
+
+  // Bleed bonus: cyan blood against dark red flora is the most visible
+  // signal on the planet. More bleeding = more visible, up to saturation.
+  if (target.blood != null && target.bloodMax != null && target.bloodMax > 0
+      && target.blood < target.bloodMax) {
+    const bleedFraction = 1.0 - (target.blood / target.bloodMax);
+    contrast += BLEED_CONTRAST_BONUS * Math.min(1.0, bleedFraction / BLEED_VISUAL_SATURATION);
+  }
+
+  return contrast;
+}
+
 function getVisualRange(detector, target) {
-  const detectability = target.signals ? target.signals.visual : 0;
+  let detectability = target.signals ? target.signals.visual : 0;
   const sensitivity = getEffectiveVisual(detector);
   const light = getLightLevel();
   if (detectability <= 0 || sensitivity <= 0 || light <= 0) return 0;
+
+  // ── Motion factor (Visual Detection Pass 1) ──
+  // Moving creatures already have VIS_MOVEMENT_MULT applied in signals.js.
+  // Still creatures get a dramatic reduction — they require spatial pattern
+  // recognition rather than temporal change detection.
+  const isMoving = _isTargetMoving(target);
+  if (!isMoving) {
+    detectability *= MOTION_SIGNAL_STILL;
+  }
+
+  // ── Background contrast factor (Visual Detection Pass 1) ──
+  // How different the creature's integument looks from the terrain.
+  // Near-perfect match → ~0.1× (nearly invisible).
+  // Maximum mismatch → ~1.0+× (fully visible).
+  const contrastFactor = _computeContrastFactor(target);
+  detectability *= contrastFactor;
+
   return Math.cbrt(detectability * light) * sensitivity * VIS_RANGE_COEFF;
 }
 
@@ -403,9 +487,43 @@ function canSeePlayerTile(mon){
 }
 
 function canSeePlayer(mon){
-  if (!canSeePlayerTile(mon)) return false;
-  if (state.player.stealth){
-    const d = chebyshev(mon.x, mon.y, state.player.x, state.player.y);
+  const player = state.player;
+  if (!player || player.hp <= 0) return false;
+
+  const d = chebyshev(mon.x, mon.y, player.x, player.y);
+
+  // Blindsight creatures use vibration, not vision — unaffected by motion/contrast
+  if (mon.mods && mon.mods.blindsight != null){
+    return d <= mon.mods.blindsight;
+  }
+
+  // Line of sight required
+  if (!hasLOS(player.layer, mon.x, mon.y, player.x, player.y, mon.vis)){
+    return false;
+  }
+
+  // Base view radius
+  const vr = monsterViewRadius(mon);
+  if (d > vr) return false;
+
+  // ── Motion × contrast × concealment (Visual Detection Pass 1) ──
+  // Player's visual signal to NPCs is modified by motion state,
+  // integument-vs-terrain contrast, and local cover concealment.
+  // The effective view radius scales as cbrt of the combined modifier
+  // (same relationship as signal → range in getVisualRange).
+  const isMoving = _isTargetMoving(player);
+  const motionFactor = isMoving ? 1.0 : MOTION_SIGNAL_STILL;
+  const contrastFactor = _computeContrastFactor(player);
+  const concealment = computeEffectiveConcealment(player);
+  const concealmentFactor = Math.max(0, 1.0 - concealment);
+
+  const combinedFactor = motionFactor * contrastFactor * concealmentFactor;
+  const effectiveVR = vr * Math.cbrt(combinedFactor);
+
+  if (d > effectiveVR) return false;
+
+  // Legacy stealth check (retained for backward compatibility)
+  if (player.stealth){
     if (d > 1){
       const chance = stealthDetectChance(mon);
       return roll100() <= chance;
@@ -1015,6 +1133,14 @@ function detectCorpses(creature) {
  * Prompt Q: speciesConfidence and sizeEstimate are computed inline (lightweight
  * version of the species/size curves from buildDetectionInfo) so the rendering
  * system can gate blob-vs-sprite display.
+ *
+ * Visual Detection Pass 1: also computes visual detection for creatures ON
+ * FOV tiles. Motion × contrast × concealment modifiers determine whether a
+ * creature in the player's field of view is actually visually detectable.
+ * Creatures that blend into their background may be invisible even on
+ * visible tiles. Results populate player._visuallyDetected (Set of creature
+ * references) and low-SNR visual detections are added to sensedCreatures
+ * for blob rendering.
  */
 function computePlayerPerception() {
   const player = state.player;
@@ -1022,8 +1148,11 @@ function computePlayerPerception() {
 
   // Clear previous turn's results
   player.sensedCreatures = [];
+  // Visual Detection Pass 1: track which FOV creatures passed visual detection
+  player._visuallyDetected = new Set();
 
   const fovSet = state.fovSet;
+  const monocularSet = state.monocularSet;
 
   // Prompt R: spatial grid narrows candidate list for player perception
   const nearby = getNearbyCreatures(player.x, player.y);
@@ -1032,10 +1161,74 @@ function computePlayerPerception() {
   for (const creature of nearby) {
     if (creature.hp <= 0) continue;
 
-    // Skip creatures already in visual FOV — they render normally
-    if (fovSet && fovSet.has(`${creature.x},${creature.y}`)) continue;
+    const creatureKey = `${creature.x},${creature.y}`;
+    const inBinocularFOV = fovSet && fovSet.has(creatureKey);
+    const inMonocularFOV = !inBinocularFOV && monocularSet && monocularSet.has(creatureKey);
+    const inAnyFOV = inBinocularFOV || inMonocularFOV;
 
-    // Ensure creature has signals computed
+    // ── Visual detection for FOV creatures (Visual Detection Pass 1) ──
+    // Creatures on visible tiles are NOT automatically detected. The player's
+    // visual system must produce enough signal to distinguish the creature
+    // from its background, accounting for motion and integument contrast.
+    if (inAnyFOV) {
+      // Ensure creature has signals computed
+      if (!creature.signals) continue;
+
+      const visRange = getVisualRange(player, creature);
+      const d = dist(player.x, player.y, creature.x, creature.y);
+
+      if (visRange > 0 && d <= visRange && hasLineOfSight(player, creature)) {
+        // Check vision cone
+        const inCone = isInVisionCone(player, creature);
+        if (inCone) {
+          // Apply local concealment (cover on the target's tile)
+          const concealment = computeEffectiveConcealment(creature);
+          const effectiveVisRange = concealment > 0
+            ? visRange * Math.cbrt(1.0 - concealment)
+            : visRange;
+
+          if (d <= effectiveVisRange) {
+            // Creature visually detected — compute SNR for rendering quality
+            const visSNR = d > 0 ? effectiveVisRange / d : effectiveVisRange * 10;
+
+            let speciesConfidence = 0;
+            if (visSNR > SPECIES_CONF_MIN) {
+              speciesConfidence = Math.min(1.0,
+                (visSNR - SPECIES_CONF_MIN) / (SPECIES_CONF_FULL - SPECIES_CONF_MIN));
+            }
+
+            if (speciesConfidence >= SPECIES_DISPLAY_CONFIDENCE) {
+              // High confidence — creature renders normally via drawEntityAtTile
+              player._visuallyDetected.add(creature);
+            } else {
+              // Low confidence — route through sensedCreatures for blob rendering
+              let sizeEstimate = null;
+              if (visSNR > 0) {
+                const uncertaintyFactor = SIZE_UNCERTAINTY_BASE / visSNR;
+                const rawEstimate = estimateMassFromSignal(creature, player);
+                sizeEstimate = {
+                  estimated: rawEstimate,
+                  lower: rawEstimate / (1 + uncertaintyFactor),
+                  upper: rawEstimate * (1 + uncertaintyFactor),
+                };
+              }
+              player.sensedCreatures.push({
+                creature, bestSNR: visSNR, speciesConfidence, sizeEstimate,
+                _visualFOV: true,  // flag: from visual detection on FOV tile
+              });
+            }
+          }
+        }
+      }
+      // If NOT visually detected at all, creature is invisible on this tile.
+      // Non-visual channels can still detect it (processed below for outside-FOV
+      // creatures, but FOV creatures are not double-processed for non-visual
+      // since the tile is visible and the player's attention is visual).
+      continue;
+    }
+
+    // ── Non-visual detection (existing code, unchanged) ──
+    // Skip creatures already in visual FOV — handled above
     if (!creature.signals) continue;
 
     // Per-zone detection against this creature
@@ -1088,6 +1281,8 @@ export {
   getVisualRange, facingToAngle, isInVisionCone, hasLineOfSight,
   // Local concealment
   computeEffectiveConcealment,
+  // Visual detection helpers (Pass 1)
+  _isTargetMoving, _computeContrastFactor,
   // Master detection
   canDetect, getDetectionRange,
   // Legacy vision

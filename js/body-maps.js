@@ -59,6 +59,10 @@ export const SPECIES_TEMPLATES = {
     bodyType: 'meso',
     colorPalette: 'meso_predator',
     circulationType: 'closed',
+    // Visual detection: species-level integument reflectance (Pass 1).
+    // Thick textured skin, wrinkled, hairless. Generalist cross-biome.
+    // Medium-dark, neutral — decent match in most habitats, perfect in none.
+    integument: { brightness: 0.25, hue: 'brown' },
   },
   ravager: {
     displayName: 'Ravager',
@@ -71,6 +75,9 @@ export const SPECIES_TEMPLATES = {
     bodyType: 'apex',
     colorPalette: 'meso_predator',
     circulationType: 'closed',
+    // Visual detection: dense, dark skin. Preference for denser cover.
+    // Dark, reddish — optimized for forest interior.
+    integument: { brightness: 0.18, hue: 'dark-red' },
   },
   grazer: {
     displayName: 'Grazer',
@@ -83,6 +90,9 @@ export const SPECIES_TEMPLATES = {
     bodyType: 'grazer',
     colorPalette: 'meso_predator',
     circulationType: 'open',
+    // Visual detection: semi-flexible integument, thin. Open-terrain grazer.
+    // Matches dark red-brown grassland mats where it feeds.
+    integument: { brightness: 0.33, hue: 'warm-red' },
   },
   shaleback: {
     displayName: 'Shale-back',
@@ -95,6 +105,9 @@ export const SPECIES_TEMPLATES = {
     bodyType: 'meso',       // placeholder — no PLAYER_SHALEBACK sprite yet
     colorPalette: 'meso_predator',
     circulationType: 'closed',
+    // Visual detection: thick, mucousy/oily surface. Amphibious.
+    // Dark, brownish — matches muddy coastal substrate.
+    integument: { brightness: 0.22, hue: 'brown' },
   },
   lurker: {
     displayName: 'Lurker',
@@ -107,8 +120,46 @@ export const SPECIES_TEMPLATES = {
     bodyType: 'meso',       // placeholder — no PLAYER_LURKER sprite yet
     colorPalette: 'meso_predator',
     circulationType: 'open',
+    // Visual detection: thickened, stiffened integument, segmented armor.
+    // Forest/cover specialist. Very dark, reddish — near-perfect forest floor match.
+    integument: { brightness: 0.15, hue: 'dark-red' },
   },
 };
+
+// ==================== INTEGUMENT LOOKUP (Visual Detection Pass 1) ====================
+// Maps creature keys to integument reflectance data for visual detection.
+// Species-level uniform color (per-zone is Pass 2).
+// Derived from ecology descriptions and habitat preferences.
+// Creature 5 (mushroom/colonial chemotroph) is a dead concept — intentionally omitted.
+const CREATURE_INTEGUMENT = {
+  wolf:        { brightness: 0.25, hue: 'brown' },      // C1 meso-predator: generalist, cross-biome
+  dire_wolf:   { brightness: 0.18, hue: 'dark-red' },   // C2 apex predator: forest interior specialist
+  hare:        { brightness: 0.33, hue: 'warm-red' },    // C3 small herbivore: open-terrain grazer
+  cave_crab:   { brightness: 0.22, hue: 'brown' },      // C4 large grazer: amphibious, muddy coastal
+  ambush_pred: { brightness: 0.15, hue: 'dark-red' },   // C6 ambush predator: forest/cover specialist
+};
+
+/**
+ * Get integument data for any entity (player or creature).
+ * Returns { brightness, hue } or null if no integument defined.
+ */
+export function getIntegument(entity) {
+  // Player: look up via species template
+  if (entity.isPlayer && entity.species) {
+    const template = SPECIES_TEMPLATES[entity.species];
+    if (template && template.integument) return template.integument;
+    // Fallback: look up by creature key from template
+    if (template && template.creatureKey) {
+      return CREATURE_INTEGUMENT[template.creatureKey] || null;
+    }
+    return null;
+  }
+  // NPC creature: look up by key
+  if (entity.key) {
+    return CREATURE_INTEGUMENT[entity.key] || null;
+  }
+  return null;
+}
 
 // ==================== BODY MAPS ====================
 // Phase 2 — expanded body zone definitions with full physical composition.

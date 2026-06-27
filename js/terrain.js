@@ -286,6 +286,59 @@ export function tileConcealmentData(ground, coverType) {
   return null;
 }
 
+// ==================== TERRAIN VISUAL PROPERTIES (Visual Detection Pass 1) ====================
+// Reflectance properties for background contrast computation.
+// Each terrain type has brightness (0-1) and hue category.
+// When computing visual contrast against a creature's integument, the
+// terrain behind the creature determines the background signal.
+// Cover types override ground types — a creature in forest cover is seen
+// against the dark forest backdrop, not the underlying grass.
+
+const TERRAIN_VISUAL = {
+  // ---- GROUND types ----
+  [T.GRASS]:       { brightness: 0.35, hue: 'warm-red' },   // photosynthetic mats in open amber light
+  [T.SAND]:        { brightness: 0.45, hue: 'brown' },      // mineral-depleted pale substrate
+  [T.ROCK]:        { brightness: 0.45, hue: 'gray' },       // mineral surface, higher reflectance
+  [T.WATER]:       { brightness: 0.30, hue: 'dark' },       // reflective but dark
+  [T.DEEP_WATER]:  { brightness: 0.15, hue: 'dark' },       // very dark surface
+  [T.ROAD]:        { brightness: 0.30, hue: 'brown' },      // packed dirt/gravel
+  [T.BEACH]:       { brightness: 0.45, hue: 'brown' },      // lighter mineral substrate, coastal
+  [T.CAVE_FLOOR]:  { brightness: 0.30, hue: 'gray' },       // dark rock floor underground
+  [T.LAVA]:        { brightness: 0.60, hue: 'warm-red' },   // glowing — very bright
+  [T.UWATER]:      { brightness: 0.15, hue: 'dark' },       // underground dark water
+  [T.WOOD_FLOOR]:  { brightness: 0.35, hue: 'brown' },      // wooden planks
+  [T.RUIN_FLOOR]:  { brightness: 0.35, hue: 'gray' },       // ancient weathered stone
+  [T.SHOP_INSIDE]: { brightness: 0.35, hue: 'brown' },      // interior wood floor
+  [T.MUD]:         { brightness: 0.20, hue: 'brown' },      // dark, mixed organic-mineral substrate
+  [T.FUNGAL_GRASS]:{ brightness: 0.30, hue: 'mineral' },    // chemotrophic zone ground cover
+  [T.DIRT]:        { brightness: 0.30, hue: 'brown' },      // medium brightness, neutral
+
+  // ---- COVER types ----
+  // Cover visual represents the dominant background a creature is seen against.
+  [T.FOREST]:      { brightness: 0.15, hue: 'dark-red' },   // dark photosynthetic mat cover, deep shadow
+  [T.MUSHFOREST]:  { brightness: 0.25, hue: 'mineral' },    // chemotrophic colony structures, moderate cover
+  [T.WHEAT]:       { brightness: 0.35, hue: 'warm-red' },   // tall photosynthetic growth
+};
+
+// Default for any terrain type without specific visual data.
+// Gray-brown neutral — won't give strong match or mismatch.
+const _DEFAULT_TERRAIN_VISUAL = { brightness: 0.30, hue: 'brown' };
+
+/**
+ * Get visual reflectance properties for the background at a tile.
+ * Cover visual overrides ground visual (creature is seen against cover backdrop).
+ * @param {number} groundType - ground terrain type
+ * @param {number} coverType - cover terrain type (may be 0/null/undefined)
+ * @returns {{ brightness: number, hue: string }}
+ */
+export function getTerrainVisual(groundType, coverType) {
+  // Cover takes priority — creature is seen against cover backdrop
+  if (coverType && TERRAIN_VISUAL[coverType]) {
+    return TERRAIN_VISUAL[coverType];
+  }
+  return TERRAIN_VISUAL[groundType] || _DEFAULT_TERRAIN_VISUAL;
+}
+
 // ==================== FOOD TILE CLASSIFICATION (I-C) ====================
 // A "food tile" is any tile with organic vegetation an herbivore could graze.
 // Ground types with inherent vegetation, or any tile with organic cover.

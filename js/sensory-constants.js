@@ -86,6 +86,27 @@ export const MARKER_MASS_MAX   = 250;    // kg — at or above this → maximum 
 // Per-ray sightline opacity accumulation and local concealment modifiers.
 // See Visual-Occlusion-Design.md for full specification.
 
+// ── Visual Detection Pass 1: Motion & Background Contrast ──
+// Motion factor: binary — did the creature change tiles this turn?
+// A moving creature fires temporal change detection (fast, involuntary).
+// A stationary creature requires spatial pattern recognition (slow, effortful).
+// The asymmetry is compressed from biological reality (~10-100× on Earth)
+// for playability, but must remain dramatic enough that stillness is a
+// meaningful survival strategy.
+export const MOTION_SIGNAL_MOVING        = 3.5;    // moving creature signal multiplier
+export const MOTION_SIGNAL_STILL         = 0.25;   // stationary creature signal multiplier
+
+// Background contrast: how different the creature's integument looks
+// from the terrain it's standing on.
+export const CONTRAST_FLOOR              = 0.10;   // minimum contrast even at perfect match
+export const BRIGHTNESS_CONTRAST_WEIGHT  = 1.5;    // brightness difference weight (luminance dominates)
+export const HUE_MISMATCH_PENALTY        = 0.30;   // additional contrast from categorical hue mismatch
+
+// Bleed contrast: cyan blood against dark red flora is maximum contrast.
+// Wounds are beacons. More bleeding = more visible, up to saturation.
+export const BLEED_CONTRAST_BONUS        = 0.40;   // max additional contrast from visible bleeding
+export const BLEED_VISUAL_SATURATION     = 0.50;   // blood loss fraction at which bonus saturates
+
 // Occlusion budget = acuity × OCCLUSION_BUDGET_COEFF.
 // Tuned so acuity 3 → budget ~1.35 (2–3 dense forest tiles before cutoff),
 //          acuity 5 → budget ~2.25 (4–5 dense forest tiles).
