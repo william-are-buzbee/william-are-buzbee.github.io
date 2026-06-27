@@ -221,8 +221,8 @@ export const FORAGE_SEARCH_RADIUS    = 12;    // how far herbivores look for foo
 
 // ---- Density ratios (1 creature per N tiles of suitable habitat) ----
 // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-export const SPAWN_DENSITY_SMALL_HERB  = [8, 12];    // C3 — small herbivore (hare)
-export const SPAWN_DENSITY_LARGE_HERB  = [25, 40];   // C4 — large herbivore (cave_crab)
+export const SPAWN_DENSITY_SMALL_HERB  = [20, 30];   // C3 — small herbivore (hare)
+export const SPAWN_DENSITY_LARGE_HERB  = [80, 120];  // C4 — large herbivore (cave_crab)
 export const SPAWN_DENSITY_MESO_PRED   = [100, 150]; // C1 — meso-predator (wolf)
 export const SPAWN_DENSITY_AMBUSH_PRED = [120, 180]; // C6 — ambush predator (ambush_pred)
 export const SPAWN_DENSITY_APEX_PRED   = [350, 500]; // C2 — apex predator (dire_wolf)
