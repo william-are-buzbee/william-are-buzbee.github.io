@@ -1,6 +1,6 @@
 // ==================== WORLD LOGIC — placement, spawning, init ====================
 import { state, worlds, covers, features, monsters, activateLayer } from './state.js';
-import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, LAYER_META, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H, DORMANT_RADIUS,
+import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, LAYER_META, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H, ACTIVE_RADIUS, DORMANT_RADIUS,
          SPAWN_DENSITY_SMALL_HERB, SPAWN_DENSITY_LARGE_HERB, SPAWN_DENSITY_MESO_PRED,
          SPAWN_DENSITY_AMBUSH_PRED, SPAWN_DENSITY_APEX_PRED,
          SPAWN_CLUSTER_SIZE, SPAWN_CLUSTER_RADIUS,
@@ -36,7 +36,12 @@ function initDormancy(creature, spawnLayer) {
   }
   const dx = creature.x - p.x;
   const dy = creature.y - p.y;
-  if (dx * dx + dy * dy > DORMANT_RADIUS * DORMANT_RADIUS) {
+  // Use ACTIVE_RADIUS (not DORMANT_RADIUS) for initial classification.
+  // The hysteresis ring (ACTIVE_RADIUS..DORMANT_RADIUS) prevents flickering
+  // during gameplay movement — but at world-gen, there's no movement to flicker.
+  // Creatures in the ring start dormant and wake naturally when the player
+  // moves within ACTIVE_RADIUS.
+  if (dx * dx + dy * dy > ACTIVE_RADIUS * ACTIVE_RADIUS) {
     creature._dormant = true;
     creature._dormantTurns = 0;
   } else {
