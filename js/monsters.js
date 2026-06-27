@@ -866,50 +866,72 @@ const SPAWN_BLACKLIST = new Set([
 ]);
 
 // ==================== HABITAT DEFINITIONS ====================
-// Biome-based spawn rules for surface creatures.  Replaces the old
-// tile-type matching in index 12 of MON arrays.
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+// Tile-level habitat preferences for spawning. Each species maps to the
+// ground and cover terrain types it can spawn on. A tile matches if its
+// ground type OR cover type appears in the species' set.
 //
-//   biomes       — biome NAME strings from BIOME_TARGET, not tile types
-//   spawnWeight  — base probability per valid tile
-//   nearWater    — if true, only spawn within nearWaterDist of a water tile
-//   nearWaterDist— radius to scan for water proximity
-//   maxPerCell   — max spawns of this creature per target-map cell
+// "light forest" vs "dense forest" cannot be distinguished at tile level —
+// T.FOREST cover is a single type. Both ambush and apex predators accept
+// any forest-cover tile; the density difference is handled by how many
+// such tiles exist in the biome.
 //
-// Only surface creatures that are NOT in SPAWN_BLACKLIST need entries.
-const HABITAT = {
-  // Meso-predator: generalist, crosses biomes freely.  Common but not everywhere.
-  wolf: {
-    biomes: ['plains', 'forest', 'wetland', 'fungal', 'beach'],
-    spawnWeight: 0.012,
-    nearWater: false,
-    nearWaterDist: 0,
-    maxPerCell: 4,
-  },
-  // Large predator (apex): rare, prefers dense cover and wet terrain.
-  dire_wolf: {
-    biomes: ['forest', 'wetland'],
-    spawnWeight: 0.003,
-    nearWater: false,
-    nearWaterDist: 0,
-    maxPerCell: 1,
-  },
-  // Small herbivore: the most common creature.  Found everywhere with vegetation.
+// These are static lookup tables, not body-map-derived preferences.
+// The long-term system will derive habitat from physical traits.
+
+const SPAWN_HABITAT = {
+  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+
+  // C3 — Small herbivore: open-ground grazer, feeds on photosynthetic mats in open light.
+  // Spawns on open grassland, light forest edges, and bare earth.
   hare: {
-    biomes: ['plains', 'forest', 'wetland', 'beach', 'fungal'],
-    spawnWeight: 0.025,
-    nearWater: false,
-    nearWaterDist: 0,
-    maxPerCell: 10,
+    ground: new Set([T.GRASS, T.DIRT, T.RUIN_FLOOR]),
+    cover:  new Set([T.FOREST]),        // forest-edge tiles count as habitat
+    // Note: FUNGAL_GRASS omitted — C3 feeds on photosynthetic mats, not chemotrophic substrate
   },
-  // Large herbivore (amphibious grazer): spawns on walkable land near water.
+
+  // C4 — Large herbivore: amphibious grazer, prefers edges between land and water.
+  // Spawns on grassland, mud, beach, and shallow water (can enter water).
   cave_crab: {
-    biomes: ['plains', 'wetland', 'shallows', 'beach'],
-    spawnWeight: 0.006,
-    nearWater: true,
-    nearWaterDist: 8,
-    maxPerCell: 2,
+    ground: new Set([T.GRASS, T.MUD, T.BEACH, T.WATER]),
+    cover:  new Set([]),
+    // Note: T.WATER included because cave_crab has canEnterWater=true.
+    // Viability check + nearWater affinity ensures these aren't stranded.
   },
+
+  // C1 — Meso-predator: generalist, crosses biome boundaries.
+  // Spawns across most terrestrial terrain.
+  wolf: {
+    ground: new Set([T.GRASS, T.DIRT, T.MUD, T.RUIN_FLOOR]),
+    cover:  new Set([T.FOREST]),
+    // Note: wider habitat than other predators reflects generalist niche
+  },
+
+  // C6 — Ambush predator: cover specialist, needs concealment for ambush strategy.
+  // Spawns only on tiles with forest cover (canopy concealment).
+  ambush_pred: {
+    ground: new Set([]),                // no bare-ground spawning
+    cover:  new Set([T.FOREST, T.MUSHFOREST]),
+    // Note: MUSHFOREST added — ambush_pred's existing biomes include 'fungal',
+    // and its territory array includes T.MUSHFOREST and T.FUNGAL_GRASS
+  },
+
+  // C2 — Apex predator: forest apex, hunts under canopy.
+  // Spawns on forest-cover tiles.
+  dire_wolf: {
+    ground: new Set([]),                // no bare-ground spawning
+    cover:  new Set([T.FOREST]),
+    // Note: design doc specifies "dense forest, light forest" — both are T.FOREST
+  },
+};
+
+// ---- Legacy HABITAT (biome-based) — retained for mushroom spawning ----
+// Mushroom (C5) is NOT part of the density-based system (dead concept per
+// Spawning-Design.md) but still spawns via the old biome-weight approach.
+// Only the mushroom entry is kept active; all other species use SPAWN_HABITAT.
+const HABITAT = {
   // Colonial chemotroph: only in fungal zones, spawns in clusters.
+  // NOT part of first-pass density system — uses legacy per-tile probability.
   mushroom: {
     biomes: ['fungal'],
     spawnWeight: 0.030,
@@ -917,16 +939,8 @@ const HABITAT = {
     nearWaterDist: 0,
     maxPerCell: 15,
   },
-  // Solitary ambush predator: uncommon, prefers dense cover and biome edges.
-  ambush_pred: {
-    biomes: ['forest', 'fungal'],
-    spawnWeight: 0.005,
-    nearWater: false,
-    nearWaterDist: 0,
-    maxPerCell: 2,
-  },
 };
 
 // Re-export everything that other modules need
-export { MON, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES, CLADE_DATA, HABITAT, WANDER_PROFILES, DEFAULT_WANDER_PROFILE };
+export { MON, MON_SPEED, PERSONALITY_POOL, SPAWN_BLACKLIST, VISION_PROFILES, CLADE_DATA, HABITAT, SPAWN_HABITAT, WANDER_PROFILES, DEFAULT_WANDER_PROFILE };
 export { rollPersonality, monHP, monDodge, monAcc, monCritChance, monCritMult, monDamage, spawnMonster, getSpawnRules, getCladeData };

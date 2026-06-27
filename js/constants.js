@@ -212,6 +212,46 @@ export const GRAZE_HUNGER_REDUCTION  = 0.03;  // hunger reduction per turn of gr
 export const HERBIVORE_SAFETY_BONUS  = 0.25;  // herbivores treat safety as 0.25 more urgent than raw value
 export const FORAGE_SEARCH_RADIUS    = 12;    // how far herbivores look for food tiles
 
+// ==================== FIRST-PASS SPAWNING CONSTANTS ====================
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+// All values below are hardcoded tuning parameters, not derived from
+// energy budgets or ecological simulation. They produce a plausible
+// initial snapshot — nothing more. The long-term system will replace
+// everything in this section with emergent population dynamics.
+
+// ---- Density ratios (1 creature per N tiles of suitable habitat) ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+export const SPAWN_DENSITY_SMALL_HERB  = [8, 12];    // C3 — small herbivore (hare)
+export const SPAWN_DENSITY_LARGE_HERB  = [25, 40];   // C4 — large herbivore (cave_crab)
+export const SPAWN_DENSITY_MESO_PRED   = [100, 150]; // C1 — meso-predator (wolf)
+export const SPAWN_DENSITY_AMBUSH_PRED = [120, 180]; // C6 — ambush predator (ambush_pred)
+export const SPAWN_DENSITY_APEX_PRED   = [350, 500]; // C2 — apex predator (dire_wolf)
+
+// ---- Spacing minimums (tiles between same-species predators) ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+export const SPAWN_SPACING_MESO   = 18;  // C1 min distance from nearest C1
+export const SPAWN_SPACING_AMBUSH = 18;  // C6 min distance from nearest C6
+export const SPAWN_SPACING_APEX   = 35;  // C2 min distance from nearest C2
+
+// ---- Prey clustering (small herbivores) ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+export const SPAWN_CLUSTER_SIZE    = [3, 6];  // C3 individuals per cluster
+export const SPAWN_CLUSTER_RADIUS  = 6;       // tiles from cluster center
+export const SPAWN_CLUSTER_SPACING = 20;      // min distance between cluster centers
+
+// ---- Large herbivore loose spacing ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+export const SPAWN_SPACING_LARGE_HERB = 12;   // C4 loose spacing between individuals
+
+// ---- Viability check ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+export const SPAWN_VIABILITY_RADIUS = 6;  // check this radius around spawn point
+export const SPAWN_VIABILITY_MIN    = 6;  // need at least this many habitat tiles in radius
+
+// ---- Placement attempt limits ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+export const SPAWN_MAX_ATTEMPTS = 50;  // per-creature placement attempts before giving up
+
 // ==================== GAMEPLAY FORMULA CONSTANTS ====================
 // Stat scale: 1-100 range (scaled from legacy 1-10).
 export const STAT_MIN = 1;

@@ -1,11 +1,17 @@
 // ==================== WORLD LOGIC — placement, spawning, init ====================
 import { state, worlds, covers, features, monsters, activateLayer } from './state.js';
-import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, LAYER_META, getAtmosphere, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H, DORMANT_RADIUS } from './constants.js';
+import { LAYER_SURFACE, LAYER_UNDER, W_SURF, H_SURF, W_UNDER, H_UNDER, LAYER_META, BIOME_TARGET, CELL_TILE_W, CELL_TILE_H, DORMANT_RADIUS,
+         SPAWN_DENSITY_SMALL_HERB, SPAWN_DENSITY_LARGE_HERB, SPAWN_DENSITY_MESO_PRED,
+         SPAWN_DENSITY_AMBUSH_PRED, SPAWN_DENSITY_APEX_PRED,
+         SPAWN_SPACING_MESO, SPAWN_SPACING_AMBUSH, SPAWN_SPACING_APEX,
+         SPAWN_SPACING_LARGE_HERB,
+         SPAWN_CLUSTER_SIZE, SPAWN_CLUSTER_RADIUS, SPAWN_CLUSTER_SPACING,
+         SPAWN_VIABILITY_RADIUS, SPAWN_VIABILITY_MIN, SPAWN_MAX_ATTEMPTS } from './constants.js';
 import { T, isWalkable, isCover } from './terrain.js';
 import { rand, randi, choice } from './rng.js';
 // DISABLED — town removed (was used for initScholarInventory)
 // import { BOOKS } from './items.js';
-import { spawnMonster, MON, SPAWN_BLACKLIST, HABITAT } from './monsters.js';
+import { spawnMonster, MON, SPAWN_BLACKLIST, HABITAT, SPAWN_HABITAT } from './monsters.js';
 import { SIGN_TEXTS } from './npcs.js';
 import { worldDims, getFeature, setFeature, inBounds, chebyshev, getCover, setCover } from './world-state.js';
 import { generateLayer } from './world-gen.js';
@@ -214,7 +220,7 @@ export function placeStructures(){
           if (!inBounds(LAYER_SURFACE,nx,ny)) continue;
           const nt = worlds[LAYER_SURFACE][ny][nx];
           // Eels spawn on water tiles ONLY; crabs can spawn on beach or water
-          if ((nt === T.WATER || nt === T.DEEP_WATER) && rand() < 0.3 * SPAWN_DENSITY_MULT){
+          if ((nt === T.WATER || nt === T.DEEP_WATER) && rand() < 0.15){
             const pick = rand() < 0.5 ? 'cave_eel' : 'cave_crab';
             if (!SPAWN_BLACKLIST.has(pick)) {  // safety: respect blacklist for direct spawns
             const m = spawnMonster(pick);
@@ -224,7 +230,7 @@ export function placeStructures(){
             initDormancy(m);
             monsters[LAYER_SURFACE].push(m);
             }
-          } else if (nt === T.BEACH && rand() < 0.15 * SPAWN_DENSITY_MULT){
+          } else if (nt === T.BEACH && rand() < 0.075){
             // Crabs only on beach (amphibious)
             if (!SPAWN_BLACKLIST.has('cave_crab')) {  // safety: respect blacklist for direct spawns
             const m = spawnMonster('cave_crab');
@@ -284,9 +290,12 @@ export function placeStructures(){
 }
 
 // ==================== MONSTER SPAWNING ====================
-
-// Global spawn density multiplier — halved to reduce crowding
-const SPAWN_DENSITY_MULT = 0.5;
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+//
+// This entire section is temporary scaffolding. It places a static snapshot
+// of creature populations using hardcoded density ratios, spacing rules, and
+// clustering. The long-term system will derive population from energy budgets
+// and dynamic reproduction. See Spawning-Design.md for the full roadmap.
 
 // Cover types that block creature spawning (structures, interactables, etc.)
 const NO_SPAWN_COVERS = new Set([
@@ -297,8 +306,56 @@ const NO_SPAWN_COVERS = new Set([
   T.FARM, T.CASTLE, T.BLACKSPIRE, T.TOWN,
 ]);
 
-// Check whether any water tile (T.WATER or T.DEEP_WATER) exists within
-// `dist` Chebyshev distance of (cx, cy) on the surface grid.
+// ---- Tile-level habitat matching ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+// Returns true if a tile's ground+cover combination matches a species' habitat.
+function tileMatchesHabitat(ground, cover, habitatDef) {
+  if (cover && habitatDef.cover.has(cover)) return true;
+  if (habitatDef.ground.has(ground)) return true;
+  return false;
+}
+
+// ---- Spawn viability check ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+// Verifies that the spawn point has enough habitat tiles nearby to support
+// local movement. Prevents stranding a creature on a single valid tile
+// surrounded by water or impassable terrain.
+// This is a simple neighbor count, not pathfinding.
+function isSpawnViable(x, y, habitatDef) {
+  const grid = worlds[LAYER_SURFACE];
+  const coverGrid = covers[LAYER_SURFACE];
+  let count = 0;
+  const r = SPAWN_VIABILITY_RADIUS;
+  const x0 = Math.max(0, x - r);
+  const x1 = Math.min(W_SURF - 1, x + r);
+  const y0 = Math.max(0, y - r);
+  const y1 = Math.min(H_SURF - 1, y + r);
+  for (let sy = y0; sy <= y1; sy++) {
+    for (let sx = x0; sx <= x1; sx++) {
+      const g = grid[sy][sx];
+      const c = coverGrid ? coverGrid[sy][sx] : 0;
+      if (tileMatchesHabitat(g, c, habitatDef)) count++;
+      if (count >= SPAWN_VIABILITY_MIN) return true; // early exit
+    }
+  }
+  return false;
+}
+
+// ---- Spacing check ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+// Returns true if (x, y) respects minimum distance from all existing
+// creatures in the provided array. Uses Chebyshev distance (max of dx, dy).
+// This runs once at world generation, not per turn — performance is not critical.
+function respectsSpacing(x, y, placed, minSpacing) {
+  for (let i = 0; i < placed.length; i++) {
+    const dx = Math.abs(x - placed[i].x);
+    const dy = Math.abs(y - placed[i].y);
+    if (Math.max(dx, dy) < minSpacing) return false;
+  }
+  return true;
+}
+
+// ---- Check whether any water tile exists within `dist` of (cx, cy) ----
 function hasNearbyWater(cx, cy, dist) {
   const grid = worlds[LAYER_SURFACE];
   const h = grid.length, w = grid[0].length;
@@ -315,99 +372,358 @@ function hasNearbyWater(cx, cy, dist) {
   return false;
 }
 
+// ---- Pick a random value within an integer range [lo, hi] ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+function randRange(lo, hi) {
+  return lo + randi(hi - lo + 1);
+}
+
+// ---- Fisher-Yates shuffle (in-place) ----
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = randi(i + 1);
+    const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+  }
+  return arr;
+}
+
+// ---- Place a creature and initialize standard fields ----
+// FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+function placeCreature(key, x, y) {
+  const m = spawnMonster(key);
+  if (!m) return null;
+  m.x = x; m.y = y;
+  m.homeX = x; m.homeY = y;
+  m.hp = m.hpMax;
+
+  // Drive system: set wander home position for territorial creatures
+  if (m._needsHomePosition && m.wanderProfile) {
+    m.wanderProfile.homePosition = { x: x, y: y };
+    delete m._needsHomePosition;
+  }
+
+  // Prompt S: initialize dormancy state based on distance to player
+  initDormancy(m);
+
+  if (!monsters[LAYER_SURFACE]) monsters[LAYER_SURFACE] = [];
+  monsters[LAYER_SURFACE].push(m);
+  return m;
+}
+
 export function spawnMonstersInWorld(){
+  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+  // Initialize monster arrays
+  if (!monsters[LAYER_SURFACE]) monsters[LAYER_SURFACE] = [];
+  if (!monsters[LAYER_UNDER])   monsters[LAYER_UNDER]   = [];
 
-  // ---- Build the list of surface habitat candidates (non-blacklisted) ----
-  const habitatKeys = Object.keys(HABITAT).filter(k => !SPAWN_BLACKLIST.has(k));
-
-  // ---- Per-cell spawn counters: cellCounters["cx,cy"][monKey] → count ----
-  const cellCounters = {};
-  function getCellKey(x, y) {
-    return Math.floor(x / CELL_TILE_W) + ',' + Math.floor(y / CELL_TILE_H);
-  }
-  function getCellCount(cellKey, monKey) {
-    const bucket = cellCounters[cellKey];
-    return bucket ? (bucket[monKey] || 0) : 0;
-  }
-  function incCellCount(cellKey, monKey) {
-    if (!cellCounters[cellKey]) cellCounters[cellKey] = {};
-    cellCounters[cellKey][monKey] = (cellCounters[cellKey][monKey] || 0) + 1;
-  }
+  const grid = worlds[LAYER_SURFACE];
+  const coverGrid = covers[LAYER_SURFACE];
 
   // ---- Safe zone around player start ----
   const safeZone = Math.max(3, Math.round(Math.min(W_SURF, H_SURF) * 0.063));
   const startX = state.player.startX || Math.floor(W_SURF * 0.50);
   const startY = state.player.startY || Math.floor(H_SURF * 0.56);
 
-  const spawnedWolves = [];
+  function inSafeZone(x, y) {
+    return Math.abs(x - startX) < safeZone && Math.abs(y - startY) < safeZone;
+  }
+
+  // ==================================================================
+  // PHASE 0: Count habitat tiles per species
+  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+  // One-time scan at world generation. For each species in the density
+  // system, collect all valid spawn tiles (matching habitat, walkable or
+  // species-allowed, not in safe zone, not blocked by structure cover).
+  // ==================================================================
+  const speciesKeys = ['dire_wolf', 'ambush_pred', 'wolf', 'cave_crab', 'hare'];
+  const habitatTiles = {};   // key → [{x, y}, ...]
+  for (const key of speciesKeys) {
+    habitatTiles[key] = [];
+  }
 
   for (let y = 0; y < H_SURF; y++) {
     for (let x = 0; x < W_SURF; x++) {
-      const ground = worlds[LAYER_SURFACE][y][x];
-      const cover = covers[LAYER_SURFACE] ? covers[LAYER_SURFACE][y][x] : 0;
+      const ground = grid[y][x];
+      const cover = coverGrid ? coverGrid[y][x] : 0;
 
-      // Skip non-walkable tiles
-      if (!isWalkable(ground, cover)) continue;
+      // Skip non-walkable tiles (exception: water for cave_crab)
+      const walkable = isWalkable(ground, cover);
+      const isWaterTile = (ground === T.WATER);
+
+      // Skip structure covers
+      if (cover && NO_SPAWN_COVERS.has(cover)) continue;
       // Skip town interiors
       if (ground === T.WOOD_FLOOR) continue;
-      // Skip special cover tiles (structures, interactables)
-      if (cover && NO_SPAWN_COVERS.has(cover)) continue;
-      // Skip player safe zone
-      if (Math.abs(x - startX) < safeZone && Math.abs(y - startY) < safeZone) continue;
+      // Skip safe zone
+      if (inSafeZone(x, y)) continue;
 
-      // ---- Determine biome from target map ----
-      const cellX = Math.floor(x / CELL_TILE_W);
-      const cellY = Math.floor(y / CELL_TILE_H);
-      const clampedCX = Math.min(cellX, BIOME_TARGET[0].length - 1);
-      const clampedCY = Math.min(cellY, BIOME_TARGET.length - 1);
-      const biome = BIOME_TARGET[clampedCY][clampedCX].biome;
+      for (const key of speciesKeys) {
+        const hab = SPAWN_HABITAT[key];
+        if (!hab) continue;
 
-      const cellKey = clampedCX + ',' + clampedCY;
+        // Walkability gate: most species need walkable tiles.
+        // cave_crab can spawn on water tiles (canEnterWater = true).
+        if (!walkable && !(key === 'cave_crab' && isWaterTile)) continue;
 
-      // ---- Find creatures whose habitat includes this biome ----
-      for (let i = 0; i < habitatKeys.length; i++) {
-        const key = habitatKeys[i];
-        const hab = HABITAT[key];
-
-        // Biome check
-        if (!hab.biomes.includes(biome)) continue;
-
-        // maxPerCell check
-        if (getCellCount(cellKey, key) >= hab.maxPerCell) continue;
-
-        // nearWater proximity check
-        if (hab.nearWater && !hasNearbyWater(x, y, hab.nearWaterDist)) continue;
-
-        // Roll independently against spawnWeight (modulated by density mult)
-        if (rand() >= hab.spawnWeight * SPAWN_DENSITY_MULT) continue;
-
-        // Spawn this creature
-        const m = spawnMonster(key);
-        if (!m) continue;
-
-        m.x = x; m.y = y;
-        m.homeX = x; m.homeY = y;
-        m.hp = m.hpMax;
-
-        // Drive system: set wander home position for territorial creatures
-        if (m._needsHomePosition && m.wanderProfile) {
-          m.wanderProfile.homePosition = { x: x, y: y };
-          delete m._needsHomePosition;
+        if (tileMatchesHabitat(ground, cover, hab)) {
+          habitatTiles[key].push({ x, y });
         }
-
-        // Prompt S: initialize dormancy state based on distance to player
-        initDormancy(m);
-
-        if (!monsters[LAYER_SURFACE]) monsters[LAYER_SURFACE] = [];
-        monsters[LAYER_SURFACE].push(m);
-        incCellCount(cellKey, key);
-
-        if (key === 'wolf' || key === 'dire_wolf') spawnedWolves.push(m);
       }
     }
   }
 
-  // Wolf pair bonding (unchanged)
+  // ==================================================================
+  // Compute target populations from density ratios
+  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+  // A random value within each density range is chosen per spawn pass
+  // so populations vary between maps.
+  // ==================================================================
+  const densityMap = {
+    hare:        SPAWN_DENSITY_SMALL_HERB,
+    cave_crab:   SPAWN_DENSITY_LARGE_HERB,
+    wolf:        SPAWN_DENSITY_MESO_PRED,
+    ambush_pred: SPAWN_DENSITY_AMBUSH_PRED,
+    dire_wolf:   SPAWN_DENSITY_APEX_PRED,
+  };
+
+  const targetPop = {};
+  const habitatCount = {};
+  for (const key of speciesKeys) {
+    const tiles = habitatTiles[key].length;
+    habitatCount[key] = tiles;
+    const [lo, hi] = densityMap[key];
+    const ratio = randRange(lo, hi);
+    targetPop[key] = Math.max(0, Math.round(tiles / ratio));
+  }
+
+  // Shuffle habitat tile arrays so random picks are O(1) pops
+  for (const key of speciesKeys) {
+    shuffleArray(habitatTiles[key]);
+  }
+
+  // Track placed creatures per species for spacing checks
+  const placed = {};
+  for (const key of speciesKeys) {
+    placed[key] = [];
+  }
+
+  // Track all spawned wolves/dire_wolves for pair bonding
+  const spawnedWolves = [];
+
+  // ==================================================================
+  // PHASE 1: Apex predators (dire_wolf / C2)
+  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+  // Fewest individuals, largest spacing requirements. Placed first.
+  // ==================================================================
+  {
+    const key = 'dire_wolf';
+    const target = targetPop[key];
+    const tiles = habitatTiles[key];
+    const hab = SPAWN_HABITAT[key];
+    let spawned = 0;
+    let attempts = 0;
+    let tileIdx = 0;
+
+    while (spawned < target && attempts < SPAWN_MAX_ATTEMPTS && tileIdx < tiles.length) {
+      const { x, y } = tiles[tileIdx++];
+      attempts++;
+
+      if (!isSpawnViable(x, y, hab)) continue;
+      if (!respectsSpacing(x, y, placed[key], SPAWN_SPACING_APEX)) continue;
+
+      const m = placeCreature(key, x, y);
+      if (m) {
+        placed[key].push({ x, y });
+        spawnedWolves.push(m);
+        spawned++;
+        attempts = 0; // reset attempt counter on success
+      }
+    }
+
+    console.log(`[Spawn] Apex predator (dire_wolf): ${spawned}/${target} placed (${habitatCount[key]} habitat tiles)`);
+  }
+
+  // ==================================================================
+  // PHASE 2: Ambush predators (C6) and meso-predators (C1)
+  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+  // Moderate numbers, moderate spacing. No cross-species spacing check —
+  // a C1 near a C2 is fine (they coexist in real ecosystems).
+  // ==================================================================
+  for (const [key, spacing] of [['ambush_pred', SPAWN_SPACING_AMBUSH], ['wolf', SPAWN_SPACING_MESO]]) {
+    const target = targetPop[key];
+    const tiles = habitatTiles[key];
+    const hab = SPAWN_HABITAT[key];
+    let spawned = 0;
+    let attempts = 0;
+    let tileIdx = 0;
+
+    while (spawned < target && attempts < SPAWN_MAX_ATTEMPTS && tileIdx < tiles.length) {
+      const { x, y } = tiles[tileIdx++];
+      attempts++;
+
+      if (!isSpawnViable(x, y, hab)) continue;
+      if (!respectsSpacing(x, y, placed[key], spacing)) continue;
+
+      const m = placeCreature(key, x, y);
+      if (m) {
+        placed[key].push({ x, y });
+        if (key === 'wolf') spawnedWolves.push(m);
+        spawned++;
+        attempts = 0; // reset attempt counter on success
+      }
+    }
+
+    console.log(`[Spawn] ${key}: ${spawned}/${target} placed (${habitatCount[key]} habitat tiles)`);
+  }
+
+  // ==================================================================
+  // PHASE 3: Large herbivores (cave_crab / C4)
+  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+  // Individual placement with loose spacing. No clustering.
+  // ==================================================================
+  {
+    const key = 'cave_crab';
+    const target = targetPop[key];
+    const tiles = habitatTiles[key];
+    const hab = SPAWN_HABITAT[key];
+    let spawned = 0;
+    let attempts = 0;
+    let tileIdx = 0;
+
+    while (spawned < target && attempts < SPAWN_MAX_ATTEMPTS && tileIdx < tiles.length) {
+      const { x, y } = tiles[tileIdx++];
+      attempts++;
+
+      if (!isSpawnViable(x, y, hab)) continue;
+      if (!respectsSpacing(x, y, placed[key], SPAWN_SPACING_LARGE_HERB)) continue;
+
+      const m = placeCreature(key, x, y);
+      if (m) {
+        placed[key].push({ x, y });
+        spawned++;
+        attempts = 0;
+      }
+    }
+
+    console.log(`[Spawn] Large herbivore (cave_crab): ${spawned}/${target} placed (${habitatCount[key]} habitat tiles)`);
+  }
+
+  // ==================================================================
+  // PHASE 4: Small herbivores in clusters (hare / C3)
+  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+  // Most numerous, clustered. Pick cluster centers with spacing between
+  // centers, then scatter individuals within cluster radius on valid tiles.
+  // ==================================================================
+  {
+    const key = 'hare';
+    const target = targetPop[key];
+    const tiles = habitatTiles[key];
+    const hab = SPAWN_HABITAT[key];
+    const avgCluster = Math.round((SPAWN_CLUSTER_SIZE[0] + SPAWN_CLUSTER_SIZE[1]) / 2);
+    const clusterCount = Math.max(1, Math.round(target / avgCluster));
+
+    const clusterCenters = [];
+    let totalSpawned = 0;
+    let centerAttempts = 0;
+    let tileIdx = 0;
+
+    // Place cluster centers
+    while (clusterCenters.length < clusterCount && centerAttempts < SPAWN_MAX_ATTEMPTS && tileIdx < tiles.length) {
+      const { x, y } = tiles[tileIdx++];
+      centerAttempts++;
+
+      if (!isSpawnViable(x, y, hab)) continue;
+      if (!respectsSpacing(x, y, clusterCenters, SPAWN_CLUSTER_SPACING)) continue;
+
+      clusterCenters.push({ x, y });
+      centerAttempts = 0; // reset on success
+    }
+
+    // Populate each cluster
+    for (const center of clusterCenters) {
+      if (totalSpawned >= target) break;
+
+      const clusterSize = randRange(SPAWN_CLUSTER_SIZE[0], SPAWN_CLUSTER_SIZE[1]);
+      let clusterSpawned = 0;
+
+      // Try to place individuals within SPAWN_CLUSTER_RADIUS of center
+      for (let attempt = 0; attempt < clusterSize * 4 && clusterSpawned < clusterSize; attempt++) {
+        const ox = randi(SPAWN_CLUSTER_RADIUS * 2 + 1) - SPAWN_CLUSTER_RADIUS;
+        const oy = randi(SPAWN_CLUSTER_RADIUS * 2 + 1) - SPAWN_CLUSTER_RADIUS;
+        const tx = center.x + ox;
+        const ty = center.y + oy;
+
+        // Bounds check
+        if (tx < 0 || ty < 0 || tx >= W_SURF || ty >= H_SURF) continue;
+        if (inSafeZone(tx, ty)) continue;
+
+        const ground = grid[ty][tx];
+        const cover = coverGrid ? coverGrid[ty][tx] : 0;
+        if (!isWalkable(ground, cover)) continue;
+        if (cover && NO_SPAWN_COVERS.has(cover)) continue;
+        if (!tileMatchesHabitat(ground, cover, hab)) continue;
+
+        const m = placeCreature(key, tx, ty);
+        if (m) {
+          clusterSpawned++;
+          totalSpawned++;
+        }
+      }
+    }
+
+    console.log(`[Spawn] Small herbivore (hare): ${totalSpawned}/${target} placed in ${clusterCenters.length} clusters (${habitatCount[key]} habitat tiles)`);
+  }
+
+  // ==================================================================
+  // LEGACY: Mushroom (chemotroph) spawning
+  // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
+  // Mushroom (C5) is NOT part of the density-based system per design doc.
+  // Retained as legacy biome-weight spawning — fungal zones only.
+  // ==================================================================
+  {
+    const mushroomHab = HABITAT.mushroom;
+    if (mushroomHab && !SPAWN_BLACKLIST.has('mushroom')) {
+      const cellCounters = {};
+      function getCellKey(x, y) {
+        return Math.floor(x / CELL_TILE_W) + ',' + Math.floor(y / CELL_TILE_H);
+      }
+
+      for (let y = 0; y < H_SURF; y++) {
+        for (let x = 0; x < W_SURF; x++) {
+          const ground = grid[y][x];
+          const cover = coverGrid ? coverGrid[y][x] : 0;
+          if (!isWalkable(ground, cover)) continue;
+          if (ground === T.WOOD_FLOOR) continue;
+          if (cover && NO_SPAWN_COVERS.has(cover)) continue;
+          if (inSafeZone(x, y)) continue;
+
+          // Determine biome from target map
+          const cellX = Math.floor(x / CELL_TILE_W);
+          const cellY = Math.floor(y / CELL_TILE_H);
+          const clampedCX = Math.min(cellX, BIOME_TARGET[0].length - 1);
+          const clampedCY = Math.min(cellY, BIOME_TARGET.length - 1);
+          const biome = BIOME_TARGET[clampedCY][clampedCX].biome;
+
+          if (!mushroomHab.biomes.includes(biome)) continue;
+
+          const cellKey = clampedCX + ',' + clampedCY;
+          const count = cellCounters[cellKey] || 0;
+          if (count >= mushroomHab.maxPerCell) continue;
+
+          if (rand() >= mushroomHab.spawnWeight) continue;
+
+          const m = placeCreature('mushroom', x, y);
+          if (m) {
+            cellCounters[cellKey] = count + 1;
+          }
+        }
+      }
+    }
+  }
+
+  // ==================================================================
+  // Wolf pair bonding (unchanged from previous system)
+  // ==================================================================
   const pairBonders = spawnedWolves.filter(w => w.personality === 'pair_bond' && !w.bondPartner);
   for (let i=0; i<pairBonders.length-1; i+=2){
     const a = pairBonders[i], b = pairBonders[i+1];
@@ -417,70 +733,12 @@ export function spawnMonstersInWorld(){
     }
   }
 
-  // ==== OLD TILE-TYPE SURFACE SPAWN LOGIC (replaced by habitat system above) ====
-  // const surfaceDensity = {
-  //   [T.GRASS]:    0.008  * SPAWN_DENSITY_MULT,
-  //   [T.FOREST]:   0.04   * SPAWN_DENSITY_MULT,
-  //   [T.SAND]:     0.035  * SPAWN_DENSITY_MULT,
-  //   [T.ROCK]:     0.035  * SPAWN_DENSITY_MULT,
-  //   [T.BEACH]:    0.003  * SPAWN_DENSITY_MULT,
-  //   [T.CAVE_FLOOR]:0.03  * SPAWN_DENSITY_MULT,
-  //   [T.MUSHFOREST]:0.05  * SPAWN_DENSITY_MULT,
-  //   [T.FUNGAL_GRASS]:0.04 * SPAWN_DENSITY_MULT,
-  //   [T.MUD]:      0.01   * SPAWN_DENSITY_MULT,
-  //   [T.DIRT]:     0.008  * SPAWN_DENSITY_MULT,
-  // };
-  // for (let y=0;y<H_SURF;y++){
-  //   for (let x=0;x<W_SURF;x++){
-  //     const ground = worlds[LAYER_SURFACE][y][x];
-  //     const cover = covers[LAYER_SURFACE] ? covers[LAYER_SURFACE][y][x] : 0;
-  //     if (!isWalkable(ground, cover)) continue;
-  //     if (ground === T.WOOD_FLOOR) continue;
-  //     if (cover && (cover === T.TOWN || cover === T.CASTLE || cover === T.BLACKSPIRE ||
-  //         cover === T.SIGN || cover === T.NPC || cover === T.HOUSE || cover === T.SHOP ||
-  //         cover === T.INN || cover === T.STAIRS_DOWN || cover === T.STAIRS_UP ||
-  //         cover === T.CHEST || cover === T.BOOK || cover === T.SHOPKEEPER ||
-  //         cover === T.FOUNTAIN || cover === T.LAMP_POST)) continue;
-  //     const safeZone = Math.max(3, Math.round(Math.min(W_SURF, H_SURF) * 0.063));
-  //     const startX = state.player.startX || Math.floor(W_SURF * 0.50);
-  //     const startY = state.player.startY || Math.floor(H_SURF * 0.56);
-  //     if (Math.abs(x - startX) < safeZone && Math.abs(y - startY) < safeZone) continue;
-  //     const biomeKey = cover || ground;
-  //     const density = surfaceDensity[biomeKey] || 0;
-  //     if (rand() >= density) continue;
-  //     let eligible = Object.keys(MON).filter(k => {
-  //       if (SPAWN_BLACKLIST.has(k)) return false;
-  //       const d = MON[k];
-  //       return d[13].includes(biomeKey) && d[14] === LAYER_SURFACE;
-  //     });
-  //     if (cover === T.MUSHFOREST) eligible = ['mushroom'];
-  //     {
-  //       const atmo = getAtmosphere(x, y);
-  //       if (atmo.elevation > 0.68 && atmo.moisture < 0.35 &&
-  //           (ground === T.ROCK || ground === T.CAVE_FLOOR)){
-  //         eligible = ['rock_golem'];
-  //       }
-  //     }
-  //     if (cover === T.FOREST && eligible.includes('wolf')){
-  //       eligible.push('dire_wolf');
-  //       eligible.push('wolf');
-  //     }
-  //     eligible = eligible.filter(k => !SPAWN_BLACKLIST.has(k));
-  //     if (!eligible.length) continue;
-  //     const picked = choice(eligible);
-  //     const m = spawnMonster(picked);
-  //     m.x = x; m.y = y;
-  //     m.homeX = x; m.homeY = y;
-  //     m.hp = m.hpMax;
-  //     monsters[LAYER_SURFACE].push(m);
-  //     if (picked === 'wolf' || picked === 'dire_wolf') spawnedWolves.push(m);
-  //   }
-  // }
-
-  // Underground
+  // ==================================================================
+  // Underground spawning (unchanged — not part of first-pass redesign)
+  // ==================================================================
   const underDensity = {
-    [T.CAVE_FLOOR]: 0.03  * SPAWN_DENSITY_MULT,
-    [T.ROCK]:       0.025 * SPAWN_DENSITY_MULT,
+    [T.CAVE_FLOOR]: 0.015,
+    [T.ROCK]:       0.0125,
   };
   for (let y=0;y<H_UNDER;y++){
     for (let x=0;x<W_UNDER;x++){
@@ -493,8 +751,8 @@ export function spawnMonstersInWorld(){
       for (let dy=-2;dy<=2;dy++) for (let dx=-2;dx<=2;dx++){
         const nx=x+dx,ny=y+dy;
         if (!inBounds(LAYER_UNDER,nx,ny)) continue;
-        if (worlds[LAYER_UNDER][ny][nx]===T.LAVA){ biomeHint = T.LAVA; density = 0.04 * SPAWN_DENSITY_MULT; }
-        else if (worlds[LAYER_UNDER][ny][nx]===T.UWATER && biomeHint==null){ biomeHint = T.UWATER; density = 0.035 * SPAWN_DENSITY_MULT; }
+        if (worlds[LAYER_UNDER][ny][nx]===T.LAVA){ biomeHint = T.LAVA; density = 0.02; }
+        else if (worlds[LAYER_UNDER][ny][nx]===T.UWATER && biomeHint==null){ biomeHint = T.UWATER; density = 0.0175; }
       }
       if (rand() >= density) continue;
       const targetT = biomeHint || ground;
