@@ -396,8 +396,10 @@ function placeCreature(key, x, y) {
 
 export function spawnMonstersInWorld(){
   // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-  // Initialize monster arrays
-  if (!monsters[LAYER_SURFACE]) monsters[LAYER_SURFACE] = [];
+  // Reset monster arrays — the new density-based system replaces any creatures
+  // placed by the legacy populateMonsters() call in surface-gen.js.
+  // Without this reset, creatures are double-spawned (old + new system).
+  monsters[LAYER_SURFACE] = [];
   if (!monsters[LAYER_UNDER])   monsters[LAYER_UNDER]   = [];
 
   const grid = worlds[LAYER_SURFACE];
@@ -716,11 +718,30 @@ export function initWorld(seed){
   state.player.startX = spawnX;
   state.player.startY = spawnY;
 
-  placeStructures();
-
+  // Set player position BEFORE placeStructures and spawnMonstersInWorld so
+  // that initDormancy distance checks use the correct coordinates.
   activateLayer(LAYER_SURFACE);
   state.player.layer = LAYER_SURFACE;
   state.player.x = spawnX;
   state.player.y = spawnY;
+
+  placeStructures();
+
   spawnMonstersInWorld();
+
+  // ── Final dormancy sweep (Prompt S) ──
+  // Catch any creature from any spawning path that was never initialized.
+  // After this pass, every creature on every layer has an explicit _dormant
+  // value — the turn-loop's updateCreatureActivity can rely on it.
+  for (const layerStr of Object.keys(monsters)) {
+    const layerIdx = Number(layerStr);
+    const layerMons = monsters[layerIdx];
+    if (!layerMons) continue;
+    for (const m of layerMons) {
+      if (m.hp <= 0) continue;
+      if (m._dormant == null) {   // undefined or null — never initialized
+        initDormancy(m, layerIdx);
+      }
+    }
+  }
 }
