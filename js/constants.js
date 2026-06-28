@@ -221,11 +221,22 @@ export const FORAGE_SEARCH_RADIUS    = 12;    // how far herbivores look for foo
 
 // ---- Density ratios (1 creature per N tiles of suitable habitat) ----
 // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
-export const SPAWN_DENSITY_SMALL_HERB  = [20, 30];   // C3 — small herbivore (hare)
-export const SPAWN_DENSITY_LARGE_HERB  = [80, 120];  // C4 — large herbivore (cave_crab)
-export const SPAWN_DENSITY_MESO_PRED   = [100, 150]; // C1 — meso-predator (wolf)
-export const SPAWN_DENSITY_AMBUSH_PRED = [120, 180]; // C6 — ambush predator (ambush_pred)
-export const SPAWN_DENSITY_APEX_PRED   = [350, 500]; // C2 — apex predator (dire_wolf)
+//
+// Original ecological density values — restore after detection performance optimization:
+// export const SPAWN_DENSITY_SMALL_HERB  = [20, 30];   // C3 — small herbivore (hare)
+// export const SPAWN_DENSITY_LARGE_HERB  = [80, 120];  // C4 — large herbivore (cave_crab)
+// export const SPAWN_DENSITY_MESO_PRED   = [100, 150]; // C1 — meso-predator (wolf)
+// export const SPAWN_DENSITY_AMBUSH_PRED = [120, 180]; // C6 — ambush predator (ambush_pred)
+// export const SPAWN_DENSITY_APEX_PRED   = [350, 500]; // C2 — apex predator (dire_wolf)
+//
+// FIRST PASS SPAWNING — density reduced for testing (engine can't handle full ecological density yet)
+// Restore higher values after detection system performance optimization
+// ~15× increase in denominators — targets ~30-50 total on 224×224 map
+export const SPAWN_DENSITY_SMALL_HERB  = [300, 450];   // C3 — small herbivore (hare)        ~15-25 total
+export const SPAWN_DENSITY_LARGE_HERB  = [1200, 1800]; // C4 — large herbivore (cave_crab)    ~5-10 total
+export const SPAWN_DENSITY_MESO_PRED   = [1500, 2250]; // C1 — meso-predator (wolf)           ~3-5 total
+export const SPAWN_DENSITY_AMBUSH_PRED = [1800, 2700]; // C6 — ambush predator (ambush_pred)  ~2-4 total
+export const SPAWN_DENSITY_APEX_PRED   = [5000, 7500]; // C2 — apex predator (dire_wolf)      ~1-2 total
 
 // ---- Prey clustering (small herbivores) ----
 // FIRST PASS SPAWNING — placeholder, see Spawning-Design.md
