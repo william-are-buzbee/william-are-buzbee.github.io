@@ -10,27 +10,27 @@ export const BIOME = {
   // Native Clade-A vision: lifted brightness, rich warm-spectrum separation.
 
   // Plains: warm brown ground with muted accent detail.
-  plains:    {bg:'#2a2218', fg:'#504830', mid:'#3c3420', tint:null},
+  plains:    {bg:'#342818', fg:'#7a4c38', mid:'#583a28', tint:null},
 
   // Forest: dark floor, warm brown canopy features.
-  forest:    {bg:'#1a1210', fg:'#3a2818', mid:'#281c14', tint:'#3a2818'},
+  forest:    {bg:'#2e160e', fg:'#6a2c24', mid:'#4a2018', tint:'#6a2c24'},
 
   // --- Mineral-depleted zone: pale, desaturated, washed-out gray ---
   // The "dead zone" — muted and gray against the rich living biomes.
   desert:    {bg:'#383636', fg:'#bab6b2', mid:'#868280', tint:'#a09c98'},
 
   // --- Rock/mountain: mineral substrate, slightly cooler than organic terrain ---
-  rock:      {bg:'#2e2820', fg:'#504a3e', mid:'#3e3830', tint:'#504a3e'},
+  rock:      {bg:'#3a3228', fg:'#a89a84', mid:'#786c58', tint:'#968a76'},
 
   // --- Water: cool-toned, dark ---
-  water:     {bg:'#182030', fg:'#304860', mid:'#243848', tint:null},
-  deep:      {bg:'#101820', fg:'#203040', mid:'#182430', tint:null},
+  water:     {bg:'#302a1c', fg:'#b09868', mid:'#6e5c3c', tint:null},
+  deep:      {bg:'#221c14', fg:'#786a50', mid:'#443a28', tint:null},
 
   // --- Geothermal: lava stays hot ---
   lava:      {bg:'#3e1a10', fg:'#e08060', mid:'#b85030', tint:'#d06040'},
 
   // --- Stone (boulders, stairs, structural) — mineral substrate ---
-  stone:     {bg:'#2e2820', fg:'#504a3e', mid:'#3e3830', tint:'#504a3e'},
+  stone:     {bg:'#302c24', fg:'#a09686', mid:'#665e50', tint:'#a89886'},
 
   // --- Underground: warm amber-brown, well-lit by native eyes ---
   // Geothermally active ecosystem — not a dark dungeon.
@@ -44,29 +44,29 @@ export const BIOME = {
   wood_floor:{bg:'#2c2010', fg:'#8e6c44', mid:'#604828', tint:null},
 
   // --- Chemotrophic biomes: non-photosynthetic, manganese-purple ---
-  mushroom:  {bg:'#201824', fg:'#403040', mid:'#2c2430', tint:'#403040'},
-  mushforest:{bg:'#201824', fg:'#403040', mid:'#2c2430', tint:'#403040'},
+  mushroom:  {bg:'#241c30', fg:'#806898', mid:'#583c68', tint:'#70587e'},
+  mushforest:{bg:'#261e32', fg:'#866c90', mid:'#5a3e6c', tint:'#70587e'},
 
   // --- Crops: muted amber ---
   wheat:     {bg:'#382e18', fg:'#aa8c48', mid:'#7a6438', tint:null},
 
   // --- Beach: transition between sand and water, warm but darker than sand ---
-  beach:     {bg:'#382e22', fg:'#5a5038', mid:'#484028', tint:'#5a5038'},
+  beach:     {bg:'#403628', fg:'#a89474', mid:'#786a50', tint:'#8e7c58'},
   // --- Sand: mineral grains reflecting amber starlight, warm tan ---
-  sand:      {bg:'#3a3428', fg:'#625a48', mid:'#504838', tint:'#625a48'},
+  sand:      {bg:'#383636', fg:'#bab6b2', mid:'#868280', tint:'#a09c98'},
   ruin:      {bg:'#2a2624', fg:'#6e645c', mid:'#524e48', tint:'#645c58'},
   void:      {bg:'#000000', fg:'#000000', mid:'#000000', tint:null},
   cave_wall: {bg:'#1a1614', fg:'#342e28', mid:'#262220', tint:null},
   cave_rock: {bg:'#181816', fg:'#2c2a28', mid:'#201e1c', tint:null},
 
   // --- Wetland: wet dead organic matter ---
-  mud:       {bg:'#1e1810', fg:'#342a18', mid:'#28201c', tint:'#342a18'},
+  mud:       {bg:'#2c2010', fg:'#7a5c28', mid:'#54401c', tint:'#664820'},
 
   // --- Fungal ground: non-photosynthetic chemotrophic mat, purple-dark ---
-  fungal_grass:{bg:'#1e181e', fg:'#382e38', mid:'#28222a', tint:'#382e38'},
+  fungal_grass:{bg:'#221c2e', fg:'#6c5c88', mid:'#4c3e5e', tint:'#5c4c6e'},
 
   // --- Bare earth: dry ground ---
-  dirt:      {bg:'#241c14', fg:'#403420', mid:'#32281a', tint:null},
+  dirt:      {bg:'#362a14', fg:'#7e6840', mid:'#5e482c', tint:null},
   hut_wall:  {bg:'#2c2010', fg:'#8e6c44', mid:'#604828', tint:null},
 };
 
