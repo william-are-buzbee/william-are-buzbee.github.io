@@ -470,8 +470,9 @@ function render(){
 // Paints a subtle colored tint on nearby tiles where ground scent has been
 // deposited, as read through the player's contact chemical transducers. The
 // reach is set by transducer quality (1–3 tiles), so a keener nose "sees" more
-// of the trail. Most tiles are clean. Blood-dominant tiles read reddish; every
-// other trail reads as warm gold. The overlay moves with the player.
+// of the trail. Most tiles are clean. Blood-dominant tiles read cyan (copper-
+// based hemolymph); every other trail reads as warm gold. The overlay moves
+// with the player.
 function _renderGroundTrails(layer, ox, oy, VW, VH, TILE, fovActive, fovExplored) {
   const p = state.player;
   if (!p) return;
@@ -514,9 +515,9 @@ function _renderGroundTrails(layer, ox, oy, VW, VH, TILE, fovActive, fovExplored
     if (fovActive && !(fovExplored && fovExplored.has(`${wx},${wy}`))) continue;
 
     const opacity = Math.min(0.25, total * 0.15);
-    // Reddish for blood-dominant trails, warm gold for everything else.
+    // Cyan for blood-dominant trails (copper-based hemolymph), warm gold for everything else.
     if ((scent.hemolymph || 0) > total * 0.4) {
-      ctx.fillStyle = `rgba(160, 50, 40, ${opacity})`;
+      ctx.fillStyle = `rgba(0, 180, 180, ${opacity})`;
     } else {
       ctx.fillStyle = `rgba(210, 180, 100, ${opacity})`;
     }

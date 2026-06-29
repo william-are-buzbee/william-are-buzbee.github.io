@@ -620,8 +620,11 @@ function _windDescription() {
  * from the body map and produces a multi-line readout: local terrain volatiles,
  * wind, airborne creature scent (with source bearing), and ground trails (with
  * freshness and trail direction). Does NOT consume a turn.
+ *
+ * @param {string} [mode] — 'ground' for contact chemoreception only,
+ *   'air' for airborne chemoreception only. Omit or undefined for both (legacy).
  */
-export function performSniff() {
+export function performSniff(mode) {
   const p = state.player;
   if (!p) return;
   const layer = p.layer;
@@ -640,22 +643,42 @@ export function performSniff() {
     }
   }
 
-  // No transducers at all — nothing to sniff with.
+  const doGround = mode === 'ground' || mode == null;
+  const doAir    = mode === 'air'    || mode == null;
+
+  // Check if the requested mode has a functioning transducer
+  if (doGround && !doAir && bestContact <= 0) {
+    log('You have no functioning contact chemoreceptors.', LOG_CATEGORIES.SENSING);
+    return;
+  }
+  if (doAir && !doGround && bestAirborne <= 0) {
+    log('You have no functioning airborne chemoreceptors.', LOG_CATEGORIES.SENSING);
+    return;
+  }
   if (bestContact <= 0 && bestAirborne <= 0) {
     log('You have no functioning chemical transducers.', LOG_CATEGORIES.SENSING);
     return;
   }
 
-  // 1. Local terrain volatiles (always available — you breathe the air you stand in)
-  log(_localTerrainVolatiles(layer, p.x, p.y), LOG_CATEGORIES.SENSING);
+  // Flavor text for the sensing mode
+  if (mode === 'ground') {
+    log('You press your chemoreceptors to the ground...', LOG_CATEGORIES.SENSING);
+  } else if (mode === 'air') {
+    log('You sample the air...', LOG_CATEGORIES.SENSING);
+  }
 
-  // 2. Wind
-  log(_windDescription(), LOG_CATEGORIES.SENSING);
+  // 1. Local terrain volatiles (always available — you breathe the air you stand in)
+  if (doAir) {
+    log(_localTerrainVolatiles(layer, p.x, p.y), LOG_CATEGORIES.SENSING);
+
+    // 2. Wind
+    log(_windDescription(), LOG_CATEGORIES.SENSING);
+  }
 
   let detectedScent = false;
 
   // 3. Airborne creature scent
-  if (bestAirborne > 0) {
+  if (doAir && bestAirborne > 0) {
     const rawAir = _getAirborneMap(layer).get(key);
     const selfAir = _getSelfAirborneMap(layer).get(key);
     const aScent = rawAir ? _subtractSelf(rawAir, selfAir) : null;
@@ -668,38 +691,57 @@ export function performSniff() {
     }
   }
 
-  // 4. Ground scent
-  if (bestContact > 0) {
+  // 4. Ground scent (contact chemoreception — player's tile + 8 adjacent)
+  if (doGround && bestContact > 0) {
     const gMap = _getGroundMap(layer);
     const sgMap = _getSelfGroundMap(layer);
-    const rawGround = gMap.get(key);
-    const selfGround = sgMap.get(key);
-    const gScent = rawGround ? _subtractSelf(rawGround, selfGround) : null;
     const contactThreshold = SCENT_FLOOR / bestContact;
-    const descriptors = gScent ? _describeScent(gScent, contactThreshold) : [];
+
+    // Check all 9 tiles: player's own tile + 8 neighbors
+    const DIRS_9 = [
+      [0, 0],
+      [0,-1], [1,-1], [1,0], [1,1],
+      [0,1], [-1,1], [-1,0], [-1,-1],
+    ];
+
+    // Aggregate: find the strongest scent across checked tiles
+    let bestScent = null;
+    let bestTotal = 0;
+
+    for (const [ddx, ddy] of DIRS_9) {
+      const adjKey = `${p.x + ddx},${p.y + ddy}`;
+      const adjRaw = gMap.get(adjKey);
+      if (!adjRaw) continue;
+      const adjSelf = sgMap.get(adjKey);
+      const adj = _subtractSelf(adjRaw, adjSelf);
+      let total = 0;
+      for (const cls of MOLECULAR_CLASSES) total += adj[cls] || 0;
+      if (total > bestTotal) {
+        bestTotal = total;
+        bestScent = adj;
+      }
+    }
+
+    const descriptors = bestScent ? _describeScent(bestScent, contactThreshold) : [];
     if (descriptors.length > 0) {
       detectedScent = true;
-      const freshness = gScent.age < 8 ? 'Fresh' : gScent.age < 30 ? 'Recent' : 'Fading';
+      const freshness = bestScent.age < 8 ? 'Fresh' : bestScent.age < 30 ? 'Recent' : 'Fading';
 
       // Trail direction — the adjacent tile whose deposit is freshest (lowest age)
       // is where the trail freshens toward.
       let freshestDir = null;
-      let freshestAge = gScent.age;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          const adjKey = `${p.x + dx},${p.y + dy}`;
-          const adjRaw = gMap.get(adjKey);
-          if (!adjRaw) continue;
-          // Subtract self-shadow from adjacent tile too
-          const adjSelf = sgMap.get(adjKey);
-          const adj = _subtractSelf(adjRaw, adjSelf);
-          // Only consider adjacent tile if it still has detectable scent after subtraction
-          if (!MOLECULAR_CLASSES.some(cls => (adj[cls] || 0) >= contactThreshold)) continue;
-          if (adj.age < freshestAge) {
-            freshestAge = adj.age;
-            freshestDir = _offsetToCompass(dx, dy);
-          }
+      let freshestAge = bestScent.age;
+      for (const [ddx, ddy] of DIRS_9) {
+        if (ddx === 0 && ddy === 0) continue;  // skip own tile for direction
+        const adjKey = `${p.x + ddx},${p.y + ddy}`;
+        const adjRaw = gMap.get(adjKey);
+        if (!adjRaw) continue;
+        const adjSelf = sgMap.get(adjKey);
+        const adj = _subtractSelf(adjRaw, adjSelf);
+        if (!MOLECULAR_CLASSES.some(cls => (adj[cls] || 0) >= contactThreshold)) continue;
+        if (adj.age < freshestAge) {
+          freshestAge = adj.age;
+          freshestDir = _offsetToCompass(ddx, ddy);
         }
       }
       const dirHint = freshestDir ? `, trail freshens toward the ${freshestDir}` : '';
@@ -709,8 +751,10 @@ export function performSniff() {
 
   // 5. Nothing on the wind or the ground
   if (!detectedScent) {
-    if (bestAirborne > 0) {
+    if (doAir && bestAirborne > 0) {
       log('No creature scent on the wind.', LOG_CATEGORIES.SENSING);
+    } else if (doGround && bestContact > 0) {
+      log('The ground carries no traces.', LOG_CATEGORIES.SENSING);
     } else {
       log('You detect nothing of note.', LOG_CATEGORIES.SENSING);
     }

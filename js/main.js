@@ -202,10 +202,10 @@ const SELF_KEYS = new Set(['s', '5', 'clear', ' ']);
 
 // ── Action keys (non-movement) ──
 const ACTION_MAP = {
-  'r': () => eatAction(),          // Eat (ground corpses first, then inventory)
+  'r': () => eatAction(),          // Eat (ground corpses first, then legacy inventory fallback)
   'f': () => toggleStealth(),      // Sneak toggle
   'g': () => pickUpFromGround(),   // Get/pickup
-  'v': () => performSniff(),       // Sniff — deliberate chemical readout (free, no turn)
+  // V (sniff) handled explicitly below ACTION_MAP — V: ground, Shift+V: air
   '?': () => showHelp(),           // Help
   '/': () => showHelp(),
 };
@@ -399,17 +399,25 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  // ── Overlay panel handling (inventory only) ──
-  // LEGACY POPUP: inventory still uses overlay. Migrate to HUD-native pattern.
-  const PANEL_KEYS = { i: 'inventory' };
+  // ══════════════════════════════════════════════════════════════
+  // LEGACY INVENTORY — commented out, not deleted.
+  // The inventory system (items, equipment, potions, books) predates
+  // the body map. Will be replaced by object manipulation system.
+  // UI entry point severed here. Data structures in items.js,
+  // interactions.js, player.js left intact for future use.
+  // ══════════════════════════════════════════════════════════════
+
+  // // ── Overlay panel handling (inventory only) ──
+  // // LEGACY POPUP: inventory still uses overlay. Migrate to HUD-native pattern.
+  // const PANEL_KEYS = { i: 'inventory' };
   const kLow = ev.key.toLowerCase();
 
-  if (isOverlayOpen()) {
-    if (ev.key === 'Escape') { closeOverlay(); ev.preventDefault(); return; }
-    if (PANEL_KEYS[kLow]) { ev.preventDefault(); togglePanel(PANEL_KEYS[kLow]); return; }
-    ev.preventDefault();
-    return;
-  }
+  // if (isOverlayOpen()) {
+  //   if (ev.key === 'Escape') { closeOverlay(); ev.preventDefault(); return; }
+  //   if (PANEL_KEYS[kLow]) { ev.preventDefault(); togglePanel(PANEL_KEYS[kLow]); return; }
+  //   ev.preventDefault();
+  //   return;
+  // }
 
   // T key: toggle HUD bar display mode (minimal ↔ full)
   if (kLow === 't' && !ev.shiftKey && !isMapOpen()) {
@@ -419,12 +427,13 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  // No overlay open — intercept inventory key before movement
-  if (PANEL_KEYS[kLow] && !ev.shiftKey && !isMapOpen()) {
-    ev.preventDefault();
-    togglePanel(PANEL_KEYS[kLow]);
-    return;
-  }
+  // // LEGACY INVENTORY: I key binding severed (see comment block above)
+  // // No overlay open — intercept inventory key before movement
+  // if (PANEL_KEYS[kLow] && !ev.shiftKey && !isMapOpen()) {
+  //   ev.preventDefault();
+  //   togglePanel(PANEL_KEYS[kLow]);
+  //   return;
+  // }
 
   // TAB key: toggle log visibility
   if (ev.key === 'Tab') {
@@ -476,6 +485,16 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
+  // Alt+direction: turn in place (reorient without moving)
+  if (ev.altKey && !ev.shiftKey) {
+    const dir = DIR_MAP[kLow];
+    if (dir) {
+      ev.preventDefault();
+      safeDispatch(turnInPlace, dir[0], dir[1]);
+      return;
+    }
+  }
+
   // Shift+direction: sprint movement (replaces legacy turn-in-place)
   // Sprint mode set by keydown/keyup — Shift+direction now does sprint move.
   if (ev.shiftKey) {
@@ -504,6 +523,13 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
+  // Smell — V: ground contact, Shift+V: airborne
+  if (kLow === 'v') {
+    ev.preventDefault();
+    safeDispatch(performSniff, ev.shiftKey ? 'air' : 'ground');
+    return;
+  }
+
   // Action keys
   const action = ACTION_MAP[kLow];
   if (action) {
@@ -521,30 +547,35 @@ document.addEventListener('keyup', (ev) => {
   }
 });
 
-// LEGACY POPUP: inventory buttons still appear inside modals (ground loot,
-// shops). Migrate these to HUD-native patterns then remove this listener.
-const INV_ACTIONS = {
-  eat:        (i) => eatItem(i),
-  drop:       (i) => dropItem(i),
-  potion:     (i) => usePotion(i),
-  book:       (i) => readBook(i),
-  equipW:     (i) => equipWeaponFromInv(i),
-  equipA:     (i) => equipArmorFromInv(i),
-  eatCorpse:  (i) => eatCorpseFromInv(i),
-};
-
-document.getElementById('modal-inner').addEventListener('click', (ev) => {
-  for (const [key, fn] of Object.entries(INV_ACTIONS)) {
-    const raw = ev.target.dataset[key];
-    if (raw != null) {
-      const idx = parseInt(raw, 10);
-      if (Number.isFinite(idx)) {
-        try { fn(idx); } catch (err) { console.error(err); }
-      }
-      return;
-    }
-  }
-});
+// ══════════════════════════════════════════════════════════════
+// LEGACY INVENTORY DELEGATION — commented out, not deleted.
+// These handlers fired when inventory-panel buttons were clicked inside
+// modals. With the I key binding severed, the inventory panel no longer
+// opens, so these handlers are unreachable. Ground loot (data-gpick) and
+// ground eat (data-geat) use separate wiring in player-actions.js.
+// ══════════════════════════════════════════════════════════════
+// const INV_ACTIONS = {
+//   eat:        (i) => eatItem(i),
+//   drop:       (i) => dropItem(i),
+//   potion:     (i) => usePotion(i),
+//   book:       (i) => readBook(i),
+//   equipW:     (i) => equipWeaponFromInv(i),
+//   equipA:     (i) => equipArmorFromInv(i),
+//   eatCorpse:  (i) => eatCorpseFromInv(i),
+// };
+//
+// document.getElementById('modal-inner').addEventListener('click', (ev) => {
+//   for (const [key, fn] of Object.entries(INV_ACTIONS)) {
+//     const raw = ev.target.dataset[key];
+//     if (raw != null) {
+//       const idx = parseInt(raw, 10);
+//       if (Number.isFinite(idx)) {
+//         try { fn(idx); } catch (err) { console.error(err); }
+//       }
+//       return;
+//     }
+//   }
+// });
 
 // ==================== CHARGEN CONTROLS ====================
 // Prompt F: old stat-allocation buttons (cg-random, cg-reset, cg-begin) removed.
