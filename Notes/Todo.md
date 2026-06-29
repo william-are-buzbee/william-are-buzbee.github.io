@@ -54,12 +54,26 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] First pass muscle fiber system (muscle fiber type by contraction, aerobic vs anaerobic, aerobic capacity vs glycogen capacity, demand exceeding aerobic thresholds consumes glycogen)
 - [x] Third pass over cognitive system (Ganglia are physical structures that inform motor circuits, so running away is not an abstraction but a physical set of circuits connected to motor function)
 - [x] Chemical sensing third pass (molecule based detection, wind direction & detection, contact vs airborn detection, air diffusion, emittance, etc)
+- [x] Creature density scaled down for testing (~30-50 total, proportions preserved, original values commented out)
+- [x] Speed system overhaul (fiber data on all species, player sprint/walk, mass-dependent acceleration, mass-dependent turning cost, legacy turn probability removed)
+- [x] Hare freeze behavior — first pass (ganglion freeze state between alert and flee)
+- [x] Cleanup batch (blood cyan not red, Alt+dir turn-in-place, Shift+V air smell, V ground smell, inventory commented out, 8-directional ground scent)\ 
+- [x] Hare freeze behavior rewrite — physical two-threshold architecture (remove _shouldBreakFreeze, replace with two-ganglion signal-vs-threshold system, decouple confidence normalization). Prompt ready: prompt-hare-freeze-physical.md
+- [x] Hare freeze behavior rewrite — physical two-threshold architecture (remove _shouldBreakFreeze, replace with two-ganglion signal-vs-threshold system, decouple confidence normalization). Prompt ready: prompt-hare-freeze-physical.md
+- [x] Ecological palette and tile texture update (red-violet grass, amber water, new dirt/sand/stone/water textures, creature tints, meso/apex profile sprites). Prompt ready: prompt-ecological-palette.md. Revert reference: old-palette-revert.md
+- [x] Ambient brightness dip rendering (subtle terrain darkening near creatures for visibility). Prompt ready: prompt-ambient-dip.md
+- [x] Canvas-rendered title screen (terrain background, keyboard menu, death screen, species selection restyle). Prompt ready: prompt-canvas-title-screen.md 
+- [x] Detection performance optimization (BLOCKING for full density — profile the hot path, reduce spatial query radius per species, cache LOS per tile-pair, cache best transducer per channel)
 
 ## Up Next
-- [ ] Detection performance optimization (BLOCKING — profile the hot path, reduce spatial query radius per species, cache LOS per tile-pair, cache best transducer per channel)
-- [ ] Ganglion and substrate work for the small grazer (escape mechanics, physical behavior from body map)
+- [ ] Visual revert (revert poor visual overhaul changes to older, more visually appealing form)
+- [ ] Visual discussion (determine 3-layer color system in detail, create visual pallette and textures that are accurate at layers 1 and 2 but appealing at 3)
+- [ ] Visual planning for future (down the line, the creature's body map will inform what visuals you see on screen, aka, layer 3 is eventually going to be animal based, but currently is just an average "what animals generally can see on this planet" with a decent degree of )
+- [ ] Visual rethinking (use the new 16x16 pallettes and textures as a exact color reference but not an exact visual reference for 32x32 sprites that will become the norm)
+- [ ] Visual customization (first pass settings menu with texture/resource pack/tileset option- switch between 32x32, 16x16, ASCII, "simple", and a 64x64 upscaled version of the 32x32, etc, plus ability to upload your own with a coherent spritesheet for others to manipulate easily)
 
 ## Near-Term Plans (no particular order at the moment)
+- [ ] 32×32 directional sprites (8 facings per creature, mass-proportional tile footprints, designed at 32×32, downscaled to 16×16). Reference: sprite-lineup-reference.md
 - [ ] Second-pass over bleed/metabolism/healing mechanic
 - [ ] Fourth-pass over cognition/ganglia system (actual pattern libraries/memory system)
 - [ ] NPC scent tracking AI (plume following, trail following, search patterns)
@@ -67,8 +81,10 @@ Prompt queue and task tracker. Check things off as they're done.
 - [ ] NPC vision update (per-eye body map computation, replace VISION_PROFILES)
 - [ ] Creature 5 (colonial chemotroph) redesign in doc and legacy content removal from game
 - [ ] Legacy creature name cleanup (wolf→prowler, dire_wolf→ravager, cave_crab→shaleBack, etc.)
-- [ ] Legacy elemental damage and name cleanup (blade damage )
+- [ ] Legacy elemental damage and name cleanup (blade damage)
 - [ ] Restore ecological creature density after detection performance optimization
+- [ ] Chemical workspace / scent gradient system (integration capacity determines how many samples are held, neural tissue computes gradient direction from sequential contact samples)
+- [ ] Player movement intensity expansion (creep/stalk mode — slower, quieter emission, beyond current walk/sprint)
 
 ## Long-Term Plans
 - [ ] Immune/infection mechanics (needs metabolism first)
@@ -196,6 +212,26 @@ For new chats, include:
 - **Ecology doc three-layer color model.** Material × starlight × creature perception. Screen shows layer 3. Color Interpretation Guide has hex values.
 
 - **Internal creature names:** wolf=meso-predator, dire_wolf=apex predator, hare=small herbivore, cave_crab=large wading grazer, mushroom=colonial chemotroph (dead), ambush_pred=ambush predator.
+
+- **Speed system uses fiber-aware PTW.** getBodyPTW accepts optional intensity parameter. Walking = slow-twitch only. Sprint = full substrate-dependent. All species now have fiber data.
+
+- **Player sprint is Shift+direction.** Alt+direction = turn in place. State tracked via state.player.sprintMode and _lastMovementIntensity.
+
+- **Mass-dependent acceleration.** _consecutiveMoveTurns tracks ramp-up. turnsToFullSpeed(mass) = log4(mass/3). Turning costs momentum proportional to mass.
+
+- **Legacy turn probability removed.** TURN_AGILITY_COEFF deprecated. Turning is deterministic — always succeeds, momentum cost via applyTurningCost.
+
+- **Smell split into ground/air.** V = ground smell, Shift+V = air smell. performSniff accepts 'ground'/'air' mode parameter.
+
+- **Inventory UI severed.** I key commented out. Data structures intact. Legacy popup annotation blocks in main.js.
+
+- **Ground scent is 8-directional + own tile.** DIRS_9 in scent.js covers all 8 neighbors plus center.
+
+- **_visuallyDetected is a Set on state.player**, not a boolean on the creature. Check with state.player._visuallyDetected.has(creature).
+
+- **Confidence normalization in threat templates** uses thresholds.flee in denominator — couples transducer output to ganglion threshold. Flagged for decoupling in the two-threshold freeze rewrite.
+
+- **Palette values are Layer 3 (creature perception).** Not material color or physical appearance. See ecology doc three-layer model.
 
 ### Typical File Sets
 - **Biome/terrain work:** surface-gen.js, constants.js, terrain.js
