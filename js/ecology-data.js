@@ -27,8 +27,8 @@ export const BIOME = {
   // --- Water: reflects amber sky, dark and warm, NOT blue or teal ---
   // Distinguished from terrain primarily by surface texture (ripple pattern), not by hue.
   // Trace mineral shimmer provides the only color variation.
-  water:     {bg:'#121010', fg:'#2a2018', mid:'#1e1814', tint:null},
-  deep:      {bg:'#0c0a08', fg:'#201810', mid:'#18120e', tint:null},
+  water:     {bg:'#121010', fg:'#3a2c18', mid:'#241c10', tint:null},
+  deep:      {bg:'#0c0a08', fg:'#2a1c10', mid:'#1a1208', tint:null},
 
   // --- Geothermal: lava stays hot ---
   lava:      {bg:'#3e1a10', fg:'#e08060', mid:'#b85030', tint:'#d06040'},
