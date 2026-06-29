@@ -10,6 +10,7 @@ import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js'
 import { updateUI, hideHud, toggleStatusFullMode } from './ui.js';
 import { canvas, ctx, resizeCanvas, render } from './rendering.js';
 import { tintedSprite } from './sprites.js';
+import { isTexturePickerOpen, toggleTexturePicker } from './texture-picker.js';
 
 import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks, eatAction } from './player-actions.js';
 import { T, terrainName, terrainInfo } from './terrain.js';
@@ -73,6 +74,7 @@ function safeDispatch(fn, ...args) {
   if (modalEl.classList.contains('show')) return;
   if (isMapOpen()) return;
   if (isOverlayOpen()) return;
+  if (isTexturePickerOpen()) return;
   if (state.inputLocked) return;
   if (state.lookMode) return;
   try {
@@ -109,6 +111,7 @@ canvas.addEventListener('click', (ev) => {
   if (state.inputLocked) return;
   if (isMapOpen()) return;
   if (isOverlayOpen()) return;
+  if (isTexturePickerOpen()) return;
   if (_restartConfirmVisible) return;
   if (state.lookMode) { exitLookMode(); return; }
 
@@ -475,8 +478,20 @@ document.addEventListener('keydown', (ev) => {
   //   return;
   // }
 
+  // Texture picker: Alt+T toggles overlay
+  if (kLow === 't' && ev.altKey && !isMapOpen()) {
+    ev.preventDefault();
+    toggleTexturePicker();
+    return;
+  }
+  // While texture picker is open, only Alt+T (above) and Escape close it
+  if (isTexturePickerOpen()) {
+    if (ev.key === 'Escape') { ev.preventDefault(); toggleTexturePicker(); }
+    return;
+  }
+
   // T key: toggle HUD bar display mode (minimal ↔ full)
-  if (kLow === 't' && !ev.shiftKey && !isMapOpen()) {
+  if (kLow === 't' && !ev.shiftKey && !ev.altKey && !isMapOpen()) {
     ev.preventDefault();
     toggleStatusFullMode();
     updateUI();
