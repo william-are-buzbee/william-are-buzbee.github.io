@@ -60,9 +60,9 @@ export const SPECIES_TEMPLATES = {
     colorPalette: 'meso_predator',
     circulationType: 'closed',
     // Visual detection: species-level integument reflectance (Pass 1).
-    // Thick textured skin, wrinkled, hairless. Generalist cross-biome.
-    // Medium-dark, neutral — decent match in most habitats, perfect in none.
-    integument: { brightness: 0.25, hue: 'brown' },
+    // Thick textured skin, wrinkled, hairless. Cross-biome pursuit hunter.
+    // Warm amber-red — decent match in most habitats, perfect in none.
+    integument: { brightness: 0.35, hue: 'amber-brown' },
   },
   ravager: {
     displayName: 'Ravager',
@@ -73,10 +73,10 @@ export const SPECIES_TEMPLATES = {
     attacks: 3,
     description: 'Six limbs. Centralized brain, enhanced chemical senses. Bite and two heavy claw attacks. Hits hard, takes hits, dominates smaller creatures. Vulnerable to being flanked.',
     bodyType: 'apex',
-    colorPalette: 'meso_predator',
+    colorPalette: 'apex_predator',
     circulationType: 'closed',
-    // Visual detection: dense, dark skin. Preference for denser cover.
-    // Dark, reddish — optimized for forest interior.
+    // Visual detection: dense, dark skin. Forest interior specialist.
+    // Deep forest red — optimized for forest interior.
     integument: { brightness: 0.18, hue: 'dark-red' },
   },
   grazer: {
@@ -88,11 +88,11 @@ export const SPECIES_TEMPLATES = {
     attacks: 0,
     description: 'Eight limbs. Distributed ganglia, vibration-dominant senses. No attacks. Fastest creature in the game. Survives by not being caught. The hard mode.',
     bodyType: 'grazer',
-    colorPalette: 'meso_predator',
+    colorPalette: 'small_herbivore',
     circulationType: 'open',
-    // Visual detection: semi-flexible integument, thin. Open-terrain grazer.
-    // Matches dark red-brown grassland mats where it feeds.
-    integument: { brightness: 0.33, hue: 'warm-red' },
+    // Visual detection: grassland camouflage match. Nearly invisible on grass.
+    // Earthy dark — matches dark red-brown grassland mats where it feeds.
+    integument: { brightness: 0.22, hue: 'earth' },
   },
   shaleback: {
     displayName: 'Shale-back',
@@ -103,11 +103,11 @@ export const SPECIES_TEMPLATES = {
     attacks: 4,
     description: 'Six limbs. Centralized brain, chemical and visual senses. Front shove and rear kick attacks. Massive, slow, extremely tanky. Almost impossible to kill head-on.',
     bodyType: 'meso',       // placeholder — no PLAYER_SHALEBACK sprite yet
-    colorPalette: 'meso_predator',
+    colorPalette: 'large_herbivore',
     circulationType: 'closed',
     // Visual detection: thick, mucousy/oily surface. Amphibious.
-    // Dark, brownish — matches muddy coastal substrate.
-    integument: { brightness: 0.22, hue: 'brown' },
+    // Marsh green-brown — matches muddy coastal/shore substrate.
+    integument: { brightness: 0.25, hue: 'marsh' },
   },
   lurker: {
     displayName: 'Lurker',
@@ -118,11 +118,11 @@ export const SPECIES_TEMPLATES = {
     attacks: 7,
     description: 'Eight limbs. Distributed ganglia, vibration-dominant senses. Seven attacks, mostly puncture. Devastating single-zone damage but fragile. Fights like a stiletto.',
     bodyType: 'meso',       // placeholder — no PLAYER_LURKER sprite yet
-    colorPalette: 'meso_predator',
+    colorPalette: 'ambush_predator',
     circulationType: 'open',
     // Visual detection: thickened, stiffened integument, segmented armor.
-    // Forest/cover specialist. Very dark, reddish — near-perfect forest floor match.
-    integument: { brightness: 0.15, hue: 'dark-red' },
+    // Dark substrate match — concealment specialist.
+    integument: { brightness: 0.22, hue: 'substrate' },
   },
 };
 
@@ -132,11 +132,11 @@ export const SPECIES_TEMPLATES = {
 // Derived from ecology descriptions and habitat preferences.
 // Creature 5 (mushroom/colonial chemotroph) is a dead concept — intentionally omitted.
 const CREATURE_INTEGUMENT = {
-  wolf:        { brightness: 0.25, hue: 'brown' },      // C1 meso-predator: generalist, cross-biome
-  dire_wolf:   { brightness: 0.18, hue: 'dark-red' },   // C2 apex predator: forest interior specialist
-  hare:        { brightness: 0.33, hue: 'warm-red' },    // C3 small herbivore: open-terrain grazer
-  cave_crab:   { brightness: 0.22, hue: 'brown' },      // C4 large grazer: amphibious, muddy coastal
-  ambush_pred: { brightness: 0.15, hue: 'dark-red' },   // C6 ambush predator: forest/cover specialist
+  wolf:        { brightness: 0.35, hue: 'amber-brown' },  // C1 meso-predator: cross-biome pursuit hunter
+  dire_wolf:   { brightness: 0.18, hue: 'dark-red' },     // C2 apex predator: forest interior specialist
+  hare:        { brightness: 0.22, hue: 'earth' },         // C3 small herbivore: grassland camouflage
+  cave_crab:   { brightness: 0.25, hue: 'marsh' },         // C4 large grazer: amphibious, shore/wetland
+  ambush_pred: { brightness: 0.22, hue: 'substrate' },     // C6 ambush predator: concealment specialist
 };
 
 /**

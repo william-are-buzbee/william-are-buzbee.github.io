@@ -594,9 +594,9 @@ S.AMBUSH_PRED = [
 ];
 
 // ==================== CORPSE SPRITE ====================
-// Meat-chunk — a large reddish-brown oval slab filling most of the tile,
-// with 2-3 curved lighter lines suggesting exposed rib bone / marbling.
-// '#' = meat (dark reddish-brown #8a3030), '-' = bone/marbling (warm off-white #d0b898).
+// Meat-chunk — a large oval slab filling most of the tile,
+// with 2-3 curved lighter lines suggesting exposed bone / marbling.
+// '#' = exposed hemolymph tissue (cyan #40a0a0), '-' = bone/shell (warm off-white #c0b898).
 S.CORPSE = [
   '................',
   '.....#####......',
@@ -644,12 +644,12 @@ S.NPC_VILLAGER = [
 // Pulled directly from the six current creature sprite definitions.
 // key → { label (display name), color (hex tint used by tintedMonsterSprite) }
 export const COLOR_PALETTES = {
-  meso_predator:       { label: 'Meso-Predator',      color: '#5a4a40' },
-  apex_predator:       { label: 'Apex Predator',       color: '#3a302a' },
-  large_herbivore:     { label: 'Large Herbivore',     color: '#4a5040' },
-  small_herbivore:     { label: 'Small Herbivore',     color: '#7a8070' },
+  meso_predator:       { label: 'Meso-Predator',      color: '#584030' },
+  apex_predator:       { label: 'Apex Predator',       color: '#302018' },
+  large_herbivore:     { label: 'Large Herbivore',     color: '#384030' },
+  small_herbivore:     { label: 'Small Herbivore',     color: '#3c3828' },
   colonial_chemotroph: { label: 'Colonial Chemotroph', color: '#786880' },
-  ambush_predator:     { label: 'Ambush Predator',     color: '#5a5048' },
+  ambush_predator:     { label: 'Ambush Predator',     color: '#3a3028' },
 };
 
 // Sprite bake cache
@@ -673,10 +673,10 @@ function buildSprite(rows){
 }
 Object.keys(S).forEach(k => spriteCache[k] = buildSprite(S[k]));
 
-// Corpse sprite uses custom meat/bone colors instead of default COL_FG/COL_MID
+// Corpse sprite uses custom hemolymph/bone colors instead of default COL_FG/COL_MID
 (function bakeCorpseSprite(){
-  const MEAT = '#a84040';  // warm reddish-brown, lifted for native vision
-  const BONE = '#e0caa8';  // warm off-white rib/marbling
+  const MEAT = '#40a0a0';  // cyan — exposed hemolymph-rich tissue (copper-based)
+  const BONE = '#c0b898';  // warm off-white — mineral bone/shell reflects amber starlight
   const rows = S.CORPSE;
   const c = document.createElement('canvas');
   c.width = SPR*PIX; c.height = SPR*PIX;
