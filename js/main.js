@@ -9,9 +9,10 @@ import { tileSize, viewW, viewH, cycleZoom, setZoom, zoom, toggleSpritePack, get
 import { modalEl, closeModal, openModal, setUpdateUICallback } from './modal.js';
 import { updateUI, hideHud, toggleStatusFullMode } from './ui.js';
 import { canvas, ctx, resizeCanvas, render } from './rendering.js';
+import { tintedSprite } from './sprites.js';
 
 import { attemptMove, restAction, eatBest, eatItem, eatCorpseFromInv, usePotion, dropItem, equipWeaponFromInv, equipArmorFromInv, turnInPlace, lookAtGround, pickUpFromGround, setGroundModalCallbacks, eatAction } from './player-actions.js';
-import { terrainName, terrainInfo } from './terrain.js';
+import { T, terrainName, terrainInfo } from './terrain.js';
 import { inBounds, getCover, monsterAt as worldMonsterAt } from './world-state.js';
 import { getItems } from './ground-items.js';
 import { setOnPlayerDeathCallback, debugEcology, debugForceHunger, debugCognition, debugSubstrate } from './enemy-ai.js';
@@ -33,7 +34,7 @@ function log(text, category) {
   if (window._pendingLogCatQueue) window._pendingLogCatQueue.push(category || 'system');
   _rawLog(text, category);
 }
-import { openCharGen, renderCharGen, randomizeAttrs, beginGame, onPlayerDeath, onVictory } from './chargen.js';
+import { openCharGen, renderCharGen, randomizeAttrs, beginGame, onPlayerDeath, onVictory, speciesKeyNav } from './chargen.js';
 import { hasSave, tryResume, deleteSave, migrateFromLocalStorage } from './save-load.js';
 import { isMapOpen, toggleMap, closeMap, markCurrentCell } from './worldmap.js';
 // LEGACY POPUP: overlay.js still used by inventory panel. Migrate to HUD-native.
@@ -42,8 +43,18 @@ import { isOverlayOpen, activePanel, togglePanel, closeOverlay, setInventoryActi
 
 // ==================== WIRE CALLBACKS ====================
 setUpdateUICallback(updateUI);
-setOnPlayerDeathCallback(() => { deleteSave().catch(e => console.error('[Save]', e)); onPlayerDeath(); });
-setOnVictoryCallback(() => { deleteSave().catch(e => console.error('[Save]', e)); onVictory(); });
+setOnPlayerDeathCallback(() => {
+  deleteSave().catch(e => console.error('[Save]', e));
+  onPlayerDeath();
+  hideHud();
+  renderDeathScreen();
+});
+setOnVictoryCallback(() => {
+  deleteSave().catch(e => console.error('[Save]', e));
+  onVictory();
+  hideHud();
+  renderVictoryScreen();
+});
 // LEGACY POPUP: ground pickup still uses modal. Migrate to HUD-native.
 setGroundModalCallbacks(openModal, closeModal);
 setInventoryActions({
@@ -98,7 +109,7 @@ canvas.addEventListener('click', (ev) => {
   if (state.inputLocked) return;
   if (isMapOpen()) return;
   if (isOverlayOpen()) return;
-  if (restartConfirmEl.style.display === 'flex') return;
+  if (_restartConfirmVisible) return;
   if (state.lookMode) { exitLookMode(); return; }
 
   const { wx, wy } = canvasToWorld(ev);
@@ -166,6 +177,11 @@ canvas.addEventListener('wheel', (ev) => {
   if (cycleZoom(direction)) {
     resizeCanvas();
     if (state.gameState === 'play') render();
+    else if (state.gameState === 'title') {
+      _titleBackdropCanvas = null; // invalidate cache for new tile size
+      renderTitle();
+    } else if (state.gameState === 'death') renderDeathScreen();
+    else if (state.gameState === 'victory') renderVictoryScreen();
     updateZoomLabel();
   }
 }, { passive: false });
@@ -376,11 +392,51 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  // Restart confirm escape
-  if (restartConfirmEl.style.display === 'flex') {
-    if (ev.key === 'Escape' || ev.key.toLowerCase() === 'n') {
+  // Restart confirm — canvas-rendered, keyboard only (Y/N/Escape)
+  if (_restartConfirmVisible) {
+    const kLow = ev.key.toLowerCase();
+    if (ev.key === 'Escape' || kLow === 'n') {
       hideRestartConfirm();
       ev.preventDefault();
+    } else if (kLow === 'y') {
+      hideRestartConfirm();
+      deleteSave().catch(e => console.error('[Save]', e));
+      goToTitle();
+      ev.preventDefault();
+    }
+    return;
+  }
+
+  // ---- Canvas-rendered screen states: title, species, death, victory ----
+  // Title screen keyboard navigation
+  if (state.gameState === 'title') {
+    const speciesScreen = document.getElementById('species-screen');
+    if (speciesScreen && speciesScreen.style.display === 'flex') {
+      // Species selection is open — delegate to species keyboard handler
+      handleSpeciesKeys(ev);
+    } else {
+      // Title menu navigation
+      handleTitleKeys(ev);
+    }
+    return;
+  }
+
+  // Death screen — Enter returns to title
+  if (state.gameState === 'death') {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      deleteSave().catch(e => console.error('[Save]', e));
+      goToTitle();
+    }
+    return;
+  }
+
+  // Victory screen — Enter returns to title
+  if (state.gameState === 'victory') {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      deleteSave().catch(e => console.error('[Save]', e));
+      goToTitle();
     }
     return;
   }
@@ -592,101 +648,472 @@ if (_cgReset) _cgReset.addEventListener('click', () => {
 if (_cgBegin) _cgBegin.addEventListener('click', beginGame);
 
 // ==================== STATE MACHINE TRANSITIONS ====================
+// Canvas-rendered screens replace DOM overlays. showScreen is now only
+// used internally by canvas rendering — DOM elements stay hidden via CSS.
+
 function showScreen(id) {
-  for (const s of ['title', 'death', 'victory']) {
-    document.getElementById(s).style.display = s === id ? 'flex' : 'none';
+  // DOM screens are hidden via CSS (!important) — no need to toggle them.
+  // Just manage game state and trigger appropriate canvas rendering.
+  if (id === 'title') {
+    state.gameState = 'title';
+    hideHud();
+    // Invalidate backdrop so it regenerates fresh
+    _titleBackdropCanvas = null;
+    updateTitleMenu().then(() => renderTitle()).catch(e => console.error(e));
   }
-  state.gameState = id === 'title' ? 'title' : state.gameState;
-  if (id === 'title') { updateTitleButtons().catch(e => console.error(e)); hideHud(); }
   if (id === 'death' || id === 'victory') hideHud();
 }
 
-// ---- Save-aware title screen ----
+// ---- Save-aware title screen (canvas-rendered) ----
+// DOM refs kept for backward compat — elements are hidden via CSS.
 const titleEl = document.getElementById('title');
 const titleContinueBtn = document.getElementById('title-continue');
 const titleNewGameBtn  = document.getElementById('title-newgame');
 
+// Legacy: updateTitleButtons still used during startup migration path.
+// Replaced by updateTitleMenu for canvas rendering.
 async function updateTitleButtons() {
-  if (await hasSave()) {
-    titleContinueBtn.style.display = '';
-  } else {
-    titleContinueBtn.style.display = 'none';
-  }
+  await updateTitleMenu();
 }
 
-titleContinueBtn.addEventListener('click', async (ev) => {
-  ev.stopPropagation();
-  if (await hasSave()) {
-    const resumed = await tryResume();
-    if (resumed) {
-      titleEl.style.display = 'none';
-      state.gameState = 'play';
-      try { updateUI(); } catch(e) { console.error(e); }
-    } else {
-      deleteSave().catch(e => console.error('[Save]', e));
-      await updateTitleButtons();
-      openCharGen();
+// ══════════════════════════════════════════════════════════════
+// LEGACY DOM HANDLERS — commented out, replaced by keyboard navigation.
+// Title menu: handleTitleKeys (above) replaces these click handlers.
+// Death/victory: Enter key replaces these click handlers.
+// ══════════════════════════════════════════════════════════════
+
+// titleContinueBtn.addEventListener('click', async (ev) => {
+//   ev.stopPropagation();
+//   if (await hasSave()) {
+//     const resumed = await tryResume();
+//     if (resumed) {
+//       titleEl.style.display = 'none';
+//       state.gameState = 'play';
+//       try { updateUI(); } catch(e) { console.error(e); }
+//     } else {
+//       deleteSave().catch(e => console.error('[Save]', e));
+//       await updateTitleButtons();
+//       openCharGen();
+//     }
+//   }
+// });
+//
+// titleNewGameBtn.addEventListener('click', (ev) => {
+//   ev.stopPropagation();
+//   deleteSave().catch(e => console.error('[Save]', e));
+//   openCharGen();
+// });
+//
+// titleEl.addEventListener('click', (ev) => {
+//   // Only buttons above should act
+// });
+//
+// document.getElementById('death').addEventListener('click', () => {
+//   deleteSave().catch(e => console.error('[Save]', e));
+//   showScreen('title');
+// });
+// document.getElementById('victory').addEventListener('click', () => {
+//   deleteSave().catch(e => console.error('[Save]', e));
+//   showScreen('title');
+// });
+
+// ---- In-game restart confirmation (canvas-rendered) ----
+// showRestartConfirm / hideRestartConfirm defined above in canvas section.
+// DOM click handlers for restart-yes/restart-no commented out —
+// Y/N keyboard handling replaces them.
+
+// document.getElementById('restart-yes').addEventListener('click', (ev) => {
+//   ev.stopPropagation();
+//   hideRestartConfirm();
+//   deleteSave().catch(e => console.error('[Save]', e));
+//   showScreen('title');
+// });
+//
+// document.getElementById('restart-no').addEventListener('click', (ev) => {
+//   ev.stopPropagation();
+//   hideRestartConfirm();
+// });
+//
+// restartConfirmEl.addEventListener('click', (ev) => {
+//   ev.stopPropagation();
+// });
+
+// ==================== CANVAS-RENDERED SCREENS ====================
+// Title, death, victory, and restart confirmation are all rendered on
+// the game canvas using the same sprite pipeline as gameplay.
+// DOM elements for these screens are hidden via CSS.
+
+// ---- Seeded 2D Perlin noise (self-contained for title backdrop) ----
+function _titleNoise2D(seed) {
+  const perm = new Uint8Array(512);
+  const p = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) p[i] = i;
+  let s = seed | 0;
+  for (let i = 255; i > 0; i--) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const j = s % (i + 1);
+    const tmp = p[i]; p[i] = p[j]; p[j] = tmp;
+  }
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+  const grad2 = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+  function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  function lerp(a, b, t) { return a + t * (b - a); }
+  return function(x, y) {
+    const X = Math.floor(x) & 255;
+    const Y = Math.floor(y) & 255;
+    const xf = x - Math.floor(x);
+    const yf = y - Math.floor(y);
+    const u = fade(xf);
+    const v = fade(yf);
+    const g = grad2;
+    const aa = g[perm[perm[X] + Y] & 7];
+    const ba = g[perm[perm[X + 1] + Y] & 7];
+    const ab = g[perm[perm[X] + Y + 1] & 7];
+    const bb = g[perm[perm[X + 1] + Y + 1] & 7];
+    return lerp(
+      lerp(aa[0]*xf + aa[1]*yf, ba[0]*(xf-1) + ba[1]*yf, u),
+      lerp(ab[0]*xf + ab[1]*(yf-1), bb[0]*(xf-1) + bb[1]*(yf-1), u),
+      v
+    );
+  };
+}
+
+function _titleFbm(noiseFn, x, y, octaves, freq, lac, gain) {
+  let sum = 0, amp = 1, maxAmp = 0;
+  for (let i = 0; i < octaves; i++) {
+    sum += noiseFn(x * freq, y * freq) * amp;
+    maxAmp += amp;
+    freq *= lac;
+    amp *= gain;
+  }
+  return sum / maxAmp;
+}
+
+// ---- Title backdrop: cached terrain preview ----
+const TITLE_SEED = 42;
+let _titleBackdropCanvas = null;
+let _titleBackdropW = 0;
+let _titleBackdropH = 0;
+
+function generateTitleBackdrop() {
+  const TILE = tileSize();
+  const cols = Math.ceil(canvas.width / TILE);
+  const rows = Math.ceil(canvas.height / TILE);
+
+  // Skip regeneration if cached at current canvas size
+  if (_titleBackdropCanvas
+      && _titleBackdropW === canvas.width
+      && _titleBackdropH === canvas.height) {
+    return;
+  }
+
+  const noise = _titleNoise2D(TITLE_SEED);
+  const coverNoise = _titleNoise2D(TITLE_SEED + 7);
+
+  const offscreen = document.createElement('canvas');
+  offscreen.width = canvas.width;
+  offscreen.height = canvas.height;
+  const octx = offscreen.getContext('2d');
+  octx.imageSmoothingEnabled = false;
+
+  // Black base
+  octx.fillStyle = '#000';
+  octx.fillRect(0, 0, offscreen.width, offscreen.height);
+
+  for (let ry = 0; ry < rows; ry++) {
+    for (let rx = 0; rx < cols; rx++) {
+      const n = _titleFbm(noise, rx, ry, 4, 0.04, 2.0, 0.5);
+
+      // Map noise to terrain type
+      let terrain, cover = 0;
+      if (n < -0.30)       terrain = T.DEEP_WATER;
+      else if (n < -0.12)  terrain = T.WATER;
+      else if (n < -0.02)  terrain = T.BEACH;
+      else if (n < 0.08)   terrain = T.SAND;
+      else if (n < 0.40)   terrain = T.GRASS;
+      else if (n < 0.52)   terrain = T.DIRT;
+      else                  terrain = T.ROCK;
+
+      // Cover layer — trees and mushrooms for visual depth
+      if (terrain === T.GRASS && n >= 0.18) {
+        const cn = _titleFbm(coverNoise, rx, ry, 3, 0.06, 2.0, 0.5);
+        if (cn > 0.12) cover = T.FOREST;
+        else if (cn < -0.25) cover = T.MUSHFOREST;
+      }
+
+      // If mushforest cover, use fungal_grass ground
+      if (cover === T.MUSHFOREST) terrain = T.FUNGAL_GRASS;
+
+      // Resolve sprite name with variants (rocks)
+      const groundInfo = terrainInfo(terrain);
+      let spriteName = groundInfo.sprite;
+      if (terrain === T.ROCK) {
+        const rockVar = ((rx * 3571 + ry * 2909) >>> 0) % 3;
+        spriteName = rockVar === 1 ? 'ROCK_V2' : rockVar === 2 ? 'ROCK_V3' : 'ROCK';
+      }
+
+      // Rotation for visual variety (same logic as rendering.js)
+      const tileHash = ((rx * 7919 + ry * 6271 + 1013) >>> 0) % 256;
+      const rotVariant = tileHash % 4;
+      const canRotate = !cover && (terrain === T.GRASS || terrain === T.SAND || terrain === T.ROCK);
+
+      const px = rx * TILE;
+      const py = ry * TILE;
+
+      if (canRotate && rotVariant > 0) {
+        octx.save();
+        octx.translate(px + TILE / 2, py + TILE / 2);
+        octx.rotate(rotVariant * Math.PI / 2);
+        octx.drawImage(tintedSprite(spriteName, groundInfo.palette), -TILE / 2, -TILE / 2, TILE, TILE);
+        octx.restore();
+      } else {
+        octx.drawImage(tintedSprite(spriteName, groundInfo.palette), px, py, TILE, TILE);
+      }
+
+      // Draw cover sprite on top
+      if (cover) {
+        const coverInfo = terrainInfo(cover);
+        octx.drawImage(tintedSprite(coverInfo.sprite, coverInfo.palette), px, py, TILE, TILE);
+      }
     }
   }
-});
 
-titleNewGameBtn.addEventListener('click', (ev) => {
-  ev.stopPropagation();
-  deleteSave().catch(e => console.error('[Save]', e));
-  openCharGen();
-});
+  // Dim overlay — darkens terrain for text readability
+  octx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  octx.fillRect(0, 0, offscreen.width, offscreen.height);
 
-titleEl.addEventListener('click', (ev) => {
-  // Only buttons above should act
-});
-
-document.getElementById('death').addEventListener('click', () => {
-  deleteSave().catch(e => console.error('[Save]', e));
-  showScreen('title');
-});
-document.getElementById('victory').addEventListener('click', () => {
-  deleteSave().catch(e => console.error('[Save]', e));
-  showScreen('title');
-});
-
-// ---- In-game restart confirmation ----
-function showRestartConfirm() {
-  restartConfirmEl.style.display = 'flex';
-}
-function hideRestartConfirm() {
-  restartConfirmEl.style.display = 'none';
+  _titleBackdropCanvas = offscreen;
+  _titleBackdropW = canvas.width;
+  _titleBackdropH = canvas.height;
 }
 
-document.getElementById('restart-yes').addEventListener('click', (ev) => {
-  ev.stopPropagation();
-  hideRestartConfirm();
-  deleteSave().catch(e => console.error('[Save]', e));
-  showScreen('title');
-});
+// ---- Title menu state ----
+let _titleMenuOptions = ['NEW GAME'];
+let _titleMenuIndex = 0;
 
-document.getElementById('restart-no').addEventListener('click', (ev) => {
-  ev.stopPropagation();
-  hideRestartConfirm();
-});
-
-restartConfirmEl.addEventListener('click', (ev) => {
-  ev.stopPropagation();
-});
-
-// ==================== TITLE-SCREEN BACKDROP ====================
-function drawTitleBackdrop() {
-  ctx.fillStyle = '#0a0a0a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'rgba(255,255,255,0.02)';
-  for (let y = 0; y < canvas.height; y += 3) {
-    ctx.fillRect(0, y, canvas.width, 1);
+async function updateTitleMenu() {
+  if (await hasSave()) {
+    _titleMenuOptions = ['CONTINUE', 'NEW GAME'];
+  } else {
+    _titleMenuOptions = ['NEW GAME'];
+  }
+  // Clamp index if options changed
+  if (_titleMenuIndex >= _titleMenuOptions.length) {
+    _titleMenuIndex = 0;
   }
 }
-drawTitleBackdrop();
+
+// ---- Render: Title Screen ----
+function renderTitle() {
+  generateTitleBackdrop();
+
+  // Draw cached terrain backdrop
+  if (_titleBackdropCanvas) {
+    ctx.drawImage(_titleBackdropCanvas, 0, 0);
+  } else {
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Title text
+  ctx.font = '24px "Press Start 2P"';
+  ctx.fillStyle = '#e8e8e8';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('OVERWORLD', canvas.width / 2, canvas.height * 0.35);
+
+  // Subtitle
+  ctx.font = '7px "Press Start 2P"';
+  ctx.fillStyle = '#3a3a3a';
+  ctx.fillText('A world of tooth and claw', canvas.width / 2, canvas.height * 0.35 + 34);
+
+  // Menu options
+  const menuY = canvas.height * 0.52;
+  const lineHeight = 28;
+
+  for (let i = 0; i < _titleMenuOptions.length; i++) {
+    const y = menuY + i * lineHeight;
+    const selected = (i === _titleMenuIndex);
+    ctx.font = '10px "Press Start 2P"';
+    ctx.fillStyle = selected ? '#e8e8e8' : '#4a4a4a';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(_titleMenuOptions[i], canvas.width / 2, y);
+
+    if (selected) {
+      // Draw cursor
+      const textWidth = ctx.measureText(_titleMenuOptions[i]).width;
+      ctx.fillText('▶', canvas.width / 2 - textWidth / 2 - 20, y);
+    }
+  }
+}
+
+// ---- Render: Death Screen ----
+function renderDeathScreen() {
+  // Re-render the game world behind the overlay (handles resize too)
+  if (state.player) {
+    try { render(); } catch (e) { /* fallback: leave existing canvas */ }
+  }
+
+  // Dark overlay
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // "YOU DIED" text
+  ctx.font = '24px "Press Start 2P"';
+  ctx.fillStyle = '#888';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('YOU DIED', canvas.width / 2, canvas.height * 0.42);
+
+  // "PRESS ENTER" prompt
+  ctx.font = '8px "Press Start 2P"';
+  ctx.fillStyle = '#4a4a4a';
+  ctx.fillText('PRESS ENTER', canvas.width / 2, canvas.height * 0.52);
+}
+
+// ---- Render: Victory Screen ----
+function renderVictoryScreen() {
+  // Re-render the game world behind the overlay
+  if (state.player) {
+    try { render(); } catch (e) { /* fallback: leave existing canvas */ }
+  }
+
+  // Dark overlay
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // "VICTORY" text
+  ctx.font = '24px "Press Start 2P"';
+  ctx.fillStyle = '#e8e8e8';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('VICTORY', canvas.width / 2, canvas.height * 0.38);
+
+  // Subtitle
+  ctx.font = '8px "Press Start 2P"';
+  ctx.fillStyle = '#888';
+  ctx.fillText('The land exhales.', canvas.width / 2, canvas.height * 0.46);
+
+  // "PRESS ENTER" prompt
+  ctx.fillStyle = '#4a4a4a';
+  ctx.fillText('PRESS ENTER', canvas.width / 2, canvas.height * 0.54);
+}
+
+// ---- Render: Restart Confirmation (canvas overlay during gameplay) ----
+let _restartConfirmVisible = false;
+
+function renderRestartConfirm() {
+  // Game world is already on the canvas from the last render
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.font = '14px "Press Start 2P"';
+  ctx.fillStyle = '#e8e8e8';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('NEW GAME?', canvas.width / 2, canvas.height * 0.40);
+
+  ctx.font = '8px "Press Start 2P"';
+  ctx.fillStyle = '#888';
+  ctx.fillText('This will delete your save.', canvas.width / 2, canvas.height * 0.47);
+
+  ctx.font = '10px "Press Start 2P"';
+  ctx.fillStyle = '#4a4a4a';
+  ctx.fillText('Y / N', canvas.width / 2, canvas.height * 0.55);
+}
+
+function showRestartConfirm() {
+  _restartConfirmVisible = true;
+  renderRestartConfirm();
+}
+function hideRestartConfirm() {
+  _restartConfirmVisible = false;
+  if (state.gameState === 'play') render();
+}
+
+// ---- Title menu: keyboard actions ----
+function handleTitleKeys(ev) {
+  const kLow = ev.key.toLowerCase();
+  // Navigate menu
+  if (kLow === 'arrowup' || kLow === 'w' || kLow === 'k' || ev.key === '8') {
+    ev.preventDefault();
+    _titleMenuIndex = Math.max(0, _titleMenuIndex - 1);
+    renderTitle();
+    return;
+  }
+  if (kLow === 'arrowdown' || kLow === 's' || kLow === 'j' || ev.key === '2') {
+    ev.preventDefault();
+    _titleMenuIndex = Math.min(_titleMenuOptions.length - 1, _titleMenuIndex + 1);
+    renderTitle();
+    return;
+  }
+  // Select option
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    selectTitleOption();
+    return;
+  }
+}
+
+async function selectTitleOption() {
+  const option = _titleMenuOptions[_titleMenuIndex];
+  if (option === 'CONTINUE') {
+    // Same logic as the old DOM title-continue button
+    if (await hasSave()) {
+      const resumed = await tryResume();
+      if (resumed) {
+        state.gameState = 'play';
+        try { updateUI(); } catch(e) { console.error(e); }
+      } else {
+        deleteSave().catch(e => console.error('[Save]', e));
+        await updateTitleMenu();
+        openCharGen();
+      }
+    }
+  } else if (option === 'NEW GAME') {
+    deleteSave().catch(e => console.error('[Save]', e));
+    openCharGen();
+  }
+}
+
+// ---- Species selection: keyboard handler ----
+function handleSpeciesKeys(ev) {
+  const kLow = ev.key.toLowerCase();
+  if (kLow === 'arrowup' || kLow === 'w' || kLow === 'k' || ev.key === '8') {
+    ev.preventDefault();
+    speciesKeyNav(-1);
+    return;
+  }
+  if (kLow === 'arrowdown' || kLow === 's' || kLow === 'j' || ev.key === '2') {
+    ev.preventDefault();
+    speciesKeyNav(1);
+    return;
+  }
+  if (ev.key === 'Enter') {
+    ev.preventDefault();
+    beginGame();
+    return;
+  }
+}
+
+// ---- Transition: go to title screen ----
+function goToTitle() {
+  state.gameState = 'title';
+  hideHud();
+  // Invalidate backdrop cache so it regenerates at current canvas size
+  _titleBackdropCanvas = null;
+  updateTitleMenu().then(() => renderTitle()).catch(e => console.error(e));
+}
+
+// ---- Draw initial title (replaced old drawTitleBackdrop) ----
+document.fonts.ready.then(() => {
+  if (state.gameState === 'title') renderTitle();
+});
 updateZoomLabel();
 
 // ==================== STARTUP ====================
-// Migration + async title-button check. Wrapped in async IIFE because
+// Migration + async title-menu check. Wrapped in async IIFE because
 // the save system now uses IndexedDB (async) instead of localStorage.
 (async () => {
   try {
@@ -694,7 +1121,11 @@ updateZoomLabel();
   } catch (e) {
     console.error('[Save] localStorage → IndexedDB migration failed:', e);
   }
-  await updateTitleButtons();
+  await updateTitleMenu();
+  // Initial title render — terrain backdrop + menu.
+  // Font may still be loading; document.fonts.ready handler above
+  // will re-render once the pixel font is available.
+  renderTitle();
 })();
 
 // ==================== DEBUG / ECOLOGY TESTING ====================
@@ -714,7 +1145,18 @@ window.state = state;
 // ==================== WINDOW RESIZE ====================
 window.addEventListener('resize', () => {
   resizeCanvas();
-  if (state.gameState === 'play') render();
+  if (state.gameState === 'play') {
+    render();
+    if (_restartConfirmVisible) renderRestartConfirm();
+  } else if (state.gameState === 'title') {
+    // Invalidate backdrop cache — new canvas size requires regeneration
+    _titleBackdropCanvas = null;
+    renderTitle();
+  } else if (state.gameState === 'death') {
+    renderDeathScreen();
+  } else if (state.gameState === 'victory') {
+    renderVictoryScreen();
+  }
 });
 
 // ==================== ZOOM DEBUG ====================

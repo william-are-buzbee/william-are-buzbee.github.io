@@ -109,6 +109,30 @@ function beginGame(){
   render();
 }
 
+// ==================== SPECIES KEYBOARD NAVIGATION ====================
+// Arrow keys cycle through species, selecting each one.
+// Enter triggers beginGame (handled by main.js keydown).
+function speciesKeyNav(direction) {
+  const currentIdx = state.selectedSpecies
+    ? SPECIES_ORDER.indexOf(state.selectedSpecies)
+    : -1;
+  let newIdx;
+  if (currentIdx === -1) {
+    newIdx = direction > 0 ? 0 : SPECIES_ORDER.length - 1;
+  } else {
+    newIdx = currentIdx + direction;
+    if (newIdx < 0) newIdx = SPECIES_ORDER.length - 1;
+    if (newIdx >= SPECIES_ORDER.length) newIdx = 0;
+  }
+  state.selectedSpecies = SPECIES_ORDER[newIdx];
+  renderSpeciesSelect();
+
+  // Scroll selected option into view
+  const container = document.getElementById('species-options');
+  const selected = container ? container.querySelector('.species-option.selected') : null;
+  if (selected) selected.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
 // ==================== LEGACY COMPAT ====================
 // These functions are exported so existing call sites don't break.
 // openCharGen now opens species selection directly.
@@ -118,16 +142,17 @@ function openBodyTypeSelect(){ openCharGen(); } // redirect to species select
 function renderBodyTypeSelect(){ renderSpeciesSelect(); }
 
 // ==================== DEATH / VICTORY ====================
+// Canvas-rendered in main.js — these just set state.
+// main.js callbacks handle save deletion and canvas rendering.
 function onPlayerDeath(){
   state.gameState = 'death';
-  document.getElementById('death').style.display = 'flex';
+  // DOM element hidden via CSS — canvas overlay rendered by main.js callback
 }
 function onVictory(){
   state.gameState = 'victory';
-  document.getElementById('victory-sub').textContent = `The land exhales.`;
-  document.getElementById('victory').style.display = 'flex';
+  // DOM element hidden via CSS — canvas overlay rendered by main.js callback
 }
 
 export { openCharGen, renderCharGen, randomizeAttrs, beginGame,
          openBodyTypeSelect, renderBodyTypeSelect,
-         onPlayerDeath, onVictory };
+         onPlayerDeath, onVictory, speciesKeyNav };
