@@ -24,9 +24,11 @@ export const BIOME = {
   // --- Rock/mountain: mineral substrate, slightly cooler than organic terrain ---
   rock:      {bg:'#282624', fg:'#484440', mid:'#3a3834', tint:'#484440'},
 
-  // --- Water: dark with faint teal cast from dissolved mineral content, NOT blue ---
-  water:     {bg:'#101814', fg:'#203028', mid:'#18241e', tint:null},
-  deep:      {bg:'#0c1210', fg:'#182420', mid:'#101c18', tint:null},
+  // --- Water: reflects amber sky, dark and warm, NOT blue or teal ---
+  // Distinguished from terrain primarily by surface texture (ripple pattern), not by hue.
+  // Trace mineral shimmer provides the only color variation.
+  water:     {bg:'#121010', fg:'#2a2018', mid:'#1e1814', tint:null},
+  deep:      {bg:'#0c0a08', fg:'#201810', mid:'#18120e', tint:null},
 
   // --- Geothermal: lava stays hot ---
   lava:      {bg:'#3e1a10', fg:'#e08060', mid:'#b85030', tint:'#d06040'},
