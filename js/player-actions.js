@@ -1,6 +1,6 @@
 // ==================== PLAYER ACTIONS ====================
 import { state, worlds, covers } from './state.js';
-import { FED_MAX, STAT_MAX, TURN_AGILITY_COEFF, facingSteps } from './constants.js';
+import { FED_MAX, STAT_MAX, facingSteps } from './constants.js';
 import { isWalkable, terrainName } from './terrain.js';
 import { rand, randi, randomRound } from './rng.js';
 import { FOOD, POTIONS, BOOKS, findWeapon, findArmor } from './items.js';
@@ -12,6 +12,7 @@ import { log, LOG_CATEGORIES } from './log.js';
 import { updateUI } from './ui.js';
 import { playerAttack } from './combat.js';
 import { endPlayerTurn } from './enemy-ai.js';
+import { applyTurningCost } from './physiology.js';
 
 function fedDrainFor(action){
   if (action === 'rest') return 2;
@@ -40,27 +41,21 @@ function attemptMove(dx, dy){
   if (!inBounds(state.player.layer, nx, ny)){ log('The world ends here.', LOG_CATEGORIES.MOVEMENT); return; }
   if (isImpassable(state.player.layer, nx, ny)) return;
 
-  // Instant turn check — if pressing a direction we're not facing, roll for free turn.
-  // On failure, spend the action just turning (face the new direction, turn over).
-  // On success, face and act in one action.
-  const needsTurn = (state.facing.dx !== dx || state.facing.dy !== dy);
-  if (needsTurn) {
-    const steps = facingSteps(state.facing.dx, state.facing.dy, dx, dy);
-    const baseChance = (STAT_MAX + 1 - state.player.siz) * TURN_AGILITY_COEFF / 100;
-    const instantTurnChance = Math.min(1, baseChance * (5 - steps) / 3);
-    state.facing.dx = dx;
-    state.facing.dy = dy;
-    if (Math.random() >= instantTurnChance) {
-      // Failed — spend the action turning only
-      endPlayerTurn('turn');
-      return;
-    }
-    // Success — continue to move/attack below
-  } else {
-    // Already facing this direction — no turn needed
-    state.facing.dx = dx;
-    state.facing.dy = dy;
+  // Update facing — always succeeds, no probability check.
+  // Physical cost of turning handled by mass-dependent momentum loss.
+  const oldDx = state.facing.dx;
+  const oldDy = state.facing.dy;
+  state.facing.dx = dx;
+  state.facing.dy = dy;
+
+  // Apply turning cost to momentum (mass-dependent)
+  const stepsChanged = facingSteps(oldDx, oldDy, dx, dy);
+  if (stepsChanged > 0) {
+    applyTurningCost(state.player, stepsChanged);
   }
+
+  // Set movement intensity based on sprint mode
+  state.player._lastMovementIntensity = state.player.sprintMode ? 1.0 : 0.25;
 
   const mon = monsterAt(nx, ny, state.player.layer);
   if (mon){
@@ -273,8 +268,15 @@ function equipArmorFromInv(idx) {
 
 function turnInPlace(dx, dy){
   if (state.facing.dx === dx && state.facing.dy === dy) return;
+  const oldDx = state.facing.dx;
+  const oldDy = state.facing.dy;
   state.facing.dx = dx;
   state.facing.dy = dy;
+  // Apply turning cost to momentum
+  const stepsChanged = facingSteps(oldDx, oldDy, dx, dy);
+  if (stepsChanged > 0) {
+    applyTurningCost(state.player, stepsChanged);
+  }
   log(`You turn ${dirName(dx, dy)}.`, LOG_CATEGORIES.MOVEMENT);
   endPlayerTurn('turn');
 }

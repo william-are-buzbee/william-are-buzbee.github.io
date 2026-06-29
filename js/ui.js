@@ -459,7 +459,12 @@ function updateHud(d) {
   // Region label
   const regionEl = document.getElementById('region-label');
   if (regionEl) {
-    regionEl.textContent = d.regionName || '';
+    let label = d.regionName || '';
+    // Sprint indicator — appended to region label when sprinting
+    if (p && p.sprintMode) {
+      label += '  ⚡ SPRINT';
+    }
+    regionEl.textContent = label;
   }
 }
 

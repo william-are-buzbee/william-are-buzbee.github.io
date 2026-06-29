@@ -26,8 +26,14 @@ import { log } from './log.js';
  *
  * If the creature has no fiberRatio data (not yet annotated), falls back
  * to static locomotion muscle / total mass.
+ *
+ * @param {object} entity — creature or player
+ * @param {number} [intensity] — movement intensity (0-1). Controls fast-twitch recruitment.
+ *   Below FAST_TWITCH_RECRUIT_THRESHOLD: fast-twitch not recruited (walking — slow-twitch only).
+ *   At or above threshold: fast-twitch contributes proportional to substrate.
+ *   null/undefined (NPC path): uses existing behavior (full substrate contribution).
  */
-function getBodyPTW(entity) {
+function getBodyPTW(entity, intensity) {
   const bodyMap = getBodyMap(entity);
   if (!bodyMap) return (entity.strength || 1) / (entity.siz || 1);
 
@@ -47,14 +53,23 @@ function getBodyPTW(entity) {
         hasFiberData = true;
         const fastMass = zone.muscle * zone.fiberRatio;
         const slowMass = zone.muscle * (1 - zone.fiberRatio);
-        const substrateFraction = (zone.substrateMax > 0)
-          ? (zone.substrate || 0) / zone.substrateMax
-          : 0;
 
-        // Fast-contracting force scales with available substrate
-        const fastForce = fastMass * substrateFraction;
-        // Slow-contracting force scales with circulatory efficiency
+        // Slow-twitch always contributes (aerobic baseline)
         const slowForce = slowMass * circEff;
+
+        // Fast-twitch only contributes when recruited (intensity above threshold)
+        let fastForce = 0;
+        if (intensity != null && intensity >= FAST_TWITCH_RECRUIT_THRESHOLD) {
+          const substrateFraction = (zone.substrateMax > 0)
+            ? (zone.substrate || 0) / zone.substrateMax : 0;
+          fastForce = fastMass * substrateFraction;
+        } else if (intensity == null) {
+          // NPC path — use existing logic (substrate always contributes)
+          const substrateFraction = (zone.substrateMax > 0)
+            ? (zone.substrate || 0) / zone.substrateMax : 0;
+          fastForce = fastMass * substrateFraction;
+        }
+        // intensity < threshold → fast-twitch not recruited → fastForce stays 0
 
         totalLocoForce += fastForce + slowForce;
       } else {
@@ -382,8 +397,52 @@ function _clearStressChemistry(creature, ticksElapsed) {
 }
 
 
+// ==================== MASS-DEPENDENT ACCELERATION (Speed Overhaul) ====================
+
+/**
+ * Turns needed to reach full stride from rest.
+ * Smaller animals have shorter muscle fibers that cycle faster and lower inertia.
+ * 5 kg → 1 turn, 22 kg → 2 turns, 90 kg → 3 turns, 200 kg → 4 turns.
+ */
+function turnsToFullSpeed(totalMass) {
+  return Math.max(1, Math.ceil(Math.log(totalMass / 3) / Math.log(4)));
+}
+
+/**
+ * Compute total body mass from surviving zones.
+ * Used by acceleration and turning cost systems.
+ */
+function getEntityTotalMass(entity) {
+  const bodyMap = getBodyMap(entity);
+  if (!bodyMap) return entity.totalMass || entity.siz || 10;
+  let total = 0;
+  for (const zone of bodyMap) {
+    if (!zone.destroyed) total += zone.mass || 0;
+  }
+  return total;
+}
+
+/**
+ * Apply turning cost to a creature's momentum when it changes facing.
+ * Heavier creatures lose more speed on direction changes.
+ * @param {object} creature — entity with _consecutiveMoveTurns
+ * @param {number} facingStepsChanged — 0-4 (number of 45° increments turned)
+ */
+function applyTurningCost(creature, facingStepsChanged) {
+  if (!creature._consecutiveMoveTurns || creature._consecutiveMoveTurns <= 0) return;
+  if (facingStepsChanged === 0) return;
+
+  const totalMass = getEntityTotalMass(creature);
+  // Heavier creatures lose more momentum on turns
+  // 1 facing step (45°) = minor correction, 4 steps (180°) = full reversal
+  const massScalar = Math.max(0, 1.0 - (totalMass / 200)); // 0 at 200kg, 1 at 0kg
+  const retained = Math.max(0, 1.0 - (facingStepsChanged / 4) * (1 - massScalar));
+  creature._consecutiveMoveTurns = Math.floor(creature._consecutiveMoveTurns * retained);
+}
+
 // ==================== EXPORTS ====================
 export { getBodyPTW, _getCirculatoryEfficiency, _getCirculatoryRegenEfficiency,
          _depleteLocomotionSubstrate, _regenerateSubstrate,
          processBleed, getHealingRate, applyHealing,
-         _releaseStressChemistry, _clearStressChemistry };
+         _releaseStressChemistry, _clearStressChemistry,
+         turnsToFullSpeed, getEntityTotalMass, applyTurningCost };

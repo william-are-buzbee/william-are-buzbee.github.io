@@ -476,12 +476,14 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  // Shift+direction: turn in place without moving
+  // Shift+direction: sprint movement (replaces legacy turn-in-place)
+  // Sprint mode set by keydown/keyup — Shift+direction now does sprint move.
   if (ev.shiftKey) {
     const dir = DIR_MAP[kLow];
     if (dir) {
       ev.preventDefault();
-      safeDispatch(turnInPlace, dir[0], dir[1]);
+      state.player.sprintMode = true;
+      safeDispatch(attemptMove, dir[0], dir[1]);
       return;
     }
   }
@@ -493,10 +495,11 @@ document.addEventListener('keydown', (ev) => {
     return;
   }
 
-  // Movement (direction keys)
+  // Movement (direction keys) — non-sprint
   const dir = DIR_MAP[kLow];
   if (dir) {
     ev.preventDefault();
+    if (state.player) state.player.sprintMode = false;
     safeDispatch(attemptMove, dir[0], dir[1]);
     return;
   }
@@ -510,6 +513,14 @@ document.addEventListener('keydown', (ev) => {
 });
 
 // ==================== INVENTORY DELEGATION ====================
+
+// ── Sprint mode: reset when Shift is released ──
+document.addEventListener('keyup', (ev) => {
+  if (ev.key === 'Shift' && state.player) {
+    state.player.sprintMode = false;
+  }
+});
+
 // LEGACY POPUP: inventory buttons still appear inside modals (ground loot,
 // shops). Migrate these to HUD-native patterns then remove this listener.
 const INV_ACTIONS = {

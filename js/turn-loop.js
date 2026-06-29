@@ -8,7 +8,7 @@ import { state, worlds, monsters } from './state.js';
 import { getBodyMap, getNeuralArchitecture,
          BASE_AP_COST, MAX_ACTIONS_PER_INPUT, REFERENCE_SPEED, BASE_TICKS_PER_ACTION,
          HEAL_BASE_RATE, HEAL_REST_MULTIPLIER, REGEN_FRACTION,
-         SUBSTRATE_DEPLETION_MOD, SUBSTRATE_REGEN_BASE,
+         SUBSTRATE_DEPLETION_MOD, SUBSTRATE_DEPLETION_HIGH, SUBSTRATE_REGEN_BASE,
          CIRC_REGEN_EFF_CLOSED, CIRC_REGEN_EFF_OPEN, CIRC_REGEN_EFF_HYBRID,
          VASCULARITY_MIN, REGEN_UPREGULATION, FAST_TWITCH_RECRUIT_THRESHOLD,
          MASS_HUNGER_COEFF, NEURAL_HUNGER_COEFF,
@@ -28,7 +28,8 @@ import { computeSignals } from './signals.js';
 import { updateScentSystem } from './scent.js';
 import { getBodyPTW, processBleed, applyHealing,
          _getCirculatoryRegenEfficiency, _regenerateSubstrate,
-         _clearStressChemistry } from './physiology.js';
+         _clearStressChemistry,
+         turnsToFullSpeed, getEntityTotalMass, applyTurningCost } from './physiology.js';
 import { runCreatureAI, _updateInWater } from './ai.js';
 import { isWaterTile, isWaterLocked, wouldExceedTerritory, WATER_TILES,
          rebuildSpatialGrid, canMoveTo } from './ai-utils.js';
@@ -262,13 +263,27 @@ function endPlayerTurn(action){
 
   turnCount++;
 
+  // ── Player acceleration tracking (mass-dependent startup) ──
+  // Must run BEFORE AP calculation so first turn of movement isn't at 0.
+  if (state.player.movedThisTurn) {
+    state.player._consecutiveMoveTurns = (state.player._consecutiveMoveTurns || 0) + 1;
+  } else {
+    state.player._consecutiveMoveTurns = 0;
+  }
+
   // ── AP and world-time calculations ──
   // These are SEPARATE systems that both read the player's speed.
   //   AP accumulation:  ratio-based (creaturePTW / playerPTW) — determines
   //                     how often creatures act relative to the player.
   //   World-time:       reference-speed-based — determines how fast the
   //                     day/night cycle and time-scaled effects advance.
-  const playerAPRate = getBodyPTW(player);
+  const playerIntensity = state.player._lastMovementIntensity || 0.25;
+  const playerPTW = getBodyPTW(player, playerIntensity);
+  // Apply mass-dependent acceleration scalar
+  const playerTotalMass = getEntityTotalMass(player);
+  const playerTTFS = turnsToFullSpeed(playerTotalMass);
+  const playerAccelScalar = Math.min(1.0, (state.player._consecutiveMoveTurns || 0) / playerTTFS);
+  const playerAPRate = playerPTW * (state.player.movedThisTurn ? playerAccelScalar : 1.0);
   const effectivePlayerRate = Math.max(playerAPRate, 0.001);  // guard against zero/tiny
 
   // World-time: how many day-cycle ticks pass per player action.
@@ -370,17 +385,20 @@ function endPlayerTurn(action){
   _updateInWater(state.player);
   computeSignals(state.player);
 
-  // ── Player substrate depletion ──
+  // ── Player substrate depletion — uses actual movement intensity ──
   if (state.player.movedThisTurn) {
     const playerBodyMap = getBodyMap(state.player);
     if (playerBodyMap) {
-      for (const zone of playerBodyMap) {
-        if (zone.destroyed || !zone.locomotion || zone.fiberRatio == null) continue;
-        const fastMass = zone.muscle * zone.fiberRatio;
-        // Player moves at moderate intensity by default
-        // Future: sprint action could use SUBSTRATE_DEPLETION_HIGH
-        const cost = fastMass * SUBSTRATE_DEPLETION_MOD;
-        zone.substrate = Math.max(0, (zone.substrate || 0) - cost);
+      const intensity = state.player._lastMovementIntensity || 0.25;
+      // Only deplete if intensity exceeds fast-twitch recruitment threshold
+      if (intensity >= FAST_TWITCH_RECRUIT_THRESHOLD) {
+        const excessIntensity = intensity - FAST_TWITCH_RECRUIT_THRESHOLD;
+        for (const zone of playerBodyMap) {
+          if (zone.destroyed || !zone.locomotion || zone.fiberRatio == null) continue;
+          const fastMass = zone.muscle * zone.fiberRatio;
+          const cost = fastMass * excessIntensity * SUBSTRATE_DEPLETION_HIGH;
+          zone.substrate = Math.max(0, (zone.substrate || 0) - cost);
+        }
       }
     }
   }
@@ -390,17 +408,14 @@ function endPlayerTurn(action){
     const playerBodyMap = getBodyMap(state.player);
     if (playerBodyMap) {
       const circRegenEff = _getCirculatoryRegenEfficiency(state.player);
+      const playerIntensity = state.player._lastMovementIntensity || 0.25;
       for (const zone of playerBodyMap) {
         if (zone.destroyed || zone.fiberRatio == null) continue;
         if (zone.substrateMax == null || zone.substrateMax <= 0) continue;
         if (zone.substrate >= zone.substrateMax) continue;
 
-        // Block regen on locomotion zones only when movement was high-intensity.
-        // Walking/foraging is aerobic — regen proceeds normally.
+        // Block regen on locomotion zones only when movement intensity was high
         if (zone.locomotion && state.player.movedThisTurn) {
-          // Player currently always moves at moderate intensity (SUBSTRATE_DEPLETION_MOD).
-          // Future: sprint action would set a flag for high intensity.
-          const playerIntensity = 0.25; // moderate — below FAST_TWITCH_RECRUIT_THRESHOLD
           if (playerIntensity >= FAST_TWITCH_RECRUIT_THRESHOLD) continue;
         }
 
@@ -411,6 +426,36 @@ function endPlayerTurn(action){
         zone.substrate = Math.min(zone.substrateMax, (zone.substrate || 0) + regen);
       }
     }
+  }
+
+  // ── Sprint exhaustion: auto-disable sprint when any locomotion zone runs dry ──
+  if (state.player.sprintMode) {
+    const playerBodyMap = getBodyMap(state.player);
+    if (playerBodyMap) {
+      let anyDepleted = false;
+      let warned25 = false;
+      for (const zone of playerBodyMap) {
+        if (zone.destroyed || !zone.locomotion || zone.fiberRatio == null) continue;
+        if (zone.substrateMax > 0 && zone.substrate <= 0) {
+          anyDepleted = true;
+        }
+        if (!state.player._sprintWarnedLow && zone.substrateMax > 0 &&
+            zone.substrate / zone.substrateMax <= 0.25 && zone.substrate > 0) {
+          warned25 = true;
+        }
+      }
+      if (warned25) {
+        log('Your legs burn.', LOG_CATEGORIES.ENVIRONMENT);
+        state.player._sprintWarnedLow = true;
+      }
+      if (anyDepleted) {
+        log("Your legs give out — you can't maintain this pace.", LOG_CATEGORIES.ENVIRONMENT);
+        state.player.sprintMode = false;
+        state.player._sprintWarnedLow = false;
+      }
+    }
+  } else {
+    state.player._sprintWarnedLow = false;
   }
 
   // Reset player per-turn flags AFTER signals are computed (Prompt L-A).
@@ -481,11 +526,23 @@ function endPlayerTurn(action){
       }
 
       // Accumulate AP based on speed ratio (pure ratio math, no world-ticks)
-      const speedRatio = getBodyPTW(m) / effectivePlayerRate;
+      // Apply mass-dependent acceleration scalar.
+      // Only reduces speed once the creature has been moving (consecutiveMoveTurns > 0).
+      // Standing creatures act at full AP rate so they can detect, react, and start moving.
+      // Once in motion, speed ramps up from 1/ttfs to full over several turns.
+      const creatureTotalMass = getEntityTotalMass(m);
+      const creatureTTFS = turnsToFullSpeed(creatureTotalMass);
+      const rawConsecutive = m._consecutiveMoveTurns || 0;
+      const creatureAccelScalar = rawConsecutive > 0
+        ? Math.min(1.0, rawConsecutive / creatureTTFS)
+        : 1.0;
+      const creaturePTW = getBodyPTW(m);
+      const speedRatio = (creaturePTW * creatureAccelScalar) / effectivePlayerRate;
       m._accumulatedAP = (m._accumulatedAP || 0) + speedRatio * BASE_AP_COST;
 
       // Act while enough AP is accumulated (up to cap)
       let actionsThisTurn = 0;
+      let movedAnyAction = false;  // Track if creature moved during ANY action this input
       while (m._accumulatedAP >= BASE_AP_COST && actionsThisTurn < MAX_ACTIONS_PER_INPUT) {
         m._accumulatedAP -= BASE_AP_COST;
         actionsThisTurn++;
@@ -498,6 +555,7 @@ function endPlayerTurn(action){
 
         // Run the creature's full AI cycle
         runCreatureAI(m);
+        if (m.movedThisTurn) movedAnyAction = true;
 
         if (state.player.hp <= 0){ _onPlayerDeathCallback && _onPlayerDeathCallback(); return; }
         if (m.hp <= 0) break;  // creature died during its action
@@ -509,6 +567,14 @@ function endPlayerTurn(action){
 
       // Store action count for debugCognition
       m._actionsThisTurn = actionsThisTurn;
+
+      // ── NPC acceleration tracking (mass-dependent startup) ──
+      // Track whether the creature moved during any of its actions this player input.
+      if (movedAnyAction) {
+        m._consecutiveMoveTurns = (m._consecutiveMoveTurns || 0) + 1;
+      } else {
+        m._consecutiveMoveTurns = 0;
+      }
 
       // ── Time-scaled substrate regeneration (runs once per player input) ──
       _regenerateSubstrate(m, worldTicksElapsed);

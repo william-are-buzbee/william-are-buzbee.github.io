@@ -181,6 +181,12 @@ const TRANSIENT_FIELDS = [
     // AP system: accumulated action points and per-input action count (runtime only)
     '_accumulatedAP',            // float: AP carryover between player inputs
     '_actionsThisTurn',          // int: how many actions creature took this player input
+
+    // Speed overhaul: mass-dependent acceleration and sprint (runtime only)
+    '_consecutiveMoveTurns',     // int: consecutive turns this entity has been moving (inertia tracking)
+    '_lastMovementIntensity',    // float: player movement intensity this turn (0.25 walk, 1.0 sprint)
+    'sprintMode',                // boolean: player is holding sprint (Shift key)
+    '_sprintWarnedLow',          // boolean: player has been warned about low substrate
 ];
 
 /** Create a shallow copy with all transient per-turn fields removed. */
@@ -223,6 +229,10 @@ function initTransientFields(entity) {
     entity._lastGanglionIntensity = null;     // Ganglion: no intensity from last turn
     entity._accumulatedAP = 0;                // AP system: no carryover on load
     entity._actionsThisTurn = 0;              // AP system: no actions taken yet
+    entity._consecutiveMoveTurns = 0;         // Speed overhaul: no momentum on load
+    entity._lastMovementIntensity = null;     // Speed overhaul: no movement intensity
+    entity.sprintMode = false;                // Speed overhaul: not sprinting
+    entity._sprintWarnedLow = false;          // Speed overhaul: no substrate warning
 }
 
 // ==================== HELPERS ====================

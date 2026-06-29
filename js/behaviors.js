@@ -13,7 +13,7 @@ import { DMG, getBodyMap, getAvailableAttacks, selectHitZone,
          REST_RECOVERY_NORMAL, REST_RECOVERY_WEAKENED, REST_RECOVERY_CRITICAL,
          REST_EATING_BONUS,
          BURST_COEFF, BLOOD_DEATH_THRESHOLD,
-         SAFETY_DECAY_RATE } from './constants.js';
+         SAFETY_DECAY_RATE, facingSteps } from './constants.js';
 import { rand, randi, roll100 } from './rng.js';
 import { monAcc, monDodge, monDamage, monCritChance, monCritMult, DEFAULT_WANDER_PROFILE } from './monsters.js';
 import { chebyshev } from './world-state.js';
@@ -27,12 +27,17 @@ import { DIRECTION_DELTAS, dist, directionToward, directionAwayFrom,
          wouldExceedTerritory, hasCladeTerritory, tileIsFood,
          findNearestFoodTile, getCorpseAt } from './ai-utils.js';
 import { getAdjacentPrey, isViablePrey, applySafetyFromDamage } from './detection.js';
+import { applyTurningCost } from './physiology.js';
 
 // ==================== ACTION DISPATCHER (Prompt O) ====================
 // Translates reactive/deliberative output into existing behavior functions.
 
 function executeAction(creature, action) {
   let moved = false;
+  // Capture facing before action for turning cost calculation
+  const oldFacingDx = creature.facing ? creature.facing.dx : 0;
+  const oldFacingDy = creature.facing ? creature.facing.dy : 0;
+
   switch (action.behavior) {
     case 'retaliate': {
       // Attack the target
@@ -226,6 +231,15 @@ function executeAction(creature, action) {
       break;
     }
   }
+
+  // Apply mass-dependent turning cost if creature changed facing during movement
+  if (creature.facing && (creature.facing.dx !== oldFacingDx || creature.facing.dy !== oldFacingDy)) {
+    const stepsChanged = facingSteps(oldFacingDx, oldFacingDy, creature.facing.dx, creature.facing.dy);
+    if (stepsChanged > 0) {
+      applyTurningCost(creature, stepsChanged);
+    }
+  }
+
   return moved;
 }
 

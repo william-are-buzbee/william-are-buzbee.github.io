@@ -286,16 +286,14 @@ export const BASE_TICKS_PER_ACTION = 1.0;   // world-ticks per player action at 
 export const MAX_BONUS_MOVE_CHANCE = 0.50;  // DEPRECATED (no bonus moves in AP system)
 export const MIN_ACTION_CHANCE     = 0.25;  // DEPRECATED (no action skipping in AP system)
 
-// Instant turn agility — smaller creatures change facing for free more often.
-export const TURN_AGILITY_COEFF    = 1.0;   // instantTurnChance = (STAT_MAX+1-Size)*TURN_AGILITY_COEFF/100
-
-// Angular scaling for instant turn: the base chance above is calibrated for a
-// 90° turn (2 steps of 45°).  Smaller turns are easier, larger turns are harder.
-//   chance = baseChance * (5 - steps) / 3
-// Steps 1 (45°) → ×1.33,  2 (90°) → ×1.0,  3 (135°) → ×0.67,  4 (180°) → ×0.33
+// DEPRECATED — replaced by mass-dependent turning cost system (applyTurningCost in physiology.js).
+// Turning is now deterministic: player always faces the pressed direction, and the physical cost
+// is reflected in reduced _consecutiveMoveTurns (momentum loss proportional to mass and turn angle).
+export const TURN_AGILITY_COEFF    = 1.0;   // DEPRECATED — no longer used
 
 // Compute the minimum number of 45° increments between two facing directions.
 // Returns 0–4 (0 = same direction, 4 = full reversal).
+// Used by mass-dependent turning cost system (applyTurningCost in physiology.js).
 const _DIRS = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
 export function facingSteps(dx1, dy1, dx2, dy2) {
   let i1 = -1, i2 = -1;
