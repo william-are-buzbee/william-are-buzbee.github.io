@@ -10,21 +10,21 @@ export const BIOME = {
   // Native Clade-A vision: lifted brightness, rich warm-spectrum separation.
 
   // Plains: warm brown ground with muted accent detail.
-  plains:    {bg:'#342818', fg:'#7a4c38', mid:'#583a28', tint:null},
+  plains:    {bg:'#36221A', fg:'#7A4830', mid:'#5A3E26', tint:null},
 
   // Forest: dark floor, warm brown canopy features.
-  forest:    {bg:'#2e160e', fg:'#6a2c24', mid:'#4a2018', tint:'#6a2c24'},
+  forest:    {bg:'#2E1610', fg:'#671721', mid:'#4C2A18', tint:'#671721'},
 
   // --- Mineral-depleted zone: pale, desaturated, washed-out gray ---
   // The "dead zone" — muted and gray against the rich living biomes.
   desert:    {bg:'#383636', fg:'#bab6b2', mid:'#868280', tint:'#a09c98'},
 
   // --- Rock/mountain: mineral substrate, slightly cooler than organic terrain ---
-  rock:      {bg:'#3a3228', fg:'#a89a84', mid:'#786c58', tint:'#968a76'},
+  rock:      {bg:'#3A3428', fg:'#9C9278', mid:'#68604E', tint:'#968A6E'},
 
   // --- Water: cool-toned, dark ---
-  water:     {bg:'#302a1c', fg:'#b09868', mid:'#6e5c3c', tint:null},
-  deep:      {bg:'#221c14', fg:'#786a50', mid:'#443a28', tint:null},
+  water:     {bg:'#18242F', fg:'#A08848', mid:'#68582F', tint:null},
+  deep:      {bg:'#121B23', fg:'#5A4825', mid:'#3C3019', tint:null},
 
   // --- Geothermal: lava stays hot ---
   lava:      {bg:'#3e1a10', fg:'#e08060', mid:'#b85030', tint:'#d06040'},
@@ -44,14 +44,14 @@ export const BIOME = {
   wood_floor:{bg:'#2c2010', fg:'#8e6c44', mid:'#604828', tint:null},
 
   // --- Chemotrophic biomes: non-photosynthetic, manganese-purple ---
-  mushroom:  {bg:'#241c30', fg:'#806898', mid:'#583c68', tint:'#70587e'},
-  mushforest:{bg:'#261e32', fg:'#866c90', mid:'#5a3e6c', tint:'#70587e'},
+  mushroom:  {bg:'#281930', fg:'#7E6494', mid:'#523C64', tint:'#6C5480'},
+  mushforest:{bg:'#281E34', fg:'#886E94', mid:'#5C4070', tint:'#705880'},
 
   // --- Crops: muted amber ---
   wheat:     {bg:'#382e18', fg:'#aa8c48', mid:'#7a6438', tint:null},
 
   // --- Beach: transition between sand and water, warm but darker than sand ---
-  beach:     {bg:'#403628', fg:'#a89474', mid:'#786a50', tint:'#8e7c58'},
+  beach:     {bg:'#40321C', fg:'#A69270', mid:'#76684C', tint:'#8E7C58'},
   // --- Sand: mineral grains reflecting amber starlight, warm tan ---
   sand:      {bg:'#383636', fg:'#bab6b2', mid:'#868280', tint:'#a09c98'},
   ruin:      {bg:'#2a2624', fg:'#6e645c', mid:'#524e48', tint:'#645c58'},
@@ -60,13 +60,13 @@ export const BIOME = {
   cave_rock: {bg:'#181816', fg:'#2c2a28', mid:'#201e1c', tint:null},
 
   // --- Wetland: wet dead organic matter ---
-  mud:       {bg:'#2c2010', fg:'#7a5c28', mid:'#54401c', tint:'#664820'},
+  mud:       {bg:'#2E2114', fg:'#706830', mid:'#4C4824', tint:'#706830'},
 
   // --- Fungal ground: non-photosynthetic chemotrophic mat, purple-dark ---
-  fungal_grass:{bg:'#221c2e', fg:'#6c5c88', mid:'#4c3e5e', tint:'#5c4c6e'},
+  fungal_grass:{bg:'#241E30', fg:'#6E5E8A', mid:'#4E3E62', tint:'#5E4E72'},
 
   // --- Bare earth: dry ground ---
-  dirt:      {bg:'#362a14', fg:'#7e6840', mid:'#5e482c', tint:null},
+  dirt:      {bg:'#382814', fg:'#78532C', mid:'#583E22', tint:null},
   hut_wall:  {bg:'#2c2010', fg:'#8e6c44', mid:'#604828', tint:null},
 };
 
