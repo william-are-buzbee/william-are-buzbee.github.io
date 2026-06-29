@@ -9,32 +9,28 @@ export const BIOME = {
   // --- Photosynthetic biomes ---
   // Native Clade-A vision: lifted brightness, rich warm-spectrum separation.
 
-  // Plains: dark red-violet — living photosynthetic mat under amber starlight.
-  // Visibly different from dirt (dead organic, warmer/lighter).
-  plains:    {bg:'#221618', fg:'#442830', mid:'#342024', tint:null},
+  // Plains: warm brown ground with muted accent detail.
+  plains:    {bg:'#2a2218', fg:'#504830', mid:'#3c3420', tint:null},
 
-  // Forest: deepest red — photosynthetic flora, trees are the most visibly red element.
-  // Near-black floor, deep crimson canopy features.
-  forest:    {bg:'#1a1014', fg:'#382018', mid:'#281814', tint:'#382018'},
+  // Forest: dark floor, warm brown canopy features.
+  forest:    {bg:'#1a1210', fg:'#3a2818', mid:'#281c14', tint:'#3a2818'},
 
   // --- Mineral-depleted zone: pale, desaturated, washed-out gray ---
   // The "dead zone" — muted and gray against the rich living biomes.
   desert:    {bg:'#383636', fg:'#bab6b2', mid:'#868280', tint:'#a09c98'},
 
   // --- Rock/mountain: mineral substrate, slightly cooler than organic terrain ---
-  rock:      {bg:'#282624', fg:'#484440', mid:'#3a3834', tint:'#484440'},
+  rock:      {bg:'#2e2820', fg:'#504a3e', mid:'#3e3830', tint:'#504a3e'},
 
-  // --- Water: reflects amber sky, dark and warm, NOT blue or teal ---
-  // Distinguished from terrain primarily by surface texture (ripple pattern), not by hue.
-  // Trace mineral shimmer provides the only color variation.
-  water:     {bg:'#121010', fg:'#3a2c18', mid:'#241c10', tint:null},
-  deep:      {bg:'#0c0a08', fg:'#2a1c10', mid:'#1a1208', tint:null},
+  // --- Water: cool-toned, dark ---
+  water:     {bg:'#182030', fg:'#304860', mid:'#243848', tint:null},
+  deep:      {bg:'#101820', fg:'#203040', mid:'#182430', tint:null},
 
   // --- Geothermal: lava stays hot ---
   lava:      {bg:'#3e1a10', fg:'#e08060', mid:'#b85030', tint:'#d06040'},
 
   // --- Stone (boulders, stairs, structural) — mineral substrate ---
-  stone:     {bg:'#282624', fg:'#484440', mid:'#3a3834', tint:'#484440'},
+  stone:     {bg:'#2e2820', fg:'#504a3e', mid:'#3e3830', tint:'#504a3e'},
 
   // --- Underground: warm amber-brown, well-lit by native eyes ---
   // Geothermally active ecosystem — not a dark dungeon.
@@ -55,22 +51,22 @@ export const BIOME = {
   wheat:     {bg:'#382e18', fg:'#aa8c48', mid:'#7a6438', tint:null},
 
   // --- Beach: transition between sand and water, warm but darker than sand ---
-  beach:     {bg:'#302818', fg:'#504430', mid:'#403820', tint:'#504430'},
+  beach:     {bg:'#382e22', fg:'#5a5038', mid:'#484028', tint:'#5a5038'},
   // --- Sand: mineral grains reflecting amber starlight, warm tan ---
-  sand:      {bg:'#382e1e', fg:'#585040', mid:'#484028', tint:'#585040'},
+  sand:      {bg:'#3a3428', fg:'#625a48', mid:'#504838', tint:'#625a48'},
   ruin:      {bg:'#2a2624', fg:'#6e645c', mid:'#524e48', tint:'#645c58'},
   void:      {bg:'#000000', fg:'#000000', mid:'#000000', tint:null},
   cave_wall: {bg:'#1a1614', fg:'#342e28', mid:'#262220', tint:null},
   cave_rock: {bg:'#181816', fg:'#2c2a28', mid:'#201e1c', tint:null},
 
   // --- Wetland: wet dead organic matter ---
-  mud:       {bg:'#1e1610', fg:'#342418', mid:'#28201c', tint:'#342418'},
+  mud:       {bg:'#1e1810', fg:'#342a18', mid:'#28201c', tint:'#342a18'},
 
   // --- Fungal ground: non-photosynthetic chemotrophic mat, purple-dark ---
   fungal_grass:{bg:'#1e181e', fg:'#382e38', mid:'#28222a', tint:'#382e38'},
 
-  // --- Bare earth: dead organic + mineral substrate, warmer/lighter than living mat ---
-  dirt:      {bg:'#2a2018', fg:'#483828', mid:'#3a2c20', tint:null},
+  // --- Bare earth: dry ground ---
+  dirt:      {bg:'#241c14', fg:'#403420', mid:'#32281a', tint:null},
   hut_wall:  {bg:'#2c2010', fg:'#8e6c44', mid:'#604828', tint:null},
 };
 
