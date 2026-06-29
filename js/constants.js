@@ -102,6 +102,15 @@ for (let r = 0; r < BIOME_TARGET.length; r++) {
   }
 }
 
+// ==================== AMBIENT BRIGHTNESS DIP ====================
+// Subtle terrain darkening around creatures to aid visibility of camouflaged
+// species.  Values are black-overlay alpha levels at pixel distances 1 and 2
+// from the creature silhouette.  BLOB_SCALE multiplies both alphas for the
+// unidentified-blob rendering tier (low visual confidence).
+export const AMBIENT_DIP_INNER      = 0.20;  // alpha for terrain pixels 1px from creature
+export const AMBIENT_DIP_OUTER      = 0.08;  // alpha for terrain pixels 2px from creature
+export const AMBIENT_DIP_BLOB_SCALE = 0.5;   // multiplier for blob rendering tier
+
 // ==================== GANGLION SYSTEM (Hare Vertical Slice) ====================
 // Thresholds for the ganglion-based behavior system.  Only creatures with
 // CREATURE_NEURAL data run this path; all others use evaluateReactiveRules.

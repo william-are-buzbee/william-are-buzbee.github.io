@@ -2,7 +2,8 @@
 import { state, worlds, covers, groundItems } from './state.js';
 import { LAYER_UNDER, BIOME, SNR_FULL_RENDER,
          SPECIES_DISPLAY_CONFIDENCE, MARKER_MIN_RADIUS, MARKER_MAX_RADIUS,
-         MARKER_MASS_MIN, MARKER_MASS_MAX, SCENT_FLOOR, getBodyMap } from './constants.js';
+         MARKER_MASS_MIN, MARKER_MASS_MAX, SCENT_FLOOR, getBodyMap,
+         AMBIENT_DIP_INNER, AMBIENT_DIP_OUTER, AMBIENT_DIP_BLOB_SCALE } from './constants.js';
 import { tileSize, viewW, viewH, zoom, getSpritePack } from './display.js';
 import { T, terrainInfo } from './terrain.js';
 import { spriteCache, tintedSprite, tintedMonsterSprite, COLOR_PALETTES } from './sprites.js';
@@ -26,6 +27,162 @@ function getTintedMon(name, color) {
 
 export const canvas = document.getElementById('viewport');
 export const ctx = canvas.getContext('2d');
+
+// ── Ambient Brightness Dip ──
+// Darkens terrain pixels adjacent to a creature sprite to create a subtle
+// substrate-depression shadow. Computed from the sprite's pixel mask at
+// rendered tile resolution. Overlay canvases are cached per sprite+tileSize.
+
+const _dipOverlayCache = {};
+let _dipKeyCounter = 0;
+
+/**
+ * Build a tile-sized overlay canvas with black pixels at the correct alpha
+ * levels for the dip effect. Distance 1 from creature pixels gets INNER alpha,
+ * distance 2 gets OUTER alpha. Creature pixels and all other pixels are
+ * fully transparent.
+ */
+function _buildDipOverlay(spriteCanvas, ts) {
+  // Render sprite at tile resolution to read its pixel mask
+  const tmp = document.createElement('canvas');
+  tmp.width = ts; tmp.height = ts;
+  const tmpCtx = tmp.getContext('2d');
+  tmpCtx.imageSmoothingEnabled = false;
+  tmpCtx.drawImage(spriteCanvas, 0, 0, ts, ts);
+  const srcData = tmpCtx.getImageData(0, 0, ts, ts).data;
+
+  const size = ts * ts;
+  const dist = new Uint8Array(size);
+  dist.fill(255);
+
+  // Mark creature pixels (alpha > 0) as distance 0
+  for (let i = 0; i < size; i++) {
+    if (srcData[i * 4 + 3] > 0) dist[i] = 0;
+  }
+
+  // BFS expand: 2 iterations for distances 1 and 2
+  for (let d = 0; d < 2; d++) {
+    for (let py = 0; py < ts; py++) {
+      for (let px = 0; px < ts; px++) {
+        if (dist[py * ts + px] !== d) continue;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = px + dx, ny = py + dy;
+            if (nx >= 0 && nx < ts && ny >= 0 && ny < ts) {
+              const ni = ny * ts + nx;
+              if (dist[ni] > d + 1) dist[ni] = d + 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Build overlay canvas: black pixels with alpha by distance band
+  const ov = document.createElement('canvas');
+  ov.width = ts; ov.height = ts;
+  const ovCtx = ov.getContext('2d');
+  const ovImg = ovCtx.createImageData(ts, ts);
+  const ovPx = ovImg.data;
+  const a1 = Math.round(AMBIENT_DIP_INNER * 255);
+  const a2 = Math.round(AMBIENT_DIP_OUTER * 255);
+  for (let i = 0; i < size; i++) {
+    const d = dist[i];
+    if (d === 1)      ovPx[i * 4 + 3] = a1;
+    else if (d === 2) ovPx[i * 4 + 3] = a2;
+    // R,G,B stay 0 (black); alpha stays 0 for creature and far pixels
+  }
+  ovCtx.putImageData(ovImg, 0, 0);
+  return ov;
+}
+
+/**
+ * Get (or create+cache) the dip overlay for a given sprite canvas and tile size.
+ * Assigns a stable numeric key to each unique sprite canvas on first encounter.
+ */
+function _getDipOverlay(spriteCanvas, ts) {
+  if (!spriteCanvas._dipKey) {
+    spriteCanvas._dipKey = _dipKeyCounter++;
+  }
+  const key = spriteCanvas._dipKey + ':' + ts;
+  let ov = _dipOverlayCache[key];
+  if (!ov) {
+    ov = _buildDipOverlay(spriteCanvas, ts);
+    _dipOverlayCache[key] = ov;
+  }
+  return ov;
+}
+
+/**
+ * Draw the ambient brightness dip for a creature onto the main canvas.
+ * @param {CanvasRenderingContext2D} ctx — main canvas context
+ * @param {HTMLCanvasElement} spriteCanvas — the creature's baked sprite canvas
+ * @param {number} sx — screen x of the tile
+ * @param {number} sy — screen y of the tile
+ * @param {number} ts — rendered tile size in pixels
+ * @param {number} scale — intensity multiplier (1.0 = full, 0.5 = blob tier)
+ */
+function applyAmbientDip(ctx, spriteCanvas, sx, sy, ts, scale) {
+  const ov = _getDipOverlay(spriteCanvas, ts);
+  if (scale < 1.0) {
+    ctx.save();
+    ctx.globalAlpha = scale;
+    ctx.drawImage(ov, sx, sy);
+    ctx.restore();
+  } else {
+    ctx.drawImage(ov, sx, sy);
+  }
+}
+
+/**
+ * Apply ambient dip for a visually-detected creature at a tile position.
+ * Skips the player tile and non-detected creatures.
+ */
+function _applyVisualCreatureDip(wx, wy, px, py, TILE, layer) {
+  // Don't dip the player's own tile
+  if (wx === state.player.x && wy === state.player.y) return;
+  const mon = monsterAt(wx, wy, layer);
+  if (!mon) return;
+  // Only dip visually detected creatures (full-sprite tier)
+  const vd = state.player._visuallyDetected;
+  if (!vd || !vd.has(mon)) return;
+
+  let tintColor = null;
+  if (mon.tint) {
+    tintColor = mon.tint.startsWith('#') ? mon.tint : (BIOME[mon.tint] && BIOME[mon.tint].tint);
+  }
+  const spr = tintColor ? getTintedMon(mon.spr, tintColor) : getSprite(mon.spr);
+  if (spr) applyAmbientDip(ctx, spr, px, py, TILE, 1.0);
+}
+
+/**
+ * Build a small canvas with the unidentified blob ellipse, suitable for
+ * computing the ambient dip distance map. Cached by quantized radius.
+ */
+const _blobCanvasCache = {};
+function _getBlobCanvas(sizeEstimate, ts) {
+  let estimatedMass = sizeEstimate
+    ? (sizeEstimate.lower + sizeEstimate.upper) / 2 : 20;
+  const massNorm = Math.max(0, Math.min(1,
+    (Math.cbrt(estimatedMass) - Math.cbrt(MARKER_MASS_MIN)) /
+    (Math.cbrt(MARKER_MASS_MAX) - Math.cbrt(MARKER_MASS_MIN))
+  ));
+  const radius = (MARKER_MIN_RADIUS + massNorm * (MARKER_MAX_RADIUS - MARKER_MIN_RADIUS)) * ts;
+  // Quantize to nearest pixel for caching
+  const rKey = Math.round(radius) + ':' + ts;
+  if (_blobCanvasCache[rKey]) return _blobCanvasCache[rKey];
+
+  const c = document.createElement('canvas');
+  c.width = ts; c.height = ts;
+  const g = c.getContext('2d');
+  g.fillStyle = '#7a8b99';
+  g.beginPath();
+  g.ellipse(ts / 2, ts / 2, radius * 0.85, radius, 0, 0, Math.PI * 2);
+  g.fill();
+  _blobCanvasCache[rKey] = c;
+  return c;
+}
 
 /**
  * Resize canvas to match current viewport dimensions.
@@ -387,10 +544,12 @@ function render(){
       // Monocular: entity drawn, then a light overlay communicates reduced clarity.
       // Explored/ambient (neither): dimmed terrain, no entities.
       if (isVisible){
+        _applyVisualCreatureDip(wx, wy, px, py, TILE, layer);
         drawEntityAtTile(wx, wy, px, py, layer);
       } else if (isMonocular){
         // Draw the entity FIRST, then dim it lightly so monocular targets read
         // as "I can see this, but not as clearly."
+        _applyVisualCreatureDip(wx, wy, px, py, TILE, layer);
         drawEntityAtTile(wx, wy, px, py, layer);
         ctx.fillStyle = 'rgba(0,0,0,0.18)';
         ctx.fillRect(px, py, TILE, TILE);
@@ -435,6 +594,14 @@ function render(){
 
       // SNR-based opacity: faint at detection edge, solid up close
       const opacity = Math.min(1.0, Math.max(0.1, (bestSNR - 1.0) / (SNR_FULL_RENDER - 1.0)));
+
+      // ── Ambient dip for visual-FOV blobs (low-confidence visual detections) ──
+      // Applied BEFORE the opacity save so the terrain darkening is at full
+      // strength (not faded by detection SNR — the dip is on the substrate).
+      if (sensed._visualFOV && (sensed.speciesConfidence || 0) < SPECIES_DISPLAY_CONFIDENCE) {
+        const blobCanvas = _getBlobCanvas(sensed.sizeEstimate, TILE);
+        applyAmbientDip(ctx, blobCanvas, spx, spy, TILE, AMBIENT_DIP_BLOB_SCALE);
+      }
 
       ctx.save();
       ctx.globalAlpha = opacity;
