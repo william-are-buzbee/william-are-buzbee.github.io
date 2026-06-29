@@ -107,9 +107,23 @@ for (let r = 0; r < BIOME_TARGET.length; r++) {
 // CREATURE_NEURAL data run this path; all others use evaluateReactiveRules.
 // First pass — tune during playtesting.
 export const BASE_BOLT_THRESHOLD       = 4.0;   // vibration SNR required for bolt reflex at calm
-export const BASE_FLEE_THRESHOLD       = 0.5;   // total threat confidence required for flee
+export const BASE_FLEE_THRESHOLD       = 1.5;   // total threat confidence required for flee ganglion (excitatory, overcomes freeze)
+export const BASE_FREEZE_THRESHOLD     = 0.5;   // total threat confidence required for freeze ganglion (inhibitory)
 export const BASE_ALERT_THRESHOLD      = 0.25;  // total threat confidence required for alert
 export const STRESS_NEURAL_SENSITIVITY = 0.6;   // how much stress depresses thresholds (0-1)
+
+// FIRST PASS — transducer confidence normalization.
+// Placeholder for proper transducer signal model. Currently a fixed scaling factor
+// that determines how raw SNR maps to threat confidence. Transducer output should not
+// depend on ganglion thresholds — the signal is what it is, ganglia fire or don't.
+export const CONFIDENCE_NORMALIZATION  = 1.0;
+
+// FIRST PASS — confidence contribution caps and size weights.
+// These are placeholders for proper transducer sensitivity modeling.
+export const THREAT_CONF_CHANNEL_CAP       = 0.7;   // max confidence from any single channel
+export const THREAT_CONF_SIZE_MUCH_LARGER  = 0.3;   // confidence bonus for much-larger threat
+export const THREAT_CONF_SIZE_LARGER       = 0.2;   // confidence bonus for larger threat
+export const THREAT_CONF_SIZE_AMBIGUOUS    = 0.1;   // confidence bonus for ambiguous-size threat
 export const STRESS_RELEASE_AMOUNT     = 0.3;   // stress added per threat-ganglion trigger
 export const STRESS_RELEASE_MILD       = 0.08;  // stress added from alert (not flee)
 export const STRESS_CLEARANCE_BASE     = 0.04;  // stress cleared per turn before circ efficiency

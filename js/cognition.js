@@ -14,8 +14,12 @@ import { getBodyMap, getAvailableAttacks, computeStrikeDamage,
          MIN_SEEK, SEEK_SCALE, PERSISTENCE_SCALE,
          ASSESS_INTEGRATION_THRESHOLD,
          DIET_DECISION_THRESHOLD,
-         BASE_BOLT_THRESHOLD, BASE_FLEE_THRESHOLD, BASE_ALERT_THRESHOLD,
-         STRESS_NEURAL_SENSITIVITY } from './constants.js';
+         BASE_BOLT_THRESHOLD, BASE_FLEE_THRESHOLD, BASE_FREEZE_THRESHOLD,
+         BASE_ALERT_THRESHOLD,
+         CONFIDENCE_NORMALIZATION,
+         THREAT_CONF_CHANNEL_CAP, THREAT_CONF_SIZE_MUCH_LARGER,
+         THREAT_CONF_SIZE_LARGER, THREAT_CONF_SIZE_AMBIGUOUS,
+         STRESS_NEURAL_SENSITIVITY, STRESS_MAX } from './constants.js';
 import { chebyshev } from './world-state.js';
 import { randi } from './rng.js';
 import { dist, getCreatureMass, findNearestWaterTile, findNearestFoodTile,
@@ -452,14 +456,17 @@ function processGanglionSystem(creature) {
 /**
  * Compute effective thresholds by modulating base thresholds with stress level.
  * Higher stress = lower thresholds = easier to trigger.
+ * Stress modulates ALL thresholds uniformly — stress hormones in the hemolymph
+ * reach all ganglia because the circulatory system is body-wide.
  */
 function _computeEffectiveThresholds(neural, stress) {
   const sensitivity = STRESS_NEURAL_SENSITIVITY;
   const factor = 1.0 - Math.min(stress, 1.0) * sensitivity;
   return {
-    bolt:  BASE_BOLT_THRESHOLD  * factor,
-    flee:  BASE_FLEE_THRESHOLD  * factor,
-    alert: BASE_ALERT_THRESHOLD * factor,
+    bolt:   BASE_BOLT_THRESHOLD   * factor,
+    flee:   BASE_FLEE_THRESHOLD   * factor,
+    freeze: BASE_FREEZE_THRESHOLD * factor,
+    alert:  BASE_ALERT_THRESHOLD  * factor,
   };
 }
 
@@ -530,6 +537,11 @@ function _checkBoltReflex(creature, neural, detectionInfo, thresholds) {
  * - Chemical: clade, diet, stress state (future)
  * Combined confidence is higher than any single channel because
  * corroborating evidence narrows uncertainty.
+ *
+ * FIRST PASS — confidence normalization uses a fixed constant.
+ * Transducer output does not depend on ganglion thresholds — the signal
+ * is what it is, ganglia fire or don't. Channel caps and size weights
+ * are placeholders for proper transducer sensitivity modeling.
  */
 function _matchThreatTemplates(creature, neural, detectionInfo, thresholds) {
   const threatRegion = neural.structures.find(s => s.templates === 'threat');
@@ -547,23 +559,27 @@ function _matchThreatTemplates(creature, neural, detectionInfo, thresholds) {
     let confidence = 0;
 
     // Vibration contribution
+    // FIRST PASS — transducer output scaled by fixed normalization constant,
+    // not by ganglion threshold. Real transducers have nonlinear response
+    // curves, adaptation, and channel-specific scaling.
     if (det.vibrationSNR && det.vibrationSNR > 0) {
-      // Stronger vibration = more confidence something large is there
-      const vibConf = Math.min(det.vibrationSNR / (thresholds.flee * 2), 0.7);
+      const vibConf = Math.min(det.vibrationSNR / (CONFIDENCE_NORMALIZATION * 2), THREAT_CONF_CHANNEL_CAP);
       confidence += vibConf;
     }
 
     // Visual contribution
     if (det.visualSNR && det.visualSNR > 0) {
-      // Visual confirmation — size, movement
-      const visConf = Math.min(det.visualSNR / (thresholds.flee * 2), 0.7);
+      const visConf = Math.min(det.visualSNR / (CONFIDENCE_NORMALIZATION * 2), THREAT_CONF_CHANNEL_CAP);
       confidence += visConf;
     }
 
     // Size contribution — larger things relative to self are more threatening
-    if (det.sizeRelative === 'much_larger') confidence += 0.3;
-    else if (det.sizeRelative === 'larger') confidence += 0.2;
-    else if (det.sizeRelative === 'ambiguous') confidence += 0.1;
+    // FIRST PASS — placeholder for pattern library matching. Real size
+    // assessment comes from vibration amplitude patterns and visual angular
+    // size, not a category label.
+    if (det.sizeRelative === 'much_larger') confidence += THREAT_CONF_SIZE_MUCH_LARGER;
+    else if (det.sizeRelative === 'larger') confidence += THREAT_CONF_SIZE_LARGER;
+    else if (det.sizeRelative === 'ambiguous') confidence += THREAT_CONF_SIZE_AMBIGUOUS;
 
     // Diet contribution (if chemical detection available — hare has none airborne)
     if (det.dietType === 'predator' && det.dietConfidence > 0.3) {
@@ -584,8 +600,6 @@ function _matchThreatTemplates(creature, neural, detectionInfo, thresholds) {
     confidence: highestConfidence,
     source: threatSource,
     fleeBearing: threatBearing,
-    // Intensity for locomotion output — scales with confidence above flee threshold
-    fleeIntensity: Math.min(1.0, highestConfidence / thresholds.flee),
   };
 }
 
@@ -629,33 +643,63 @@ function _matchFoodTemplates(creature, neural, detectionInfo) {
 
 /**
  * Resolve competing signals at the central locomotion ganglion.
- * Highest-intensity signal wins. Not a priority list — signal magnitude.
+ *
+ * Two ganglion circuits on the locomotion pathway:
+ *   Freeze ganglion — lower threshold, inhibitory. Suppresses all motor output.
+ *   Flee ganglion — higher threshold, excitatory. Overcomes freeze inhibition.
+ *
+ * The transition from freeze to flee is NOT a decision. It happens because
+ * the transducer signal increased (threat closer) or the threshold decreased
+ * (stress chemistry), and the flee ganglion's threshold was crossed.
+ *
+ * The bolt reflex (checked earlier in processGanglionSystem) is a separate,
+ * faster circuit that fires on raw vibration magnitude before template matching.
  */
 function _resolveLocomotionOutput(creature, threatResult, foodResult, thresholds) {
-  // Check if threat exceeds flee threshold
-  if (threatResult && threatResult.confidence >= thresholds.flee) {
-    // Flee signal — high intensity, directional
-    creature._ganglionTriggeredStress = true;
-    return {
-      intensity: Math.min(1.0, threatResult.fleeIntensity),
-      direction: threatResult.fleeBearing,
-      source: threatResult.source,
-      type: 'flee', // cosmetic label for debug, not used for logic
-    };
+  if (threatResult) {
+    // ── Flee ganglion (excitatory, high threshold) ──
+    // Fires when accumulated confidence exceeds flee threshold.
+    // Output: maximum locomotion intensity, direction away from threat.
+    // This is a binary circuit — it fires or it doesn't. When it fires,
+    // the output is always maximum intensity.
+    if (threatResult.confidence >= thresholds.flee) {
+      creature._ganglionTriggeredStress = true;
+      return {
+        intensity: 1.0,                    // binary — flee ganglion fires at full
+        direction: threatResult.fleeBearing,
+        source: threatResult.source,
+        type: 'flee',
+      };
+    }
+
+    // ── Freeze ganglion (inhibitory, lower threshold) ──
+    // Fires when confidence exceeds freeze threshold but is below flee.
+    // Output: zero locomotion. Suppresses food-seeking, wandering, everything.
+    // The hare is actively holding still, not passively idle.
+    if (threatResult.confidence >= thresholds.freeze) {
+      creature._ganglionTriggeredStress = 'mild';
+      return {
+        intensity: 0,
+        direction: null,
+        type: 'freeze',
+      };
+    }
+
+    // ── Alert (below freeze threshold, above alert threshold) ──
+    // Orient toward signal source. No motor suppression — the hare might
+    // still graze if hungry. Alert is "something is there" without the
+    // confidence to trigger freeze.
+    if (threatResult.confidence >= thresholds.alert) {
+      creature._ganglionTriggeredStress = 'mild';
+      return {
+        intensity: 0,
+        direction: threatResult.fleeBearing ? (threatResult.fleeBearing + 4) % 8 : null,
+        type: 'alert',
+      };
+    }
   }
 
-  // Check if threat exceeds alert threshold (suppresses food, no locomotion)
-  if (threatResult && threatResult.confidence >= thresholds.alert) {
-    // Alert — orient toward threat, hold still, mild stress
-    creature._ganglionTriggeredStress = 'mild';
-    return {
-      intensity: 0,
-      direction: threatResult.fleeBearing ? (threatResult.fleeBearing + 4) % 8 : null,
-      type: 'alert',
-    };
-  }
-
-  // No threat — check food
+  // ── No threat above alert — check food ──
   if (foodResult) {
     return {
       intensity: foodResult.intensity,
@@ -665,12 +709,8 @@ function _resolveLocomotionOutput(creature, threatResult, foodResult, thresholds
     };
   }
 
-  // Nothing — hold still (default for vibration-dominant creature)
-  return {
-    intensity: 0,
-    direction: null,
-    type: 'hold',
-  };
+  // ── Nothing — hold still ──
+  return { intensity: 0, direction: null, type: 'hold' };
 }
 
 // ==================== DELIBERATIVE OVERRIDE (Prompt O) ====================
