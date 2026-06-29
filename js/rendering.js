@@ -6,7 +6,7 @@ import { LAYER_UNDER, BIOME, SNR_FULL_RENDER,
          AMBIENT_DIP_INNER, AMBIENT_DIP_OUTER, AMBIENT_DIP_BLOB_SCALE } from './constants.js';
 import { tileSize, viewW, viewH, zoom, getSpritePack } from './display.js';
 import { T, terrainInfo } from './terrain.js';
-import { spriteCache, tintedSprite, tintedMonsterSprite, COLOR_PALETTES } from './sprites.js';
+import { spriteCache, tintedSprite, tintedMonsterSprite, COLOR_PALETTES, textureConfig } from './sprites.js';
 import { spriteCache32, tintedSprite32, tintedMonsterSprite32 } from './sprites-32.js';
 import { inBounds, isTownCell, monsterAt, getCover } from './world-state.js';
 import { updateUI } from './ui.js';
@@ -299,13 +299,23 @@ function render(){
       // Cave wall uses variant sprites for tiling variety
       let groundSpriteName = groundInfo.sprite;
       if (ground === T.CAVE_WALL){
-        const wallVar = ((wx * 3571 + wy * 2909) >>> 0) % 3;
-        groundSpriteName = wallVar === 1 ? 'CAVE_WALL_V2' : wallVar === 2 ? 'CAVE_WALL_V3' : 'CAVE_WALL';
+        if (!textureConfig.CAVE_WALL) {
+          // Default: hash-based variant mix
+          const wallVar = ((wx * 3571 + wy * 2909) >>> 0) % 3;
+          groundSpriteName = wallVar === 1 ? 'CAVE_WALL_V2' : wallVar === 2 ? 'CAVE_WALL_V3' : 'CAVE_WALL';
+        }
+        // else: textureConfig override — groundSpriteName stays 'CAVE_WALL',
+        // getActiveSprite will return the selected variant via buildTintedTerrain
       }
       // Rock surface uses variant sprites for tiling variety
       if (ground === T.ROCK){
-        const rockVar = ((wx * 3571 + wy * 2909) >>> 0) % 3;
-        groundSpriteName = rockVar === 1 ? 'ROCK_V2' : rockVar === 2 ? 'ROCK_V3' : 'ROCK';
+        if (!textureConfig.ROCK) {
+          // Default: hash-based variant mix
+          const rockVar = ((wx * 3571 + wy * 2909) >>> 0) % 3;
+          groundSpriteName = rockVar === 1 ? 'ROCK_V2' : rockVar === 2 ? 'ROCK_V3' : 'ROCK';
+        }
+        // else: textureConfig override — groundSpriteName stays 'ROCK',
+        // getActiveSprite will return the selected variant via buildTintedTerrain
       }
 
       if (!cover && (ground === T.GRASS || ground === T.SAND || ground === T.CAVE_FLOOR || ground === T.CAVE_WALL || ground === T.ROCK) && rotVariant > 0){

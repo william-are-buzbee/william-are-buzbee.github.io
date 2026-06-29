@@ -735,7 +735,7 @@ Object.keys(S).forEach(k => spriteCache[k] = buildSprite(S[k]));
 // Terrain tint cache
 const tintedCache = {};
 function buildTintedTerrain(spriteName, palette){
-  const rows = S[spriteName];
+  const rows = getActiveSprite(spriteName);
   const c = document.createElement('canvas');
   c.width = SPR*PIX; c.height = SPR*PIX;
   const g = c.getContext('2d');
@@ -810,4 +810,65 @@ function mixColors(a, b, t){
   const br=(pb>>16)&255, bg=(pb>>8)&255, bb=pb&255;
   const r=Math.round(ar*(1-t)+br*t), gg=Math.round(ag*(1-t)+bg*t), bl=Math.round(ab*(1-t)+bb*t);
   return '#' + ((r<<16)|(gg<<8)|bl).toString(16).padStart(6,'0');
+}
+
+// ==================== SPRITE LIBRARY ====================
+// Maps tile sprite names to arrays of available variant pixel arrays.
+// Index 0 is always the default/current sprite.
+// The texture picker cycles through these per tile type.
+
+export const SPRITE_LIBRARY = {
+  // Ground tiles
+  GRASS:       [S.GRASS],
+  DIRT:        [S.DIRT],
+  MUD:         [S.MUD],
+  SAND:        [S.SAND],
+  ROCK:        [S.ROCK, S.ROCK_V2, S.ROCK_V3],
+  BEACH:       [S.BEACH],
+  FUNGAL_GRASS:[S.FUNGAL_GRASS],
+  WATER:       [S.WATER],
+  DEEP_WATER:  [S.DEEP_WATER],
+  CAVE_FLOOR:  [S.CAVE_FLOOR],
+  ROAD:        [S.ROAD],
+  RUIN_FLOOR:  [S.RUIN_FLOOR],
+
+  // Cover tiles
+  FOREST:      [S.FOREST],
+  MUSHFOREST:  [S.MUSHFOREST],
+  WHEAT:       [S.WHEAT],
+
+  // Wall/structure tiles
+  CAVE_WALL:   [S.CAVE_WALL, S.CAVE_WALL_V2, S.CAVE_WALL_V3],
+  CAVE_ROCK:   [S.CAVE_ROCK],
+  HUT_WALL:    [S.HUT_WALL],
+};
+
+// Active texture selections — index into SPRITE_LIBRARY arrays.
+// Exported so rendering and save/load can access it.
+export const textureConfig = {};
+Object.keys(SPRITE_LIBRARY).forEach(k => textureConfig[k] = 0);
+
+/**
+ * Get the currently selected sprite rows for a tile type.
+ * Falls back to the original S[name] if not in the library.
+ */
+export function getActiveSprite(spriteName) {
+  const lib = SPRITE_LIBRARY[spriteName];
+  if (!lib) return S[spriteName];
+  const idx = textureConfig[spriteName] || 0;
+  return lib[Math.min(idx, lib.length - 1)];
+}
+
+/**
+ * Rebuild sprite caches after a texture selection changes.
+ * Clears the relevant tinted cache entries so they rebuild on next render.
+ */
+export function rebuildSpriteCache(spriteName) {
+  // Rebuild the base sprite cache entry
+  spriteCache[spriteName] = buildSprite(getActiveSprite(spriteName));
+  // Clear tinted terrain cache entries that use this sprite
+  // (tintedCache keys are 'SPRITENAME|paletteName')
+  Object.keys(tintedCache).forEach(key => {
+    if (key.startsWith(spriteName + '|')) delete tintedCache[key];
+  });
 }

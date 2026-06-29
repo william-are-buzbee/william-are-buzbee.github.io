@@ -8,6 +8,7 @@ import { LAYER_META, HP_PER_SIZE, HP_PER_LEVEL_FACTOR, SPECIES_TEMPLATES, initBo
 import { findWeapon, findArmor } from './items.js';
 import { WANDER_PROFILES, DEFAULT_WANDER_PROFILE } from './monsters.js';
 import { render } from './rendering.js';
+import { textureConfig, rebuildSpriteCache, SPRITE_LIBRARY } from './sprites.js';
 import { log as _rawLog, LOG_CATEGORIES } from './log.js';
 
 // Wrap log() to tag DOM elements with categories for log tab/mute filtering.
@@ -721,6 +722,9 @@ export async function saveGame() {
 
       // World-map explored cells — Set<"cx,cy"> → array of strings
       exploredCells: state.exploredCells ? [...state.exploredCells] : [],
+
+      // Texture picker selections — sprite name → variant index
+      textureConfig: { ...textureConfig },
     };
 
     // Size measurement for diagnostics only — not used for storage.
@@ -924,6 +928,24 @@ export async function loadGame() {
 
     // --- Restore world-map explored cells ---
     state.exploredCells = new Set(data.exploredCells || []);
+
+    // --- Restore texture picker selections ---
+    if (data.textureConfig) {
+      // Reset to defaults first, then apply saved selections
+      Object.keys(textureConfig).forEach(k => textureConfig[k] = 0);
+      for (const [key, val] of Object.entries(data.textureConfig)) {
+        if (SPRITE_LIBRARY[key]) {
+          const idx = Math.floor(Number(val));
+          if (!isNaN(idx) && idx >= 0) {
+            textureConfig[key] = Math.min(idx, SPRITE_LIBRARY[key].length - 1);
+          }
+        }
+      }
+      // Rebuild all sprite caches to reflect loaded selections
+      Object.keys(textureConfig).forEach(name => {
+        if (textureConfig[name] !== 0) rebuildSpriteCache(name);
+      });
+    }
 
     return true;
   } catch (err) {
