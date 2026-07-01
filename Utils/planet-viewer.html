@@ -1,0 +1,3260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planet Generator</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #111214;
+  color: #c8c8cc;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #1a1b1e;
+  border-bottom: 1px solid #2a2b2e;
+  flex-wrap: wrap;
+}
+
+.top-bar label {
+  color: #888;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.top-bar input[type="number"] {
+  width: 90px;
+  padding: 5px 8px;
+  background: #111214;
+  border: 1px solid #3a3b3e;
+  color: #e0e0e0;
+  font-family: inherit;
+  font-size: 13px;
+  border-radius: 3px;
+}
+
+.top-bar input[type="number"]:focus {
+  outline: none;
+  border-color: #5a7a9a;
+}
+
+.top-bar button {
+  padding: 5px 14px;
+  background: #2a4a6a;
+  border: 1px solid #3a5a7a;
+  color: #d0d8e0;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+
+.top-bar button:hover { background: #3a5a7a; }
+.top-bar button:active { background: #1a3a5a; }
+
+.top-bar select {
+  padding: 5px 8px;
+  background: #111214;
+  border: 1px solid #3a3b3e;
+  color: #e0e0e0;
+  font-family: inherit;
+  font-size: 12px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.top-bar select:focus { outline: none; border-color: #5a7a9a; }
+
+.top-bar .sep {
+  width: 1px;
+  height: 20px;
+  background: #2a2b2e;
+}
+
+.status-text {
+  color: #666;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.main-area {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.planetary-panel {
+  flex: 1 1 55%;
+  max-width: 640px;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.planetary-panel canvas {
+  width: 100%;
+  max-width: 640px;
+}
+
+/* Tooltip */
+.cell-tooltip {
+  position: fixed;
+  z-index: 1000;
+  background: rgba(20, 22, 26, 0.94);
+  border: 1px solid #3a4a5a;
+  border-radius: 5px;
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #c8c8cc;
+  pointer-events: none;
+  max-width: 320px;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+
+.cell-tooltip .tip-row {
+  white-space: nowrap;
+}
+
+.cell-tooltip .tip-row b {
+  color: #5a7a9a;
+  font-weight: 600;
+}
+
+canvas {
+  border: 1px solid #2a2b2e;
+  cursor: crosshair;
+  image-rendering: pixelated;
+}
+
+canvas.globe-canvas {
+  image-rendering: auto;
+  cursor: grab;
+}
+
+canvas.globe-canvas:active {
+  cursor: grabbing;
+}
+
+canvas.mollweide-canvas {
+  image-rendering: auto;
+  cursor: crosshair;
+}
+
+canvas.hidden-canvas {
+  display: none;
+}
+
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid #3a3b3e;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.view-toggle button {
+  padding: 5px 10px;
+  background: #111214;
+  border: none;
+  border-right: 1px solid #3a3b3e;
+  color: #888;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  border-radius: 0;
+}
+
+.view-toggle button:last-child {
+  border-right: none;
+}
+
+.view-toggle button:hover {
+  background: #1e2024;
+  color: #c0c0c4;
+}
+
+.view-toggle button.active {
+  background: #2a4a6a;
+  color: #d0d8e0;
+}
+
+.info-panel {
+  display: none;
+}
+
+
+
+/* ── Regional detail panel ── */
+.regional-panel {
+  flex: 1 1 40%;
+  max-width: 520px;
+  min-width: 280px;
+}
+
+
+
+.regional-placeholder {
+  background: #1a1b1e;
+  border: 1px solid #2a2b2e;
+  border-radius: 4px;
+  padding: 24px 16px;
+  text-align: center;
+  color: #555;
+  font-style: italic;
+  font-size: 12px;
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.regional-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #1a1b1e;
+  border: 1px solid #2a2b2e;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+}
+
+.regional-header .region-label {
+  color: #5a7a9a;
+  font-size: 12px;
+  flex: 1;
+}
+
+.regional-header select {
+  padding: 4px 8px;
+  background: #111214;
+  border: 1px solid #3a3b3e;
+  color: #e0e0e0;
+  font-family: inherit;
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.regional-header select:focus { outline: none; border-color: #5a7a9a; }
+
+.regional-header .close-btn {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid #3a3b3e;
+  color: #888;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.regional-header .close-btn:hover { background: #2a2b2e; color: #ccc; }
+
+.regional-canvas-wrap {
+  border: 1px solid #2a2b2e;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.regional-canvas-wrap canvas {
+  image-rendering: pixelated;
+  cursor: crosshair;
+  width: 100%;
+  max-width: 1024px;
+}
+
+.active-panel {
+  border-color: #5a7a9a !important;
+}
+
+.regional-canvas-wrap.active-panel {
+  border-color: #5a7a9a !important;
+}
+
+.regional-header.active-panel {
+  border-color: #5a7a9a !important;
+}
+
+/* ── Tuning Panel ── */
+#tuningToggle {
+  padding: 5px 14px;
+  background: #2a4a6a;
+  border: 1px solid #3a5a7a;
+  color: #d0d8e0;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+#tuningToggle:hover { background: #3a5a7a; }
+
+#tuningPanel {
+  display: none;
+  background: rgba(10, 15, 25, 0.95);
+  border: 1px solid rgba(100, 120, 150, 0.25);
+  border-radius: 6px;
+  padding: 12px;
+  max-height: 520px;
+  overflow-y: auto;
+  width: 100%;
+}
+
+#tuningPanel::-webkit-scrollbar {
+  width: 6px;
+}
+#tuningPanel::-webkit-scrollbar-track {
+  background: rgba(20, 25, 35, 0.5);
+  border-radius: 3px;
+}
+#tuningPanel::-webkit-scrollbar-thumb {
+  background: rgba(100, 120, 150, 0.3);
+  border-radius: 3px;
+}
+
+.tune-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.tune-presets button {
+  padding: 3px 10px;
+  background: #1e2a3a;
+  border: 1px solid #3a4a5a;
+  color: #8899aa;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s, color 0.15s;
+}
+.tune-presets button:hover {
+  background: #2a3a4a;
+  color: #aabbcc;
+}
+.tune-presets button.preset-active {
+  background: #2a4a6a;
+  color: #d0d8e0;
+  border-color: #4a6a8a;
+}
+
+.tune-group-label {
+  color: #667788;
+  font-size: 11px;
+  margin: 10px 0 4px 0;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.tune-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 3px 0;
+  font-size: 12px;
+}
+
+.tune-row label {
+  width: 140px;
+  text-align: right;
+  color: #8899aa;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.tune-row input[type="range"] {
+  width: 120px;
+  accent-color: #4a7aaa;
+}
+
+.tune-value {
+  width: 50px;
+  text-align: left;
+  color: #aabbcc;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.tune-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(100, 120, 150, 0.15);
+}
+
+.tune-actions button {
+  padding: 4px 12px;
+  background: #1e2a3a;
+  border: 1px solid #3a4a5a;
+  color: #8899aa;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.15s;
+}
+.tune-actions button:hover {
+  background: #2a3a4a;
+  color: #aabbcc;
+}
+
+.tune-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 30, 50, 0.95);
+  border: 1px solid #4a6a8a;
+  color: #c0d0e0;
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  z-index: 2000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.tune-toast.visible { opacity: 1; }
+
+.tuning-wrap {
+  width: 100%;
+  padding: 0 16px 8px 16px;
+  background: #1a1b1e;
+  border-bottom: 1px solid #2a2b2e;
+}
+
+.info-value.type-continental { color: #8ab47a; }
+.info-value.type-oceanic { color: #5a8aba; }
+.info-value.type-photo { color: #c06040; }
+.info-value.type-chemo { color: #8050a0; }
+.info-value.type-mixo { color: #a05070; }
+.info-value.type-barren { color: #808080; }
+.info-value.type-frozen { color: #c0c8d0; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <label for="seedInput">Seed</label>
+  <input type="number" id="seedInput" value="42" min="0" max="999999">
+  <button id="genBtn">Generate</button>
+  <div class="sep"></div>
+  <label for="overlaySelect">Overlay</label>
+  <select id="overlaySelect">
+    <option value="surface">Surface</option>
+    <option value="topographic">Topographic</option>
+    <option value="plates">Plates</option>
+    <option value="iron">Mineral: Iron</option>
+    <option value="copper">Mineral: Copper</option>
+    <option value="manganese">Mineral: Manganese</option>
+    <option value="composite">Mineral: Composite</option>
+    <option value="moisture">Moisture</option>
+    <option value="floraType">Flora Type</option>
+    <option value="floraDensity">Flora Density</option>
+  </select>
+  <div class="sep"></div>
+  <label>View</label>
+  <div class="view-toggle">
+    <button id="viewFlat" class="active" title="Flat map view">🗺 Flat</button>
+    <button id="viewGlobe" title="3D globe view">🌍 Globe</button>
+    <button id="viewMollweide" title="Mollweide equal-area projection">🗂 Mollweide</button>
+  </div>
+  <button id="homeBtn" title="Return to home orientation (north-up, equator-centered)">⌂ Home</button>
+  <span id="speedControl" style="display:none;">
+    <label style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Speed</label>
+    <input type="range" id="spinSpeedSlider" min="0" max="100" value="30"
+           style="width:100px;vertical-align:middle;">
+    <button id="pauseSpinBtn" title="Pause/Resume spin" style="padding:5px 8px;background:#2a4a6a;border:1px solid #3a5a7a;color:#d0d8e0;font-family:inherit;font-size:12px;cursor:pointer;border-radius:3px;">⏸</button>
+  </span>
+  <span class="status-text" id="statusText">Ready</span>
+</div>
+
+<div class="tuning-wrap">
+  <button id="tuningToggle">⚙ Tuning ▼</button>
+  <div id="tuningPanel"></div>
+</div>
+<div class="tune-toast" id="tuneToast"></div>
+
+<div class="main-area">
+  <div class="planetary-panel">
+    <canvas id="planetCanvas" width="1024" height="512"></canvas>
+    <canvas id="globeCanvas" class="globe-canvas hidden-canvas" width="600" height="600"></canvas>
+    <canvas id="mollweideCanvas" class="mollweide-canvas hidden-canvas" width="1024" height="512"></canvas>
+  </div>
+  <div class="regional-panel" id="regionalPanel">
+    <div class="regional-placeholder" id="regionalPlaceholder">Click a cell on any map view to generate a high-resolution regional detail view (~1 km per cell).</div>
+    <div id="regionalActive" style="display:none;">
+      <div class="regional-header" id="regionalHeader">
+        <span class="region-label" id="regionLabel">REGION: (—, —)</span>
+        <select id="regionalOverlaySelect">
+          <option value="surface">Surface</option>
+          <option value="topographic">Topographic</option>
+          <option value="iron">Mineral: Iron</option>
+          <option value="copper">Mineral: Copper</option>
+          <option value="manganese">Mineral: Manganese</option>
+          <option value="composite">Mineral: Composite</option>
+          <option value="moisture">Moisture</option>
+          <option value="floraType">Flora Type</option>
+          <option value="floraDensity">Flora Density</option>
+        </select>
+        <button class="close-btn" id="closeRegionalBtn" title="Close regional view">✕</button>
+      </div>
+      <div class="regional-canvas-wrap" id="regionalCanvasWrap">
+        <canvas id="regionalCanvas" width="512" height="512"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="cell-tooltip" id="cellTooltip" style="display:none;"></div>
+
+<script>
+// ── Tunable Parameters ──
+const params = {
+  // Plates
+  plateCountBase: 10,
+  plateCountRange: 6,
+  continentalRatio: 0.4,
+  minPlateSpacing: 0.4,  // 3D sphere units
+
+  // Elevation
+  continentalBase: -0.05,
+  continentalNoise: 0.12,
+  oceanicBase: -0.25,
+  fractalAmp: 0.15,
+  fractalOctaves: 4,
+  fractalScale: 0.02,
+
+  // Mountains
+  collisionHeight: 0.65,
+  mountainNoiseScale: 0.05,
+  arcHeight: 0.45,
+  arcNoiseScale: 0.06,
+
+  // Hotspots
+  hotspotCountBase: 3,
+  hotspotCountRange: 5,
+  hotspotIntensityMin: 0.5,
+  hotspotIntensityMax: 1.0,
+  subPeakMin: 2,
+  subPeakMax: 5,
+  subPeakSpread: 80,
+
+  // Erosion
+  erosionPasses: 4,
+  erosionRate: 0.18,
+
+  // Blend
+  blendWidth: 6,
+
+  // Regional detail
+  coastAmplitude: 0.10,
+  coastWidth: 0.07,
+  mountainDetail: 0.05,
+  shapeNoiseAmp: 0.05,
+  drainageDepth: 0.012,
+  drainagePathsMin: 6,
+  drainagePathsMax: 12,
+};
+
+// Store defaults for reset
+const defaultParams = { ...params };
+
+const paramConfig = {
+  plateCountBase:     { label: 'Plate count base',     min: 4,     max: 20,    step: 1,     group: 'Plates' },
+  plateCountRange:    { label: 'Plate count range',    min: 1,     max: 10,    step: 1,     group: 'Plates' },
+  continentalRatio:   { label: 'Continental %',        min: 0.10,  max: 0.70,  step: 0.05,  group: 'Plates' },
+  minPlateSpacing:    { label: 'Min plate spacing',    min: 0.15,  max: 0.80,  step: 0.05,  group: 'Plates' },
+  continentalBase:    { label: 'Continental base',     min: -0.15, max: 0.10,  step: 0.01,  group: 'Elevation' },
+  continentalNoise:   { label: 'Continental noise',    min: 0.03,  max: 0.30,  step: 0.01,  group: 'Elevation' },
+  oceanicBase:        { label: 'Oceanic base',         min: -0.40, max: -0.10, step: 0.01,  group: 'Elevation' },
+  fractalAmp:         { label: 'Fractal amplitude',    min: 0.05,  max: 0.30,  step: 0.01,  group: 'Elevation' },
+  fractalOctaves:     { label: 'Fractal octaves',      min: 2,     max: 6,     step: 1,     group: 'Elevation' },
+  fractalScale:       { label: 'Fractal scale',        min: 0.005, max: 0.05,  step: 0.005, group: 'Elevation' },
+  collisionHeight:    { label: 'Collision height',     min: 0.20,  max: 1.00,  step: 0.05,  group: 'Mountains' },
+  mountainNoiseScale: { label: 'Mountain noise',       min: 0.01,  max: 0.10,  step: 0.01,  group: 'Mountains' },
+  arcHeight:          { label: 'Arc height',           min: 0.10,  max: 0.80,  step: 0.05,  group: 'Mountains' },
+  arcNoiseScale:      { label: 'Arc noise',            min: 0.01,  max: 0.10,  step: 0.01,  group: 'Mountains' },
+  hotspotCountBase:   { label: 'Hotspot count',        min: 0,     max: 10,    step: 1,     group: 'Hotspots' },
+  hotspotCountRange:  { label: 'Hotspot range',        min: 1,     max: 10,    step: 1,     group: 'Hotspots' },
+  hotspotIntensityMin:{ label: 'Intensity min',        min: 0.1,   max: 0.9,   step: 0.1,   group: 'Hotspots' },
+  hotspotIntensityMax:{ label: 'Intensity max',        min: 0.2,   max: 1.0,   step: 0.1,   group: 'Hotspots' },
+  subPeakMin:         { label: 'Sub-peaks min',        min: 1,     max: 6,     step: 1,     group: 'Hotspots' },
+  subPeakMax:         { label: 'Sub-peaks max',        min: 1,     max: 8,     step: 1,     group: 'Hotspots' },
+  subPeakSpread:      { label: 'Sub-peak spread (km)', min: 20,    max: 200,   step: 10,    group: 'Hotspots' },
+  erosionPasses:      { label: 'Erosion passes',       min: 0,     max: 8,     step: 1,     group: 'Erosion' },
+  erosionRate:        { label: 'Erosion rate',          min: 0.04,  max: 0.40,  step: 0.02,  group: 'Erosion' },
+  blendWidth:         { label: 'Blend width',           min: 2,     max: 15,    step: 1,     group: 'Blend' },
+  coastAmplitude:     { label: 'Coast amplitude',      min: 0.02,  max: 0.20,  step: 0.01,  group: 'Regional' },
+  coastWidth:         { label: 'Coast width',           min: 0.03,  max: 0.15,  step: 0.01,  group: 'Regional' },
+  mountainDetail:     { label: 'Mountain detail',       min: 0.01,  max: 0.12,  step: 0.01,  group: 'Regional' },
+  shapeNoiseAmp:      { label: 'Shape noise',           min: 0.00,  max: 0.15,  step: 0.01,  group: 'Regional' },
+  drainageDepth:      { label: 'Drainage depth',        min: 0.000, max: 0.030, step: 0.002, group: 'Regional' },
+  drainagePathsMin:   { label: 'Drain paths min',      min: 2,     max: 12,    step: 1,     group: 'Regional' },
+  drainagePathsMax:   { label: 'Drain paths max',      min: 4,     max: 20,    step: 1,     group: 'Regional' },
+};
+
+// ── Constants ──
+const W = 512, H = 256;
+const TOTAL = W * H;
+
+// ── PRNG: mulberry32 ──
+function mulberry32(seed) {
+  let s = seed | 0;
+  return function() {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ── Noise ──
+function hashInt(x, y, seed) {
+  let h = (seed & 0xffffffff) + (x * 374761393) + (y * 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = h ^ (h >>> 16);
+  return (h >>> 0) / 4294967296;
+}
+
+function noise2D(x, y, seed) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const n00 = hashInt(ix, iy, seed);
+  const n10 = hashInt(ix + 1, iy, seed);
+  const n01 = hashInt(ix, iy + 1, seed);
+  const n11 = hashInt(ix + 1, iy + 1, seed);
+  const nx0 = n00 + (n10 - n00) * sx;
+  const nx1 = n01 + (n11 - n01) * sx;
+  return (nx0 + (nx1 - nx0) * sy) * 2 - 1; // map to -1..1
+}
+
+function fractalNoise(x, y, seed, octaves, baseScale) {
+  let value = 0, amplitude = 1, frequency = baseScale, totalAmp = 0;
+  for (let i = 0; i < octaves; i++) {
+    value += amplitude * noise2D(x * frequency, y * frequency, seed + i * 1000);
+    totalAmp += amplitude;
+    amplitude *= 0.5;
+    frequency *= 2;
+  }
+  return value / totalAmp;
+}
+
+// ── 3D noise for wrapping x-axis ──
+function hashInt3D(x, y, z, seed) {
+  let h = (seed & 0xffffffff) + (x * 374761393) + (y * 668265263) + (z * 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h = h ^ (h >>> 16);
+  return (h >>> 0) / 4294967296;
+}
+
+function noise3D(x, y, z, seed) {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const fx = x - ix, fy = y - iy, fz = z - iz;
+  const ux = fx * fx * (3 - 2 * fx);
+  const uy = fy * fy * (3 - 2 * fy);
+  const uz = fz * fz * (3 - 2 * fz);
+  const n000 = hashInt3D(ix,   iy,   iz,   seed);
+  const n100 = hashInt3D(ix+1, iy,   iz,   seed);
+  const n010 = hashInt3D(ix,   iy+1, iz,   seed);
+  const n110 = hashInt3D(ix+1, iy+1, iz,   seed);
+  const n001 = hashInt3D(ix,   iy,   iz+1, seed);
+  const n101 = hashInt3D(ix+1, iy,   iz+1, seed);
+  const n011 = hashInt3D(ix,   iy+1, iz+1, seed);
+  const n111 = hashInt3D(ix+1, iy+1, iz+1, seed);
+  const nx00 = n000 + (n100 - n000) * ux;
+  const nx10 = n010 + (n110 - n010) * ux;
+  const nx01 = n001 + (n101 - n001) * ux;
+  const nx11 = n011 + (n111 - n011) * ux;
+  const nxy0 = nx00 + (nx10 - nx00) * uy;
+  const nxy1 = nx01 + (nx11 - nx01) * uy;
+  return (nxy0 + (nxy1 - nxy0) * uz) * 2 - 1; // map to -1..1
+}
+
+function fractalNoise3D(x, y, z, seed, octaves, scale) {
+  let value = 0, amplitude = 1, frequency = scale, totalAmp = 0;
+  for (let i = 0; i < octaves; i++) {
+    value += amplitude * noise3D(x * frequency, y * frequency, z * frequency, seed + i * 1000);
+    totalAmp += amplitude;
+    amplitude *= 0.5;
+    frequency *= 2;
+  }
+  return value / totalAmp;
+}
+
+// Map x to a circle in 3D so x=0 and x=W land on the same point,
+// producing seamless wrapping on the x-axis.
+function wrappedNoise(x, y, seed, octaves, scale) {
+  const theta = (x / W) * Math.PI * 2;
+  const circleScale = W / (Math.PI * 2); // preserve feature size
+  const nx = Math.cos(theta) * circleScale;
+  const nz = Math.sin(theta) * circleScale;
+  return fractalNoise3D(nx, y, nz, seed, octaves, scale);
+}
+
+// ── Precomputed sphere positions for all cells ──
+const spherePos = new Array(W);
+for (let cx = 0; cx < W; cx++) {
+  spherePos[cx] = new Array(H);
+  for (let cy = 0; cy < H; cy++) {
+    const lon = (cx / W) * Math.PI * 2 - Math.PI;
+    const lat = (cy / H) * Math.PI - Math.PI / 2;
+    spherePos[cx][cy] = {
+      x: Math.cos(lat) * Math.cos(lon),
+      y: Math.sin(lat),
+      z: Math.cos(lat) * Math.sin(lon)
+    };
+  }
+}
+
+// Conversion factor: cell distance (at equator) to 3D unit-sphere distance
+const CELL_TO_3D = 2 * Math.PI / W; // ≈ 0.01227
+
+function dist3D(a, b) {
+  const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+  return Math.sqrt(dx*dx + dy*dy + dz*dz);
+}
+
+// Sample noise in 3D using sphere position — eliminates ALL grid artifacts
+function sphereNoise(pos, seed, octaves, scale) {
+  const s = scale * 100;
+  // Offset by irrational numbers to break grid alignment with sphere axes
+  return fractalNoise3D(
+    pos.x * s + 0.3183,   // ≈ 1/π
+    pos.y * s + 0.7071,   // ≈ 1/√2
+    pos.z * s + 0.4142,   // ≈ √2 - 1
+    seed, octaves, 1.0
+  );
+}
+
+// ── Utilities ──
+function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+function wrappedDistSq(x1, y1, x2, y2) {
+  let dx = Math.abs(x1 - x2);
+  if (dx > W / 2) dx = W - dx;
+  const dy = y1 - y2;
+  return dx * dx + dy * dy;
+}
+
+function wrappedDist(x1, y1, x2, y2) {
+  return Math.sqrt(wrappedDistSq(x1, y1, x2, y2));
+}
+
+function wrapX(x) { return ((x % W) + W) % W; }
+
+// ── Spherical distance (fixes pole pinching) ──
+function toSphere(cellX, cellY) {
+  const lon = (cellX / W) * Math.PI * 2 - Math.PI;  // -π to π
+  const lat = (cellY / H) * Math.PI - Math.PI / 2;   // -π/2 to π/2 (south to north)
+  return {
+    x: Math.cos(lat) * Math.cos(lon),
+    y: Math.sin(lat),
+    z: Math.cos(lat) * Math.sin(lon)
+  };
+}
+
+function sphericalDist(x1, y1, x2, y2) {
+  const a = toSphere(x1, y1);
+  const b = toSphere(x2, y2);
+  const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+  return Math.sqrt(dx*dx + dy*dy + dz*dz);
+}
+
+// Convert a plate drift (2D angle + speed) to a 3D tangent vector on the sphere
+function driftTo3D(centerX, centerY, angleDeg, speed) {
+  const lon = (centerX / W) * Math.PI * 2 - Math.PI;
+  const lat = (centerY / H) * Math.PI - Math.PI / 2;
+  // Local east unit vector
+  const ex = -Math.sin(lon), ey = 0, ez = Math.cos(lon);
+  // Local north unit vector
+  const nx = -Math.cos(lon) * Math.sin(lat), ny = Math.cos(lat), nz = -Math.sin(lon) * Math.sin(lat);
+  const a = angleDeg * Math.PI / 180;
+  return {
+    x: speed * (Math.cos(a) * ex + Math.sin(a) * nx),
+    y: speed * (Math.cos(a) * ey + Math.sin(a) * ny),
+    z: speed * (Math.cos(a) * ez + Math.sin(a) * nz),
+  };
+}
+
+function idx(x, y) { return y * W + wrapX(x); }
+
+function maxKey(obj) {
+  let best = null, bestVal = -Infinity;
+  for (const k in obj) {
+    if (obj[k] > bestVal) { bestVal = obj[k]; best = k; }
+  }
+  return best;
+}
+
+function toRad(deg) { return deg * Math.PI / 180; }
+
+function getLatitudeBand(y) {
+  if (y < 25 || y >= 230) return 'polar';
+  if (y < 64 || y >= 192) return 'temperate';
+  return 'tropical';
+}
+
+// ── Planet data ──
+let cells = null;
+let plates = null;
+let hotspots = null;
+let geoSeeds = null; // mountain/arc/rift seed points
+
+// ── Spatial index for geological seeds ──
+const GRID_SIZE = 20;
+const GRID_W = Math.ceil(W / GRID_SIZE);
+const GRID_H = Math.ceil(H / GRID_SIZE);
+
+function buildSeedGrid(seeds) {
+  const grid = new Array(GRID_W * GRID_H);
+  for (let i = 0; i < grid.length; i++) grid[i] = [];
+  for (const s of seeds) {
+    const gx = Math.floor(s.x / GRID_SIZE) % GRID_W;
+    const gy = clamp(Math.floor(s.y / GRID_SIZE), 0, GRID_H - 1);
+    grid[gy * GRID_W + gx].push(s);
+  }
+  return grid;
+}
+
+function queryNearbySeeds(grid, x, y, maxRadius3D) {
+  const results = [];
+  const pos = spherePos[x][y];
+  // Convert 3D radius to cell units, accounting for pole compression
+  const lat = Math.abs(((y + 0.5) / H) - 0.5) * Math.PI;
+  const cosLat = Math.max(0.05, Math.cos(lat));
+  const equatCells = maxRadius3D / CELL_TO_3D;
+  const safeCells = equatCells / cosLat;
+  const cellRadius = Math.min(Math.ceil(safeCells / GRID_SIZE) + 1, Math.ceil(GRID_W / 2));
+  const gx0 = Math.floor(x / GRID_SIZE);
+  const gy0 = Math.floor(y / GRID_SIZE);
+  for (let dy = -cellRadius; dy <= cellRadius; dy++) {
+    const gy = gy0 + dy;
+    if (gy < 0 || gy >= GRID_H) continue;
+    for (let dx = -cellRadius; dx <= cellRadius; dx++) {
+      const gx = ((gx0 + dx) % GRID_W + GRID_W) % GRID_W;
+      const bucket = grid[gy * GRID_W + gx];
+      for (const s of bucket) {
+        const d = dist3D(pos, spherePos[s.x][s.y]);
+        if (d < maxRadius3D) {
+          results.push({ seed: s, dist: d });
+        }
+      }
+    }
+  }
+  return results;
+}
+
+// ── Generation pipeline ──
+function generatePlanet(seed) {
+  const rng = mulberry32(seed);
+  cells = new Array(TOTAL);
+  for (let i = 0; i < TOTAL; i++) {
+    cells[i] = {
+      x: i % W,
+      y: (i / W) | 0,
+      plateId: 0,
+      plateType: 'oceanic',
+      nearestDist: 0,
+      secondPlateId: 0,
+      secondDist: Infinity,
+      boundaryType: null,
+      boundaryStrength: 0,
+      boundaryDistance: 999,
+      elevation: 0,
+      isLand: false,
+      isShallowWater: false,
+      isDeepWater: true,
+      minerals: { iron: 0, copper: 0, manganese: 0 },
+      mineralTotal: 0,
+      isDepleted: true,
+      dominant: 'iron',
+      volcanism: 0,
+      proximity: 0,
+      blend: 0.5,
+      convergence: 0,
+      moisture: 0,
+      baseMoisture: 0,
+      temperature: 0.7,
+      isFreezing: false,
+      wind: { direction: 0, speed: 1 },
+      floraType: 'none',
+      floraDensity: 0,
+    };
+  }
+
+  // Step 1: Plates
+  step1_generatePlates(seed, rng);
+  // Step 1b: Generate geological seed points (mountains, arcs, rifts)
+  step1b_generateGeoSeeds(seed, rng);
+  // Step 2: Elevation
+  step2_computeElevation(seed, rng);
+  // Step 3: Minerals
+  step3_computeMinerals(seed, rng);
+  // Step 4: Atmosphere
+  step4_computeAtmosphere(seed, rng);
+  // Step 5: Flora
+  step5_computeFlora();
+}
+
+// ── Step 1: Plates ──
+function step1_generatePlates(seed, rng) {
+  const N = params.plateCountBase + (seed % params.plateCountRange);
+
+  // 1a. Place centers
+  const centers = [];
+  let attempts = 0;
+  while (centers.length < N && attempts < 50000) {
+    const cx = Math.floor(rng() * W);
+    const cy = Math.floor(rng() * H);
+    let ok = true;
+    for (const c of centers) {
+      if (dist3D(spherePos[cx][cy], spherePos[c.x][c.y]) < params.minPlateSpacing) { ok = false; break; }
+    }
+    if (ok) centers.push({ x: cx, y: cy });
+    attempts++;
+  }
+
+  // 1c. Assign plate properties
+  plates = centers.map((c, i) => {
+    const type = rng() < params.continentalRatio ? 'continental' : 'oceanic';
+    return {
+      id: i,
+      center: c,
+      type: type,
+      drift: {
+        angle: rng() * 360,
+        speed: 0.5 + rng() * 2.5,
+      },
+      baseRock: {
+        iron: type === 'continental' ? 0.3 + rng() * 0.3 : 0.15 + rng() * 0.2,
+        copper: 0.05 + rng() * 0.15,
+        manganese: type === 'oceanic' ? 0.2 + rng() * 0.3 : 0.05 + rng() * 0.15,
+      },
+    };
+  });
+
+  // 1b. Voronoi assignment (track nearest and second-nearest)
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let nearest = { id: -1, dist: Infinity };
+      let secondNearest = { id: -1, dist: Infinity };
+      const pos = spherePos[x][y];
+      for (let p = 0; p < plates.length; p++) {
+        const d = dist3D(pos, spherePos[plates[p].center.x][plates[p].center.y]);
+        if (d < nearest.dist) {
+          secondNearest = { id: nearest.id, dist: nearest.dist };
+          nearest = { id: p, dist: d };
+        } else if (d < secondNearest.dist) {
+          secondNearest = { id: p, dist: d };
+        }
+      }
+      const c = cells[y * W + x];
+      c.plateId = nearest.id;
+      c.plateType = plates[nearest.id].type;
+      c.nearestDist = nearest.dist;
+      c.secondPlateId = secondNearest.id;
+      c.secondDist = secondNearest.dist;
+    }
+  }
+
+  // 1d. Classify boundaries
+  const dx4 = [1, -1, 0, 0];
+  const dy4 = [0, 0, -1, 1];
+
+  // First pass: identify boundary cells and their types
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const c = cells[y * W + x];
+      const plateA = plates[c.plateId];
+      let bestConvergence = 0;
+      let bestType = null;
+      let isBoundary = false;
+
+      for (let d = 0; d < 4; d++) {
+        const nx = wrapX(x + dx4[d]);
+        const ny = y + dy4[d];
+        if (ny < 0 || ny >= H) continue;
+        const neighbor = cells[ny * W + nx];
+        if (neighbor.plateId === c.plateId) continue;
+
+        isBoundary = true;
+        const plateB = plates[neighbor.plateId];
+
+        // Boundary normal — use 3D vectors on the sphere
+        const pA3 = spherePos[plateA.center.x][plateA.center.y];
+        const pB3 = spherePos[plateB.center.x][plateB.center.y];
+        const bnx3 = pB3.x - pA3.x, bny3 = pB3.y - pA3.y, bnz3 = pB3.z - pA3.z;
+        const bnLen = Math.sqrt(bnx3*bnx3 + bny3*bny3 + bnz3*bnz3) || 1;
+
+        // Project drift vectors (as 3D tangent vectors) onto boundary normal
+        const driftA3 = driftTo3D(plateA.center.x, plateA.center.y, plateA.drift.angle, plateA.drift.speed);
+        const driftB3 = driftTo3D(plateB.center.x, plateB.center.y, plateB.drift.angle, plateB.drift.speed);
+        const driftA_proj = (driftA3.x * bnx3 + driftA3.y * bny3 + driftA3.z * bnz3) / bnLen;
+        const driftB_proj = (driftB3.x * bnx3 + driftB3.y * bny3 + driftB3.z * bnz3) / bnLen;
+        const convergence = driftA_proj - driftB_proj;
+
+        if (Math.abs(convergence) > Math.abs(bestConvergence)) {
+          bestConvergence = convergence;
+
+          if (convergence > 0.8) {
+            if (plateA.type === 'continental' && plateB.type === 'continental') {
+              bestType = 'collision';
+            } else {
+              bestType = 'subduction';
+            }
+          } else if (convergence < -0.8) {
+            if (plateA.type === 'continental' && plateB.type === 'continental') {
+              bestType = 'rift';
+            } else {
+              bestType = 'spreading';
+            }
+          } else {
+            bestType = 'transform';
+          }
+        }
+      }
+
+      if (isBoundary) {
+        c.boundaryType = bestType;
+        c.boundaryStrength = clamp(Math.abs(bestConvergence) / 3.0, 0, 1);
+        c.boundaryDistance = 0;
+      }
+    }
+  }
+
+  // BFS from boundary cells to compute boundaryDistance for non-boundary cells
+  const queue = [];
+  const visited = new Uint8Array(TOTAL);
+  for (let i = 0; i < TOTAL; i++) {
+    if (cells[i].boundaryDistance === 0) {
+      queue.push(i);
+      visited[i] = 1;
+    }
+  }
+
+  let head = 0;
+  while (head < queue.length) {
+    const ci = queue[head++];
+    const cx = ci % W;
+    const cy = (ci / W) | 0;
+    const cell = cells[ci];
+
+    for (let d = 0; d < 4; d++) {
+      const nx = wrapX(cx + dx4[d]);
+      const ny = cy + dy4[d];
+      if (ny < 0 || ny >= H) continue;
+      const ni = ny * W + nx;
+      if (visited[ni]) continue;
+
+      const newDist = cell.boundaryDistance + 1;
+      if (newDist > 15) continue; // only propagate up to distance 15
+
+      visited[ni] = 1;
+      const neighbor = cells[ni];
+      neighbor.boundaryDistance = newDist;
+      neighbor.boundaryType = cell.boundaryType;
+      neighbor.boundaryStrength = cell.boundaryStrength;
+      queue.push(ni);
+    }
+  }
+
+  // 1e. Hotspots
+  const numHotspots = params.hotspotCountBase + (seed % params.hotspotCountRange);
+  hotspots = [];
+  for (let i = 0; i < numHotspots; i++) {
+    hotspots.push({
+      x: Math.floor(rng() * W),
+      y: Math.floor(rng() * H),
+      intensity: params.hotspotIntensityMin + rng() * (params.hotspotIntensityMax - params.hotspotIntensityMin),
+    });
+  }
+}
+
+// ── Step 1b: Generate geological seed points ──
+// Instead of tracing boundaries with proximity functions, we place discrete
+// mountain/arc/rift seeds at random positions along boundary cells and raise
+// broad gaussian bumps around each one. This decouples feature shape from
+// the Voronoi boundary curve.
+function step1b_generateGeoSeeds(seed, rng) {
+  // Collect boundary cells by interaction type
+  const collisionCells = [];
+  const subductionCells = [];
+  const riftCells = [];
+
+  for (let i = 0; i < TOTAL; i++) {
+    const c = cells[i];
+    if (c.boundaryDistance !== 0) continue;
+    if (c.boundaryType === 'collision') collisionCells.push(c);
+    else if (c.boundaryType === 'subduction') subductionCells.push(c);
+    else if (c.boundaryType === 'rift') riftCells.push(c);
+  }
+
+  const mountainSeeds = [];
+  const arcSeeds = [];
+  const riftSeeds = [];
+
+  // Place mountain seeds along collision boundaries
+  // Shuffle then greedily pick with minimum spacing
+  shuffleArray(collisionCells, rng);
+  const MTN_MIN_SPACING = 0.15; // 3D sphere units (~12 cells at equator)
+  for (const c of collisionCells) {
+    let tooClose = false;
+    for (const s of mountainSeeds) {
+      if (dist3D(spherePos[c.x][c.y], spherePos[s.x][s.y]) < MTN_MIN_SPACING) {
+        tooClose = true; break;
+      }
+    }
+    if (!tooClose) {
+      // Offset slightly from boundary with noise for organic placement
+      const offsetX = (rng() - 0.5) * 6;
+      const offsetY = (rng() - 0.5) * 6;
+      mountainSeeds.push({
+        x: wrapX(Math.round(c.x + offsetX)),
+        y: clamp(Math.round(c.y + offsetY), 0, H - 1),
+        height: params.collisionHeight * (0.35 + rng() * 0.65),
+        radius: (7 + rng() * 7) * CELL_TO_3D,   // 3D radius
+        convergence: c.boundaryStrength,
+      });
+    }
+  }
+
+  // Place volcanic arc seeds along subduction boundaries
+  shuffleArray(subductionCells, rng);
+  const ARC_MIN_SPACING = 0.17; // 3D sphere units (~14 cells at equator)
+  for (const c of subductionCells) {
+    let tooClose = false;
+    for (const s of arcSeeds) {
+      if (dist3D(spherePos[c.x][c.y], spherePos[s.x][s.y]) < ARC_MIN_SPACING) {
+        tooClose = true; break;
+      }
+    }
+    if (!tooClose) {
+      // Offset inland (perpendicular to boundary) for arc effect
+      const offsetX = (rng() - 0.5) * 8;
+      const offsetY = (rng() - 0.5) * 8;
+      arcSeeds.push({
+        x: wrapX(Math.round(c.x + offsetX)),
+        y: clamp(Math.round(c.y + offsetY), 0, H - 1),
+        height: params.arcHeight * (0.35 + rng() * 0.65),
+        radius: (5 + rng() * 6) * CELL_TO_3D,  // 3D radius
+        convergence: c.boundaryStrength,
+      });
+    }
+  }
+
+  // Place rift seeds along rift boundaries
+  shuffleArray(riftCells, rng);
+  const RIFT_MIN_SPACING = 0.20; // 3D sphere units (~16 cells at equator)
+  for (const c of riftCells) {
+    let tooClose = false;
+    for (const s of riftSeeds) {
+      if (dist3D(spherePos[c.x][c.y], spherePos[s.x][s.y]) < RIFT_MIN_SPACING) {
+        tooClose = true; break;
+      }
+    }
+    if (!tooClose) {
+      const offsetX = (rng() - 0.5) * 4;
+      const offsetY = (rng() - 0.5) * 4;
+      riftSeeds.push({
+        x: wrapX(Math.round(c.x + offsetX)),
+        y: clamp(Math.round(c.y + offsetY), 0, H - 1),
+        depth: 0.04 + rng() * 0.06,
+        radius: (6 + rng() * 5) * CELL_TO_3D,  // 3D radius
+      });
+    }
+  }
+
+  // Build spatial grids for fast lookup
+  geoSeeds = {
+    mountains: mountainSeeds,
+    arcs: arcSeeds,
+    rifts: riftSeeds,
+    mountainGrid: buildSeedGrid(mountainSeeds),
+    arcGrid: buildSeedGrid(arcSeeds),
+    riftGrid: buildSeedGrid(riftSeeds),
+  };
+}
+
+function shuffleArray(arr, rng) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// ── Step 2: Elevation ──
+function step2_computeElevation(seed, rng) {
+  const MAX_MTN_RADIUS = 0.25;   // 3D units (~20 cells at equator)
+  const MAX_ARC_RADIUS = 0.18;   // 3D units (~15 cells at equator)
+  const MAX_RIFT_RADIUS = 0.18;  // 3D units (~15 cells at equator)
+  const HOTSPOT_RADIUS = 0.18;   // 3D units (~15 cells at equator)
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const c = cells[y * W + x];
+      const pos = spherePos[x][y];
+
+      const noise1 = sphereNoise(pos, seed + 500, 2, 0.015);
+
+      // Base elevation — blended near plate boundaries for smooth continental shelves
+      const plate1 = plates[c.plateId];
+      const plate2 = plates[c.secondPlateId];
+      const noiseAmp = params.continentalNoise;
+      const baseElev1 = (plate1.type === 'continental' ? params.continentalBase : params.oceanicBase) + noise1 * noiseAmp;
+      const baseElev2 = (plate2.type === 'continental' ? params.continentalBase : params.oceanicBase) + noise1 * noiseAmp;
+
+      // FIX 1 & 6: Logistic blend function centered at 0.5 at the boundary.
+      // At edgeRatio=0 (boundary): blend = 0.5 → equal mix of both plates → CONTINUOUS
+      // At large edgeRatio (interior): blend → 1.0 → 100% home plate
+      // The logistic 1/(1+exp(-k*x)) naturally gives 0.5 at x=0, no clamp needed.
+      const edgeRatio = (c.secondDist - c.nearestDist) / (c.secondDist + c.nearestDist);
+      const blendSteepness = 120 / params.blendWidth;
+      const blend = 1 / (1 + Math.exp(-edgeRatio * blendSteepness));
+
+      let elevation = baseElev2 + (baseElev1 - baseElev2) * blend;
+
+      // Store blend and proximity for downstream use and debug
+      c.blend = blend;
+      const proximity = 1 - blend;  // 0.5 at boundary, ~0 deep inside
+      c.proximity = proximity;
+
+      // Compute convergence for informational purposes (smooth, continuous)
+      if (proximity > 0.01) {
+        const pA3 = spherePos[plate1.center.x][plate1.center.y];
+        const pB3 = spherePos[plate2.center.x][plate2.center.y];
+        const bnx3 = pB3.x - pA3.x, bny3 = pB3.y - pA3.y, bnz3 = pB3.z - pA3.z;
+        const bnLen = Math.sqrt(bnx3*bnx3 + bny3*bny3 + bnz3*bnz3) || 1;
+        const dA3 = driftTo3D(plate1.center.x, plate1.center.y, plate1.drift.angle, plate1.drift.speed);
+        const dB3 = driftTo3D(plate2.center.x, plate2.center.y, plate2.drift.angle, plate2.drift.speed);
+        const driftA = (dA3.x * bnx3 + dA3.y * bny3 + dA3.z * bnz3) / bnLen;
+        const driftB = (dB3.x * bnx3 + dB3.y * bny3 + dB3.z * bnz3) / bnLen;
+        c.convergence = (driftA - driftB) / 3;
+      } else {
+        c.convergence = 0;
+      }
+
+      // FIX 2: Geological features from DISCRETE SEED POINTS, not proximity trace.
+      // Mountains are broad gaussian bumps around randomly-placed collision seeds.
+      // This creates isolated mountain masses that are NEAR boundaries but don't
+      // trace them as continuous ridges.
+
+      // Mountain seeds (collision zones)
+      const nearbyMtns = queryNearbySeeds(geoSeeds.mountainGrid, x, y, MAX_MTN_RADIUS);
+      for (const { seed: mtn, dist } of nearbyMtns) {
+        const r = mtn.radius;
+        if (dist < r) {
+          // Gaussian falloff from seed center
+          const falloff = Math.exp(-(dist * dist) / (r * r * 0.4));
+          // Add local noise to break up circular symmetry
+          const localNoise = sphereNoise(pos, seed + 999, 2, params.mountainNoiseScale);
+          const noiseMod = clamp(0.5 + localNoise * 0.6, 0.1, 1.0);
+          elevation += mtn.height * mtn.convergence * falloff * noiseMod;
+        }
+      }
+
+      // Volcanic arc seeds (subduction zones)
+      const nearbyArcs = queryNearbySeeds(geoSeeds.arcGrid, x, y, MAX_ARC_RADIUS);
+      for (const { seed: arc, dist } of nearbyArcs) {
+        const r = arc.radius;
+        if (dist < r) {
+          const falloff = Math.exp(-(dist * dist) / (r * r * 0.4));
+          const localNoise = sphereNoise(pos, seed + 777, 2, params.arcNoiseScale);
+          const noiseMod = clamp(0.4 + localNoise * 0.7, 0.05, 1.0);
+          elevation += arc.height * arc.convergence * falloff * noiseMod;
+        }
+      }
+
+      // Rift seeds (continental rift zones) — depressions
+      const nearbyRifts = queryNearbySeeds(geoSeeds.riftGrid, x, y, MAX_RIFT_RADIUS);
+      for (const { seed: rift, dist } of nearbyRifts) {
+        const r = rift.radius;
+        if (dist < r) {
+          const falloff = Math.exp(-(dist * dist) / (r * r * 0.4));
+          const localNoise = sphereNoise(pos, seed + 888, 2, 0.05);
+          const noiseMod = clamp(0.3 + localNoise * 0.5, 0.1, 1.0);
+          elevation -= rift.depth * falloff * noiseMod;
+        }
+      }
+
+      // Hotspot modifier
+      for (const hs of hotspots) {
+        const hsDist = dist3D(pos, spherePos[hs.x][hs.y]);
+        if (hsDist < HOTSPOT_RADIUS) {
+          elevation += hs.intensity * 0.35 * Math.max(0, 1 - hsDist / HOTSPOT_RADIUS);
+        }
+      }
+
+      // Fractal noise — no suppression needed with off-axis noise sampling
+      elevation += sphereNoise(pos, seed, params.fractalOctaves, params.fractalScale) * params.fractalAmp;
+
+      c.elevation = elevation;
+      c.isLand = elevation > 0.0;
+      c.isShallowWater = elevation > -0.08 && elevation <= 0.0;
+      c.isDeepWater = elevation <= -0.08;
+    }
+  }
+}
+
+// ── Step 3: Minerals ──
+function step3_computeMinerals(seed, rng) {
+  const MAX_MTN_RADIUS = 0.25;   // 3D units
+  const MAX_ARC_RADIUS = 0.18;   // 3D units
+  const HOTSPOT_VOLC_RADIUS = 0.15;  // 3D units (~12 cells at equator)
+  const HOTSPOT_CENTER_RADIUS = 0.037; // 3D units (~3 cells at equator)
+
+  // 3a. Base chemistry — FIX 3: BLEND between nearest and second-nearest plate
+  // instead of discrete plateId lookup, to eliminate mineral boundary lines.
+  for (let i = 0; i < TOTAL; i++) {
+    const c = cells[i];
+    const plate1 = plates[c.plateId];
+    const plate2 = plates[c.secondPlateId];
+    const b = c.blend; // 0.5 at boundary, ~1.0 deep inside plate1
+
+    // Smooth interpolation: at boundary, 50/50 mix; deep inside, 100% home plate
+    c.minerals.iron = (plate1.baseRock.iron * b + plate2.baseRock.iron * (1 - b)) * 0.3;
+    c.minerals.copper = (plate1.baseRock.copper * b + plate2.baseRock.copper * (1 - b)) * 0.3;
+    c.minerals.manganese = (plate1.baseRock.manganese * b + plate2.baseRock.manganese * (1 - b)) * 0.3;
+  }
+
+  // 3b. Volcanic concentration — FIX 4: use seed points, not proximity trace
+
+  for (let i = 0; i < TOTAL; i++) {
+    const c = cells[i];
+    let volcanism = 0;
+
+    // Volcanism from mountain seeds (collision zones produce minerals)
+    const nearbyMtns = queryNearbySeeds(geoSeeds.mountainGrid, c.x, c.y, MAX_MTN_RADIUS);
+    for (const { seed: mtn, dist } of nearbyMtns) {
+      const r = mtn.radius;
+      if (dist < r) {
+        const falloff = Math.exp(-(dist * dist) / (r * r * 0.5));
+        volcanism += mtn.convergence * mtn.height * falloff;
+      }
+    }
+
+    // Volcanism from arc seeds (subduction volcanics)
+    const nearbyArcs = queryNearbySeeds(geoSeeds.arcGrid, c.x, c.y, MAX_ARC_RADIUS);
+    for (const { seed: arc, dist } of nearbyArcs) {
+      const r = arc.radius;
+      if (dist < r) {
+        const falloff = Math.exp(-(dist * dist) / (r * r * 0.5));
+        volcanism += arc.convergence * arc.height * falloff;
+      }
+    }
+
+    // Hotspot volcanism
+    for (const hs of hotspots) {
+      const hsDist = dist3D(spherePos[c.x][c.y], spherePos[hs.x][hs.y]);
+      if (hsDist < HOTSPOT_VOLC_RADIUS) volcanism += hs.intensity * Math.max(0, 1 - hsDist / HOTSPOT_VOLC_RADIUS);
+    }
+
+    volcanism = clamp(volcanism, 0, 1.0);
+    c.volcanism = volcanism;
+
+    // Uniform mineral contribution from volcanism
+    c.minerals.iron += volcanism * 0.55;
+    c.minerals.copper += volcanism * 0.35;
+    c.minerals.manganese += volcanism * 0.3;
+
+    // Hotspot center floor: within ~3 cells, minerals are guaranteed high
+    // regardless of noise, producing a solid chemotrophic core
+    for (const hs of hotspots) {
+      const hsDist = dist3D(spherePos[c.x][c.y], spherePos[hs.x][hs.y]);
+      if (hsDist < HOTSPOT_CENTER_RADIUS) {
+        const centerBoost = (1 - hsDist / HOTSPOT_CENTER_RADIUS) * 0.4;
+        c.minerals.iron      = Math.max(c.minerals.iron, centerBoost * hs.intensity);
+        c.minerals.manganese = Math.max(c.minerals.manganese, centerBoost * hs.intensity * 0.8);
+        c.minerals.copper    = Math.max(c.minerals.copper, centerBoost * hs.intensity * 0.5);
+      }
+    }
+  }
+
+  // 3c. Erosion transport — 8-directional, multi-target distribution
+  for (let pass = 0; pass < params.erosionPasses; pass++) {
+    // Snapshot minerals
+    const snapIron = new Float32Array(TOTAL);
+    const snapCopper = new Float32Array(TOTAL);
+    const snapManganese = new Float32Array(TOTAL);
+    for (let i = 0; i < TOTAL; i++) {
+      snapIron[i] = cells[i].minerals.iron;
+      snapCopper[i] = cells[i].minerals.copper;
+      snapManganese[i] = cells[i].minerals.manganese;
+    }
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const ci = y * W + x;
+        const c = cells[ci];
+        const elev = c.elevation;
+
+        // Check all 8 neighbors (including diagonals)
+        const neighbors = [
+          { nx: wrapX(x - 1), ny: y },
+          { nx: wrapX(x + 1), ny: y },
+          { nx: x,            ny: y - 1 },
+          { nx: x,            ny: y + 1 },
+          { nx: wrapX(x - 1), ny: y - 1 },
+          { nx: wrapX(x + 1), ny: y - 1 },
+          { nx: wrapX(x - 1), ny: y + 1 },
+          { nx: wrapX(x + 1), ny: y + 1 },
+        ];
+
+        // Find all lower neighbors and their elevation differences
+        let totalDiff = 0;
+        const lowerNeighbors = [];
+        for (const n of neighbors) {
+          if (n.ny < 0 || n.ny >= H) continue;
+          const ni = n.ny * W + n.nx;
+          const nElev = cells[ni].elevation;
+          if (nElev < elev) {
+            const diff = elev - nElev;
+            lowerNeighbors.push({ idx: ni, diff });
+            totalDiff += diff;
+          }
+        }
+
+        // Distribute minerals proportionally to all lower neighbors
+        if (totalDiff > 0) {
+          const transferRate = params.erosionRate;
+          for (const n of lowerNeighbors) {
+            const fraction = (n.diff / totalDiff) * transferRate;
+            cells[n.idx].minerals.iron      += snapIron[ci] * fraction;
+            cells[n.idx].minerals.copper    += snapCopper[ci] * fraction;
+            cells[n.idx].minerals.manganese += snapManganese[ci] * fraction;
+          }
+          c.minerals.iron      -= snapIron[ci] * transferRate;
+          c.minerals.copper    -= snapCopper[ci] * transferRate;
+          c.minerals.manganese -= snapManganese[ci] * transferRate;
+        }
+      }
+    }
+  }
+
+  // 3d. Marine sedimentation
+  for (let i = 0; i < TOTAL; i++) {
+    if (cells[i].isDeepWater) cells[i].minerals.manganese += 0.08;
+  }
+
+  // 3e. Clamp and totals
+  for (let i = 0; i < TOTAL; i++) {
+    const c = cells[i];
+    c.minerals.iron = clamp(c.minerals.iron, 0, 1);
+    c.minerals.copper = clamp(c.minerals.copper, 0, 1);
+    c.minerals.manganese = clamp(c.minerals.manganese, 0, 1);
+    c.mineralTotal = c.minerals.iron + c.minerals.copper + c.minerals.manganese;
+    c.isDepleted = c.mineralTotal < 0.15;
+    c.dominant = maxKey(c.minerals);
+  }
+}
+
+// ── Step 4: Atmosphere ──
+function step4_computeAtmosphere(seed, rng) {
+  const dx4 = [1, -1, 0, 0];
+  const dy4 = [0, 0, -1, 1];
+
+  // BFS from ocean for moisture distance
+  const oceanDist = new Int16Array(TOTAL);
+  oceanDist.fill(9999);
+  const queue = [];
+  for (let i = 0; i < TOTAL; i++) {
+    if (!cells[i].isLand) {
+      oceanDist[i] = 0;
+      queue.push(i);
+    }
+  }
+  let head = 0;
+  while (head < queue.length) {
+    const ci = queue[head++];
+    const cx = ci % W;
+    const cy = (ci / W) | 0;
+    const curDist = oceanDist[ci];
+    if (curDist >= 40) continue;
+
+    for (let d = 0; d < 4; d++) {
+      const nx = wrapX(cx + dx4[d]);
+      const ny = cy + dy4[d];
+      if (ny < 0 || ny >= H) continue;
+      const ni = ny * W + nx;
+      if (oceanDist[ni] <= curDist + 1) continue;
+      oceanDist[ni] = curDist + 1;
+      queue.push(ni);
+    }
+  }
+
+  // Compute moisture, temperature, wind
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const ci = y * W + x;
+      const c = cells[ci];
+
+      // Base moisture
+      const baseMoisture = Math.max(0.25, 1.0 - oceanDist[ci] * 0.02);
+
+      // Rain shadow
+      const latBand = getLatitudeBand(y);
+      const upwindDx = latBand === 'temperate' ? -1 : 1;
+
+      let rainShadowPenalty = 0;
+      for (let d = 1; d <= 20; d++) {
+        const ux = wrapX(x + upwindDx * d);
+        if (y < 0 || y >= H) continue;
+        const upwindCell = cells[y * W + ux];
+        if (upwindCell.elevation > 0.4) {
+          rainShadowPenalty = Math.max(rainShadowPenalty,
+            (upwindCell.elevation - 0.3) * (1 - d / 25));
+        }
+      }
+
+      c.baseMoisture = baseMoisture;
+      c.moisture = clamp(baseMoisture - rainShadowPenalty, 0, 1);
+
+      // Temperature
+      const latFrac = Math.abs(y - 128) / 128;
+      const baseTemp = 1.0 - latFrac * 0.4;
+      const elevCooling = Math.max(0, c.elevation) * 0.3;
+      c.temperature = clamp(baseTemp - elevCooling, 0.4, 1.0);
+      c.isFreezing = c.temperature < 0.5;
+
+      // Wind
+      const windDir = latBand === 'temperate' ? 0 : 4;
+      c.wind = {
+        direction: windDir,
+        speed: 1 + Math.min(2, Math.max(0, (1 - oceanDist[ci] * 0.05)) * 2),
+      };
+    }
+  }
+}
+
+// ── Step 5: Flora ──
+function step5_computeFlora() {
+  for (let i = 0; i < TOTAL; i++) {
+    const c = cells[i];
+    if (!c.isLand) {
+      c.floraType = 'none';
+      c.floraDensity = 0;
+      continue;
+    }
+    if (c.isFreezing) {
+      c.floraType = 'frozen';
+      c.floraDensity = 0;
+      continue;
+    }
+
+    const light = 1.0;
+    const photoFitness = light * c.moisture * 0.8;
+    const chemoFitness = c.mineralTotal * c.moisture * 1.2;
+    const mixoFitness  = (0.6 + 0.5 * c.mineralTotal) * c.moisture;
+    const maxFitness = Math.max(photoFitness, chemoFitness, mixoFitness);
+
+    if (maxFitness < 0.1) {
+      c.floraType = 'barren';
+      c.floraDensity = 0;
+    } else if (photoFitness >= chemoFitness && photoFitness >= mixoFitness) {
+      c.floraType = 'photosynthetic';
+      c.floraDensity = maxFitness;
+    } else if (chemoFitness >= photoFitness && chemoFitness >= mixoFitness) {
+      c.floraType = 'chemotrophic';
+      c.floraDensity = maxFitness;
+    } else {
+      c.floraType = 'mixotrophic';
+      c.floraDensity = maxFitness;
+    }
+  }
+}
+
+// ── Rendering ──
+const canvas = document.getElementById('planetCanvas');
+const ctx = canvas.getContext('2d');
+let imageData = ctx.createImageData(1024, 512);
+
+function setPixel2x(x, y, r, g, b) {
+  const sx = x * 2, sy = y * 2;
+  for (let dy = 0; dy < 2; dy++) {
+    for (let dx = 0; dx < 2; dx++) {
+      const off = ((sy + dy) * 1024 + (sx + dx)) * 4;
+      imageData.data[off] = r;
+      imageData.data[off + 1] = g;
+      imageData.data[off + 2] = b;
+      imageData.data[off + 3] = 255;
+    }
+  }
+}
+
+// ── HSL to RGB helper (returns {r, g, b}) ──
+function hslToRgb(h, s, l) {
+  h /= 360;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => {
+    const k = (n + h * 12) % 12;
+    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+  };
+  return { r: Math.floor(f(0) * 255), g: Math.floor(f(8) * 255), b: Math.floor(f(4) * 255) };
+}
+
+// ── Color interpolation ──
+function lerpColor(c1, c2, t) {
+  return {
+    r: Math.round(c1.r + (c2.r - c1.r) * t),
+    g: Math.round(c1.g + (c2.g - c1.g) * t),
+    b: Math.round(c1.b + (c2.b - c1.b) * t),
+  };
+}
+
+// ── Mineral channel helper ──
+function mineralChannel(cell, channel) {
+  if (!cell.isLand && !cell.isShallowWater) {
+    const v = Math.floor(cell.minerals[channel] * 40);
+    if (channel === 'iron') return { r: v, g: 0, b: 0 };
+    if (channel === 'copper') return { r: 0, g: v, b: 0 };
+    return { r: 0, g: 0, b: v };
+  }
+  const v = Math.floor(cell.minerals[channel] * 255);
+  if (channel === 'iron') return { r: v, g: Math.floor(v / 4), b: Math.floor(v / 8) };
+  if (channel === 'copper') return { r: Math.floor(v / 8), g: v, b: Math.floor(v / 3) };
+  return { r: Math.floor(v / 3), g: Math.floor(v / 8), b: v };
+}
+
+// ── Overlay color functions ──
+// Each returns { r, g, b } for a given cell. Used by all three views.
+const overlayFunctions = {
+
+  'surface': function(cell) {
+    // What the planet actually looks like from space
+    if (cell.isDeepWater)    return { r: 18, g: 27, b: 47 };
+    if (cell.isShallowWater) return { r: 24, g: 36, b: 63 };
+    if (cell.isFreezing) return { r: 210, g: 215, b: 220 };
+
+    // High mountain above flora line
+    if (cell.elevation > 0.50 && cell.floraDensity < 0.15) {
+      return { r: 90, g: 80, b: 70 };
+    }
+
+    const d = cell.floraDensity;
+
+    if (cell.floraType === 'photosynthetic') {
+      const r = Math.floor(50 + d * 60);
+      const g = Math.floor(18 + d * 10);
+      const b = Math.floor(16 + d * 18);
+      return { r, g, b };
+    }
+
+    if (cell.floraType === 'chemotrophic') {
+      if (cell.dominant === 'manganese') {
+        return { r: Math.floor(50 + d * 30), g: Math.floor(25 + d * 15), b: Math.floor(60 + d * 40) };
+      } else if (cell.dominant === 'copper') {
+        return { r: Math.floor(25 + d * 15), g: Math.floor(55 + d * 35), b: Math.floor(45 + d * 25) };
+      } else {
+        return { r: Math.floor(70 + d * 30), g: Math.floor(45 + d * 20), b: Math.floor(20 + d * 10) };
+      }
+    }
+
+    if (cell.floraType === 'mixotrophic') {
+      return { r: Math.floor(60 + d * 35), g: Math.floor(20 + d * 10), b: Math.floor(35 + d * 25) };
+    }
+
+    // Barren — exposed substrate
+    if (cell.isDepleted) {
+      return { r: 70, g: 68, b: 62 };
+    }
+    return { r: 65, g: 50, b: 35 };
+  },
+
+  'topographic': function(cell) {
+    // Pure elevation map — contour-style coloring
+    if (cell.isDeepWater)    return { r: 10, g: 22, b: 40 };
+    if (cell.isShallowWater) return { r: 26, g: 48, b: 80 };
+
+    if (cell.isFreezing && cell.isLand) {
+      const t = clamp((cell.elevation) / 0.6, 0, 1);
+      return lerpColor({ r: 190, g: 195, b: 200 }, { r: 220, g: 225, b: 230 }, t);
+    }
+
+    const e = cell.elevation;
+    if (e < 0.05)  return { r: 60, g: 75, b: 55 };
+    if (e < 0.15)  return { r: 90, g: 100, b: 65 };
+    if (e < 0.30)  return { r: 130, g: 115, b: 70 };
+    if (e < 0.45)  return { r: 160, g: 130, b: 90 };
+    if (e < 0.60)  return { r: 180, g: 160, b: 130 };
+    return { r: 200, g: 185, b: 160 };
+  },
+
+  'plates': function(cell) {
+    if (cell.boundaryDistance === 0 && cell.boundaryType !== null) return { r: 240, g: 240, b: 240 };
+    const hue = (cell.plateId / plates.length) * 360;
+    const sat = cell.plateType === 'continental' ? 0.4 : 0.25;
+    const lum = cell.plateType === 'continental' ? 0.45 : 0.30;
+    return hslToRgb(hue, sat, lum);
+  },
+
+  'iron':      cell => mineralChannel(cell, 'iron'),
+  'copper':    cell => mineralChannel(cell, 'copper'),
+  'manganese': cell => mineralChannel(cell, 'manganese'),
+  'composite': cell => ({
+    r: Math.floor(cell.minerals.iron * ((!cell.isLand && !cell.isShallowWater) ? 80 : 255)),
+    g: Math.floor(cell.minerals.copper * ((!cell.isLand && !cell.isShallowWater) ? 80 : 255)),
+    b: Math.floor(cell.minerals.manganese * ((!cell.isLand && !cell.isShallowWater) ? 80 : 255)),
+  }),
+
+  'moisture': function(cell) {
+    if (!cell.isLand) return { r: 30, g: 50, b: 90 };
+    const v = Math.floor(cell.moisture * 200);
+    return { r: 20, g: 30 + Math.floor(v / 3), b: 40 + v };
+  },
+
+  'floraType': function(cell) {
+    if (cell.floraType === 'photosynthetic') return { r: 128, g: 32, b: 32 };
+    if (cell.floraType === 'chemotrophic')   return { r: 80, g: 32, b: 96 };
+    if (cell.floraType === 'mixotrophic')    return { r: 112, g: 48, b: 64 };
+    if (cell.floraType === 'barren')         return { r: 64, g: 64, b: 64 };
+    if (cell.floraType === 'frozen')         return { r: 192, g: 192, b: 200 };
+    return { r: 16, g: 32, b: 48 };
+  },
+
+  'floraDensity': function(cell) {
+    if (!cell.isLand) return { r: 10, g: 20, b: 35 };
+    if (cell.floraType === 'barren' || cell.floraType === 'frozen') return { r: 32, g: 32, b: 32 };
+    const d = clamp(cell.floraDensity, 0, 1);
+    const base = overlayFunctions['floraType'](cell);
+    return {
+      r: Math.floor(base.r * (0.3 + d * 0.7)),
+      g: Math.floor(base.g * (0.3 + d * 0.7)),
+      b: Math.floor(base.b * (0.3 + d * 0.7)),
+    };
+  },
+};
+
+// ── Get current colorFn ──
+function getColorFn(overlay) {
+  return overlayFunctions[overlay] || overlayFunctions['surface'];
+}
+
+// ── Flat map renderer ──
+function render(overlay) {
+  if (!cells) return;
+  imageData = ctx.createImageData(1024, 512);
+  const colorFn = getColorFn(overlay);
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const c = cells[y * W + x];
+      const col = colorFn(c);
+      setPixel2x(x, y, col.r, col.g, col.b);
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  drawSelectionMarker();
+}
+
+// ── Mollweide projection ──
+const mollweideCanvas = document.getElementById('mollweideCanvas');
+const mollweideCtx = mollweideCanvas.getContext('2d');
+
+function mollweideProject(cellX, cellY, canvasW, canvasH) {
+  const lon = (cellX / W) * 2 * Math.PI - Math.PI;    // -π to π
+  const lat = (cellY / H) * Math.PI - Math.PI / 2;      // -π/2 to π/2
+
+  // Solve for theta: 2θ + sin(2θ) = π sin(lat)
+  let theta = lat;
+  for (let i = 0; i < 8; i++) {
+    const denom = 2 + 2 * Math.cos(2 * theta);
+    if (Math.abs(denom) < 1e-10) break;
+    theta -= (2 * theta + Math.sin(2 * theta) - Math.PI * Math.sin(lat)) / denom;
+  }
+
+  const mx = (2 * Math.SQRT2 / Math.PI) * lon * Math.cos(theta);
+  const my = Math.SQRT2 * Math.sin(theta);
+
+  // Map to canvas with padding
+  const scale = 0.92;
+  const px = (mx / (2 * Math.SQRT2) * scale + 0.5) * canvasW;
+  const py = (0.5 - my / (2 * Math.SQRT2) * scale) * canvasH;
+
+  return { x: px, y: py };
+}
+
+function renderMollweide() {
+  if (!cells) return;
+  const mw = mollweideCanvas.width, mh = mollweideCanvas.height;
+  const mImageData = mollweideCtx.createImageData(mw, mh);
+  const data = mImageData.data;
+
+  // Fill background with dark space
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 5; data[i + 1] = 8; data[i + 2] = 16; data[i + 3] = 255;
+  }
+
+  const colorFn = getColorFn(overlaySelect.value);
+
+  // Forward-project each cell
+  for (let cy = 0; cy < H; cy++) {
+    for (let cx = 0; cx < W; cx++) {
+      const pos = mollweideProject(cx, cy, mw, mh);
+      const cell = cells[cy * W + cx];
+      const col = colorFn(cell);
+
+      // Draw a 3×3 block to fill gaps
+      const px0 = Math.round(pos.x);
+      const py0 = Math.round(pos.y);
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const px = px0 + dx;
+          const py = py0 + dy;
+          if (px >= 0 && px < mw && py >= 0 && py < mh) {
+            const off = (py * mw + px) * 4;
+            data[off] = col.r;
+            data[off + 1] = col.g;
+            data[off + 2] = col.b;
+            data[off + 3] = 255;
+          }
+        }
+      }
+    }
+  }
+
+  mollweideCtx.putImageData(mImageData, 0, 0);
+}
+
+// Inverse Mollweide: given a pixel on the Mollweide canvas, return the cell (x, y) or null
+function mollweidePixelToCell(px, py) {
+  const mw = mollweideCanvas.width, mh = mollweideCanvas.height;
+  const scale = 0.92;
+
+  // Reverse the canvas mapping
+  const mx = ((px / mw - 0.5) / scale) * (2 * Math.SQRT2);
+  const my = ((0.5 - py / mh) / scale) * (2 * Math.SQRT2);
+
+  // Check if inside the ellipse: (mx/(2√2))² + (my/√2)² ≤ 1
+  const ex = mx / (2 * Math.SQRT2);
+  const ey = my / Math.SQRT2;
+  if (ex * ex + ey * ey > 1.0) return null;
+
+  // Recover theta and lat/lon
+  const sinTheta = clamp(my / Math.SQRT2, -1, 1);
+  const theta = Math.asin(sinTheta);
+  const cosTheta = Math.cos(theta);
+
+  if (Math.abs(cosTheta) < 1e-10) {
+    // At the pole
+    const lat = sinTheta > 0 ? Math.PI / 2 : -Math.PI / 2;
+    const cellX = Math.floor(W / 2);
+    const cellY = Math.floor(Math.max(0, Math.min(H - 1, (lat + Math.PI / 2) / Math.PI * H)));
+    return { x: cellX, y: cellY };
+  }
+
+  const lon = (mx * Math.PI) / (2 * Math.SQRT2 * cosTheta);
+  if (lon < -Math.PI || lon > Math.PI) return null;
+
+  const sinLat = clamp((2 * theta + Math.sin(2 * theta)) / Math.PI, -1, 1);
+  const lat = Math.asin(sinLat);
+
+  const cellX = Math.floor(((lon + Math.PI) / (2 * Math.PI)) * W) % W;
+  const cellY = Math.floor(Math.max(0, Math.min(H - 1, ((lat + Math.PI / 2) / Math.PI) * H)));
+
+  return { x: cellX, y: cellY };
+}
+
+// Mollweide click handler
+mollweideCanvas.addEventListener('click', (e) => {
+  const rect = mollweideCanvas.getBoundingClientRect();
+  const scaleX = mollweideCanvas.width / rect.width;
+  const scaleY = mollweideCanvas.height / rect.height;
+  const px = (e.clientX - rect.left) * scaleX;
+  const py = (e.clientY - rect.top) * scaleY;
+  const cell = mollweidePixelToCell(px, py);
+  if (cell) {
+    showCellInfo(cell.x, cell.y, e);
+    showRegionalView(cell.x, cell.y);
+  }
+});
+
+// ── Tooltip ──
+const cellTooltip = document.getElementById('cellTooltip');
+let tooltipVisible = false;
+
+function showTooltip(cell, mouseX, mouseY) {
+  tooltipVisible = true;
+  cellTooltip.style.display = 'block';
+
+  // Position tooltip near cursor, but keep on screen
+  let tx = mouseX + 15;
+  let ty = mouseY - 10;
+  // Measure after setting content
+  cellTooltip.innerHTML = `
+    <div class="tip-row"><b>Elev:</b> ${cell.elevation.toFixed(3)} — ${cell.isLand ? 'land' : cell.isShallowWater ? 'shallow' : 'deep'}</div>
+    <div class="tip-row"><b>Flora:</b> ${cell.floraType} (${(cell.floraDensity || 0).toFixed(2)})</div>
+    <div class="tip-row"><b>Minerals:</b> Fe ${cell.minerals.iron.toFixed(2)}  Cu ${cell.minerals.copper.toFixed(2)}  Mn ${cell.minerals.manganese.toFixed(2)}</div>
+    <div class="tip-row"><b>Moisture:</b> ${cell.moisture.toFixed(2)}  <b>Temp:</b> ${cell.temperature.toFixed(2)}</div>
+  `;
+
+  const rect = cellTooltip.getBoundingClientRect();
+  if (tx + rect.width > window.innerWidth - 8) tx = mouseX - rect.width - 10;
+  if (ty + rect.height > window.innerHeight - 8) ty = mouseY - rect.height - 10;
+  if (tx < 4) tx = 4;
+  if (ty < 4) ty = 4;
+
+  cellTooltip.style.left = tx + 'px';
+  cellTooltip.style.top = ty + 'px';
+}
+
+function hideTooltip() {
+  tooltipVisible = false;
+  cellTooltip.style.display = 'none';
+}
+
+// Dismiss tooltip on click outside canvases
+document.addEventListener('mousedown', (e) => {
+  if (!tooltipVisible) return;
+  if (e.target === canvas || e.target === globeCanvas || e.target === mollweideCanvas || e.target === regionalCanvas) return;
+  hideTooltip();
+});
+
+function showCellInfo(x, y, mouseEvent) {
+  if (!cells) return;
+  const c = cells[y * W + x];
+  if (mouseEvent) {
+    showTooltip(c, mouseEvent.clientX, mouseEvent.clientY);
+  }
+}
+
+function showRegionalCellTooltip(rx, ry, mouseEvent) {
+  if (!regionalCells || !regionalCells[rx] || !regionalCells[rx][ry]) return;
+  const c = regionalCells[rx][ry];
+  if (mouseEvent) {
+    showTooltip(c, mouseEvent.clientX, mouseEvent.clientY);
+  }
+}
+
+// ── Globe renderer ──
+const globeCanvas = document.getElementById('globeCanvas');
+const globeCtx = globeCanvas.getContext('2d');
+let currentView = 'flat'; // 'flat', 'globe', or 'mollweide'
+
+// Globe rotation state
+const HOME_ROT_X = 0.15;  // slight downward tilt (shows northern tropics)
+const HOME_ROT_Y = 0;     // facing the prime meridian
+let rotX = HOME_ROT_X;
+let rotY = HOME_ROT_Y;
+let isDragging = false;
+let lastMX = 0, lastMY = 0;
+let dragMoved = false; // distinguish click from drag
+
+// Auto-spin state
+let autoSpin = true;
+let lastFrameTime = 0;
+let resumeDelay = false; // brief pause after drag release
+
+// Speed control
+const spinSlider = document.getElementById('spinSpeedSlider');
+const pauseBtn = document.getElementById('pauseSpinBtn');
+const speedControl = document.getElementById('speedControl');
+
+// Map slider 0-100 to speed 0.0 to 0.012
+// Default at 30 ≈ 0.0036 (close to original 0.003)
+function getSpinSpeed() {
+  return (spinSlider.value / 100) * 0.012;
+}
+
+let currentSpinSpeed = getSpinSpeed();
+
+spinSlider.addEventListener('input', () => {
+  currentSpinSpeed = getSpinSpeed();
+});
+
+pauseBtn.addEventListener('click', () => {
+  autoSpin = !autoSpin;
+  pauseBtn.textContent = autoSpin ? '⏸' : '▶';
+});
+
+function renderGlobe() {
+  if (!cells) return;
+
+  // Sample from the already-rendered flat canvas as a texture
+  const flatCtx = ctx;
+  const flatData = flatCtx.getImageData(0, 0, 1024, 512).data;
+
+  const gw = globeCanvas.width, gh = globeCanvas.height;
+  const globeImageData = globeCtx.createImageData(gw, gh);
+  const data = globeImageData.data;
+
+  const cx = gw / 2, cy = gh / 2;
+  const radius = Math.min(cx, cy) * 0.9;
+
+  const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+  const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+
+  for (let py = 0; py < gh; py++) {
+    for (let px = 0; px < gw; px++) {
+      const pixIdx = (py * gw + px) * 4;
+
+      const sx = (px - cx) / radius;
+      const sy = (py - cy) / radius;
+      const r2 = sx * sx + sy * sy;
+
+      if (r2 > 1.0) {
+        // Space background
+        data[pixIdx]     = 5;
+        data[pixIdx + 1] = 8;
+        data[pixIdx + 2] = 15;
+        data[pixIdx + 3] = 255;
+        continue;
+      }
+
+      const sz = Math.sqrt(1 - r2);
+
+      // Rotate around Y axis (horizontal drag = longitude)
+      let x3d = sx * cosY + sz * sinY;
+      let z3d = -sx * sinY + sz * cosY;
+
+      // Rotate around X axis (vertical drag = latitude)
+      let y3d = sy * cosX - z3d * sinX;
+      let z3d2 = sy * sinX + z3d * cosX;
+
+      // Convert 3D point to lat/lon
+      const lat = Math.asin(Math.max(-1, Math.min(1, -y3d)));
+      const lon = Math.atan2(x3d, z3d2);
+
+      // Map to flat texture coordinates (1024 × 512 canvas)
+      const texX = ((lon / Math.PI + 1) / 2 * 1024) % 1024;
+      const texY = ((-lat / (Math.PI / 2) + 1) / 2 * 512);
+
+      const ti = Math.floor(Math.max(0, Math.min(1023, texX)));
+      const tj = Math.floor(Math.max(0, Math.min(511, texY)));
+      const texIdx = (tj * 1024 + ti) * 4;
+
+      // Cell coordinates for elevation lookup
+      const ci = Math.floor(ti / 2);
+      const cj = Math.floor(tj / 2);
+      const elev = cells[cj * W + ci].elevation;
+
+      // Elevation relief — compute normal perturbation from elevation gradient
+      const ciR = (ci + 1) % W;
+      const cjU = Math.max(0, cj - 1);
+      const elevRight = cells[cj * W + ciR].elevation;
+      const elevUp    = cells[cjU * W + ci].elevation;
+      const reliefScale = 8.0;
+      const dEdx = (elevRight - elev) * reliefScale;
+      const dEdy = (elevUp - elev) * reliefScale;
+      // Light from upper-right
+      const reliefShade = 1.0 + dEdx * 0.5 + dEdy * (-0.5);
+
+      // Combine with sphere shading
+      const shade = Math.max(0.08, Math.min(1.2, (0.3 + 0.7 * sz) * reliefShade));
+
+      data[pixIdx]     = Math.floor(flatData[texIdx] * shade);
+      data[pixIdx + 1] = Math.floor(flatData[texIdx + 1] * shade);
+      data[pixIdx + 2] = Math.floor(flatData[texIdx + 2] * shade);
+      data[pixIdx + 3] = 255;
+    }
+  }
+
+  globeCtx.putImageData(globeImageData, 0, 0);
+  drawOrientationHUD(globeCtx, gw);
+}
+
+function drawOrientationHUD(ctx, canvasW) {
+  const size = 60;
+  const cx = canvasW - size / 2 - 12;  // top-right corner with padding
+  const cy = size / 2 + 12;
+  const radius = 22;
+
+  // Background circle
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(150, 160, 180, 0.4)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // North indicator
+  // North pole is on the rotation axis — only vertical tilt (rotX) affects its screen position
+  const northX = cx;
+  const northY = cy - Math.cos(rotX) * radius * 0.8;
+
+  // North dot
+  ctx.beginPath();
+  ctx.arc(northX, northY, 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#8ab4f8';
+  ctx.fill();
+
+  // "N" label near the dot
+  ctx.fillStyle = '#8ab4f8';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('N', northX, northY - 6);
+
+  // South indicator (opposite side)
+  const southX = cx;
+  const southY = cy + Math.cos(rotX) * radius * 0.8;
+
+  ctx.beginPath();
+  ctx.arc(southX, southY, 2, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(180, 130, 100, 0.6)';
+  ctx.fill();
+
+  // Center crosshair (current view center)
+  ctx.beginPath();
+  ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.fill();
+
+  // Tilt indicator — arc showing rotX offset from home
+  if (Math.abs(rotX - HOME_ROT_X) > 0.05) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * 0.4, -Math.PI/2, -Math.PI/2 + rotX * 2, rotX < 0);
+    ctx.strokeStyle = 'rgba(150, 180, 220, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
+// Given a pixel on the globe canvas, compute the cell (x, y) it maps to.
+// Returns null if the pixel is outside the sphere.
+function globePixelToCell(px, py) {
+  const gw = globeCanvas.width, gh = globeCanvas.height;
+  const cx = gw / 2, cy = gh / 2;
+  const radius = Math.min(cx, cy) * 0.9;
+
+  const sx = (px - cx) / radius;
+  const sy = (py - cy) / radius;
+  const r2 = sx * sx + sy * sy;
+  if (r2 > 1.0) return null;
+
+  const sz = Math.sqrt(1 - r2);
+
+  const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+  const cosX = Math.cos(rotX), sinX = Math.sin(rotX);
+
+  let x3d = sx * cosY + sz * sinY;
+  let z3d = -sx * sinY + sz * cosY;
+  let y3d = sy * cosX - z3d * sinX;
+  let z3d2 = sy * sinX + z3d * cosX;
+
+  const lat = Math.asin(Math.max(-1, Math.min(1, -y3d)));
+  const lon = Math.atan2(x3d, z3d2);
+
+  const cellX = Math.floor(((lon / Math.PI + 1) / 2 * W) % W);
+  const cellY = Math.floor(Math.max(0, Math.min(H - 1, (-lat / (Math.PI / 2) + 1) / 2 * H)));
+
+  return { x: cellX, y: cellY };
+}
+
+// Globe mouse events
+globeCanvas.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  dragMoved = false;
+  lastMX = e.clientX;
+  lastMY = e.clientY;
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  const dx = e.clientX - lastMX;
+  const dy = e.clientY - lastMY;
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true;
+  rotY += dx * 0.01;
+  rotX += dy * 0.01;
+  rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotX));
+  lastMX = e.clientX;
+  lastMY = e.clientY;
+  renderGlobe();
+});
+
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+  if (autoSpin) {
+    resumeDelay = true;
+    setTimeout(() => { resumeDelay = false; }, 500);
+  }
+});
+
+// Touch support for mobile
+globeCanvas.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 1) return;
+  e.preventDefault();
+  isDragging = true;
+  dragMoved = false;
+  lastMX = e.touches[0].clientX;
+  lastMY = e.touches[0].clientY;
+}, { passive: false });
+
+window.addEventListener('touchmove', (e) => {
+  if (!isDragging || e.touches.length !== 1) return;
+  const dx = e.touches[0].clientX - lastMX;
+  const dy = e.touches[0].clientY - lastMY;
+  if (Math.abs(dx) > 2 || Math.abs(dy) > 2) dragMoved = true;
+  rotY += dx * 0.01;
+  rotX += dy * 0.01;
+  rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotX));
+  lastMX = e.touches[0].clientX;
+  lastMY = e.touches[0].clientY;
+  renderGlobe();
+}, { passive: false });
+
+window.addEventListener('touchend', () => {
+  isDragging = false;
+  if (autoSpin) {
+    resumeDelay = true;
+    setTimeout(() => { resumeDelay = false; }, 500);
+  }
+});
+
+// Click to inspect on the globe
+globeCanvas.addEventListener('click', (e) => {
+  if (dragMoved) return; // ignore drag-end clicks
+  const rect = globeCanvas.getBoundingClientRect();
+  const scaleX = globeCanvas.width / rect.width;
+  const scaleY = globeCanvas.height / rect.height;
+  const px = (e.clientX - rect.left) * scaleX;
+  const py = (e.clientY - rect.top) * scaleY;
+  const cell = globePixelToCell(px, py);
+  if (cell) {
+    showCellInfo(cell.x, cell.y, e);
+    showRegionalView(cell.x, cell.y);
+  }
+});
+
+// ── Key state tracking for immediate arrow response ──
+const keysHeld = new Set();
+
+document.addEventListener('keydown', e => {
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+    // Regional panning takes priority when the regional view is active
+    if (activeControl === 'regional' && selectedRegion) {
+      e.preventDefault();
+      const panStep = e.shiftKey ? REGIONAL_SIZE / PLANETARY_CELL_KM : 128 / PLANETARY_CELL_KM;
+      if (e.key === 'ArrowRight') selectedRegion.cx += panStep;
+      if (e.key === 'ArrowLeft')  selectedRegion.cx -= panStep;
+      if (e.key === 'ArrowDown')  selectedRegion.cy += panStep;
+      if (e.key === 'ArrowUp')    selectedRegion.cy -= panStep;
+      selectedRegion.cx = ((selectedRegion.cx % W) + W) % W;
+      selectedRegion.cy = Math.max(0, Math.min(H - 1, selectedRegion.cy));
+
+      const band = getLatitudeBand(Math.round(selectedRegion.cy));
+      const plateCell = getPlanetaryCell(Math.round(selectedRegion.cx), Math.round(selectedRegion.cy));
+      regionLabel.textContent = `REGION: (${Math.round(selectedRegion.cx)}, ${Math.round(selectedRegion.cy)}) — ${band}, ${plateCell.plateType}`;
+
+      const t0 = performance.now();
+      generateRegionalDetail(selectedRegion.cx, selectedRegion.cy);
+      const t1 = performance.now();
+      statusText.textContent = `Regional panned in ${(t1 - t0).toFixed(0)} ms`;
+
+      // Update selection marker on planetary map
+      render(overlaySelect.value);
+      if (currentView === 'globe') renderGlobe();
+      if (currentView === 'mollweide') renderMollweide();
+      return;
+    }
+
+    // Globe rotation
+    if (currentView === 'globe') {
+      e.preventDefault();
+      keysHeld.add(e.key);
+      autoSpin = false;
+      pauseBtn.textContent = '▶';
+    }
+  }
+
+  if (e.key === 'Shift') {
+    keysHeld.add('Shift');
+  }
+
+  // Escape closes regional view
+  if (e.key === 'Escape' && selectedRegion) {
+    closeRegionalView();
+  }
+});
+
+document.addEventListener('keyup', e => {
+  keysHeld.delete(e.key);
+  if (e.key === 'Shift') keysHeld.delete('Shift');
+});
+
+// Clear keys on blur (prevents stuck keys when tabbing away)
+window.addEventListener('blur', () => keysHeld.clear());
+
+function processHeldKeys() {
+  if (keysHeld.size === 0) return false;
+
+  const speed = keysHeld.has('Shift') ? 0.04 : 0.01;
+  let moved = false;
+
+  if (keysHeld.has('ArrowLeft')) {
+    rotY -= speed;
+    moved = true;
+  }
+  if (keysHeld.has('ArrowRight')) {
+    rotY += speed;
+    moved = true;
+  }
+  if (keysHeld.has('ArrowUp')) {
+    rotX = Math.max(-Math.PI / 2, rotX - speed);
+    moved = true;
+  }
+  if (keysHeld.has('ArrowDown')) {
+    rotX = Math.min(Math.PI / 2, rotX + speed);
+    moved = true;
+  }
+
+  return moved;
+}
+
+// ── Spin animation loop ──
+function spinLoop(timestamp) {
+  if (currentView === 'globe' && cells) {
+    let needsRender = false;
+
+    // Process held arrow keys (immediate, every frame)
+    if (processHeldKeys()) {
+      needsRender = true;
+    }
+
+    // Auto-spin (only when no keys held and auto-spin is on)
+    if (autoSpin && !isDragging && !resumeDelay && keysHeld.size === 0) {
+      rotY += currentSpinSpeed;
+      needsRender = true;
+    }
+
+    // Throttle rendering to ~30fps
+    if (needsRender && timestamp - lastFrameTime > 33) {
+      renderGlobe();
+      lastFrameTime = timestamp;
+    }
+  }
+
+  requestAnimationFrame(spinLoop);
+}
+requestAnimationFrame(spinLoop);
+
+// ── Home orientation ──
+function returnHome() {
+  const startX = rotX, startY = rotY;
+  const targetX = HOME_ROT_X;
+  let deltaY = HOME_ROT_Y - rotY;
+  while (deltaY > Math.PI) deltaY -= Math.PI * 2;
+  while (deltaY < -Math.PI) deltaY += Math.PI * 2;
+  const targetY = rotY + deltaY;
+
+  let frame = 0;
+  const totalFrames = 30;
+
+  function animateHome() {
+    frame++;
+    const t = frame / totalFrames;
+    const ease = t * t * (3 - 2 * t);
+
+    rotX = startX + (targetX - startX) * ease;
+    rotY = startY + (targetY - startY) * ease;
+    renderGlobe();
+
+    if (frame < totalFrames) {
+      requestAnimationFrame(animateHome);
+    } else {
+      rotX = HOME_ROT_X;
+      rotY = HOME_ROT_Y;
+      autoSpin = true;
+      pauseBtn.textContent = '⏸';
+    }
+  }
+
+  animateHome();
+}
+
+document.getElementById('homeBtn').addEventListener('click', returnHome);
+
+// ── View toggle ──
+const viewFlatBtn = document.getElementById('viewFlat');
+const viewGlobeBtn = document.getElementById('viewGlobe');
+const viewMollweideBtn = document.getElementById('viewMollweide');
+
+function setView(view) {
+  currentView = view;
+  viewFlatBtn.classList.remove('active');
+  viewGlobeBtn.classList.remove('active');
+  viewMollweideBtn.classList.remove('active');
+  canvas.classList.add('hidden-canvas');
+  globeCanvas.classList.add('hidden-canvas');
+  mollweideCanvas.classList.add('hidden-canvas');
+  speedControl.style.display = 'none';
+  keysHeld.clear();
+  hideTooltip();
+
+  if (view === 'flat') {
+    canvas.classList.remove('hidden-canvas');
+    viewFlatBtn.classList.add('active');
+  } else if (view === 'globe') {
+    globeCanvas.classList.remove('hidden-canvas');
+    viewGlobeBtn.classList.add('active');
+    speedControl.style.display = '';
+    renderGlobe();
+  } else if (view === 'mollweide') {
+    mollweideCanvas.classList.remove('hidden-canvas');
+    viewMollweideBtn.classList.add('active');
+    renderMollweide();
+  }
+}
+
+viewFlatBtn.addEventListener('click', () => setView('flat'));
+viewGlobeBtn.addEventListener('click', () => setView('globe'));
+viewMollweideBtn.addEventListener('click', () => setView('mollweide'));
+
+// ── Regional Detail System ──
+const REGIONAL_SIZE = 512;
+const REGIONAL_SCALE = 1.0;       // km per cell
+const PLANETARY_CELL_KM = 156;    // km per planetary cell
+const CELLS_PER_PLANETARY = PLANETARY_CELL_KM / REGIONAL_SCALE;
+
+const regionalCanvas = document.getElementById('regionalCanvas');
+const regionalCtx = regionalCanvas.getContext('2d');
+const regionalPanel = document.getElementById('regionalPanel');
+const regionalPlaceholder = document.getElementById('regionalPlaceholder');
+const regionalActiveEl = document.getElementById('regionalActive');
+const regionLabel = document.getElementById('regionLabel');
+const regionalOverlaySelect = document.getElementById('regionalOverlaySelect');
+const closeRegionalBtn = document.getElementById('closeRegionalBtn');
+const regionalHeader = document.getElementById('regionalHeader');
+const regionalCanvasWrap = document.getElementById('regionalCanvasWrap');
+
+let selectedRegion = null;        // { cx, cy }
+let regionalCells = null;         // 512x512 array
+let regionalSubPeaks = [];        // sub-peak data for volcanic islands
+let activeControl = 'planetary';  // 'planetary' or 'regional'
+
+// Accessor: get planetary cell from the flat 1D cells array, treating it as 2D
+function getPlanetaryCell(x, y) {
+  const wx = ((Math.floor(x) % W) + W) % W;
+  const wy = Math.max(0, Math.min(H - 1, Math.floor(y)));
+  return cells[wy * W + wx];
+}
+
+// Seeded RNG for sub-peak generation (deterministic per-hotspot)
+function seededRNG(seed) {
+  return mulberry32(Math.abs(Math.floor(seed * 13371 + 7919)));
+}
+
+// Generate sub-peaks for volcanic hotspots near the regional view
+function generateSubPeaks(centerCX, centerCY, seed) {
+  const subPeaks = [];
+  if (!hotspots) return subPeaks;
+
+  for (const hs of hotspots) {
+    // Check if hotspot is within or near the regional bounds (in planetary cells)
+    let dx = Math.abs(hs.x - centerCX);
+    if (dx > W / 2) dx = W - dx;
+    const dy = Math.abs(hs.y - centerCY);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist > 8) continue;  // skip distant hotspots (8 planetary cells ~1250 km)
+
+    // Generate 2-5 sub-peaks around the hotspot center
+    const rng = seededRNG(seed + hs.x * 137 + hs.y * 311);
+    const numPeaks = params.subPeakMin + Math.floor(rng() * (params.subPeakMax - params.subPeakMin + 1));
+
+    for (let i = 0; i < numPeaks; i++) {
+      // Offset from hotspot center: 0-subPeakSpread km in random direction
+      const angle = rng() * Math.PI * 2;
+      const offsetDist = rng() * params.subPeakSpread;  // km
+      const peakX = hs.x + (Math.cos(angle) * offsetDist) / PLANETARY_CELL_KM;
+      const peakY = hs.y + (Math.sin(angle) * offsetDist) / PLANETARY_CELL_KM;
+
+      // Each sub-peak has its own height and radius
+      const height = hs.intensity * (0.4 + rng() * 0.6);  // 40-100% of parent
+      const radius = 30 + rng() * 50;  // 30-80 km radius in regional cells
+
+      subPeaks.push({
+        // Store in regional cell coordinates for fast lookup
+        rx: (peakX - centerCX) * CELLS_PER_PLANETARY + REGIONAL_SIZE / 2,
+        ry: (peakY - centerCY) * CELLS_PER_PLANETARY + REGIONAL_SIZE / 2,
+        height,
+        radius,
+      });
+    }
+  }
+
+  return subPeaks;
+}
+
+// Bilinear interpolation helper
+function bilerp(v00, v10, v01, v11, fx, fy) {
+  return v00 * (1 - fx) * (1 - fy) + v10 * fx * (1 - fy) + v01 * (1 - fx) * fy + v11 * fx * fy;
+}
+
+function bilinearInterpolate(px, py) {
+  const x0 = Math.floor(px), x1 = (x0 + 1) % W;
+  const y0 = Math.floor(py), y1 = Math.min(H - 1, y0 + 1);
+  const fx = px - x0, fy = py - y0;
+
+  const c00 = getPlanetaryCell(x0, y0);
+  const c10 = getPlanetaryCell(x1, y0);
+  const c01 = getPlanetaryCell(x0, y1);
+  const c11 = getPlanetaryCell(x1, y1);
+
+  return {
+    elevation:   bilerp(c00.elevation, c10.elevation, c01.elevation, c11.elevation, fx, fy),
+    minerals: {
+      iron:      bilerp(c00.minerals.iron, c10.minerals.iron, c01.minerals.iron, c11.minerals.iron, fx, fy),
+      copper:    bilerp(c00.minerals.copper, c10.minerals.copper, c01.minerals.copper, c11.minerals.copper, fx, fy),
+      manganese: bilerp(c00.minerals.manganese, c10.minerals.manganese, c01.minerals.manganese, c11.minerals.manganese, fx, fy),
+    },
+    moisture:    bilerp(c00.moisture, c10.moisture, c01.moisture, c11.moisture, fx, fy),
+    temperature: bilerp(c00.temperature, c10.temperature, c01.temperature, c11.temperature, fx, fy),
+    volcanism:   bilerp(c00.volcanism, c10.volcanism, c01.volcanism, c11.volcanism, fx, fy),
+  };
+}
+
+function addRegionalDetail(interp, rx, ry, px, py) {
+  const cell = {
+    elevation: interp.elevation,
+    minerals: { ...interp.minerals },
+    moisture: interp.moisture,
+    temperature: interp.temperature,
+    volcanism: interp.volcanism,
+  };
+
+  // Deterministic noise seed from planetary position
+  const noiseSeed = Math.floor(px * 1000 + py * 7);
+
+  // ── 2a. Sub-peak elevation contributions (multi-vent volcanic structure) ──
+  for (const peak of regionalSubPeaks) {
+    const dx = rx - peak.rx;
+    const dy = ry - peak.ry;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < peak.radius * 1.5) {
+      // Gaussian falloff from each sub-peak
+      const sigma = peak.radius * 0.4;
+      const contribution = peak.height * 0.25 * Math.exp(-(dist * dist) / (2 * sigma * sigma));
+      cell.elevation += contribution;
+    }
+  }
+
+  // Multi-scale detail noise
+  const fine   = fractalNoise(rx, ry, noiseSeed + 100, 4, 0.025);
+  const medium = fractalNoise(rx, ry, noiseSeed + 200, 3, 0.008);
+  const micro  = fractalNoise(rx, ry, noiseSeed + 300, 3, 0.06);
+
+  // Amplitude based on elevation context
+  const absElev = Math.abs(cell.elevation);
+
+  // ── 2d. Increased coastline noise ──
+  // Coastline amplification: highest detail near sea level (wider gaussian)
+  const coastFactor = Math.exp(-(absElev * absElev) / (2 * params.coastWidth * params.coastWidth));
+
+  // Mountain amplification: more detail at high elevations
+  const mountainFactor = Math.max(0, cell.elevation - 0.1) * 2;
+
+  // Ocean damping: very little noise on deep ocean floor
+  const oceanDamp = cell.elevation < -0.1 ? 0.12 : 1.0;
+
+  // Large-scale shape noise (100-200 km coastal deformation features)
+  const shapeNoise = fractalNoise(rx, ry, noiseSeed + 700, 2, 0.004);
+
+  // Combined amplitude with increased coastal and shape noise
+  const amplitude = oceanDamp * (
+    0.02 +
+    coastFactor * params.coastAmplitude +
+    coastFactor * shapeNoise * params.shapeNoiseAmp +
+    mountainFactor * params.mountainDetail
+  );
+
+  // Apply elevation detail
+  const detailNoise = fine * 0.5 + medium * 0.35 + micro * 0.15;
+  cell.elevation += detailNoise * amplitude;
+
+  // ── 2c. Coastal asymmetry (differential wave erosion) ──
+  if (coastFactor > 0.3) {
+    // A very low-frequency noise determines which "side" of features gets steepened
+    const asymmetryAngle = fractalNoise(rx * 0.003, ry * 0.003, noiseSeed + 600, 1, 1.0) * Math.PI;
+    const asymmetryX = Math.cos(asymmetryAngle);
+    const asymmetryY = Math.sin(asymmetryAngle);
+
+    // Compute local elevation gradient using noise-based approximation
+    const gradX = fractalNoise(rx + 1, ry, noiseSeed + 100, 2, 0.025) - fractalNoise(rx - 1, ry, noiseSeed + 100, 2, 0.025);
+    const gradY = fractalNoise(rx, ry + 1, noiseSeed + 100, 2, 0.025) - fractalNoise(rx, ry - 1, noiseSeed + 100, 2, 0.025);
+
+    // Dot product: how much does the local slope face the "erosion direction"?
+    const exposureDot = gradX * asymmetryX + gradY * asymmetryY;
+
+    // Exposed slopes get steepened, sheltered slopes get smoothed
+    cell.elevation += exposureDot * coastFactor * 0.03;
+  }
+
+  // Recompute water/land classification at regional resolution
+  cell.isLand = cell.elevation > 0.0;
+  cell.isShallowWater = cell.elevation > -0.04 && cell.elevation <= 0.0;
+  cell.isDeepWater = cell.elevation <= -0.04;
+  cell.isFreezing = cell.temperature < 0.5;
+
+  // Add mineral variation (regional mineral pockets)
+  const mineralNoise = fractalNoise(rx, ry, noiseSeed + 400, 2, 0.015) * 0.08;
+  cell.minerals.iron      = Math.max(0, cell.minerals.iron + mineralNoise);
+  cell.minerals.copper    = Math.max(0, cell.minerals.copper + mineralNoise * 0.6);
+  cell.minerals.manganese = Math.max(0, cell.minerals.manganese + mineralNoise * 0.8);
+  cell.mineralTotal = cell.minerals.iron + cell.minerals.copper + cell.minerals.manganese;
+  cell.isDepleted = cell.mineralTotal < 0.15;
+  cell.dominant = cell.minerals.iron >= cell.minerals.copper && cell.minerals.iron >= cell.minerals.manganese
+    ? 'iron' : cell.minerals.copper >= cell.minerals.manganese ? 'copper' : 'manganese';
+
+  // Add slight moisture variation
+  const moistureNoise = fractalNoise(rx, ry, noiseSeed + 500, 2, 0.01) * 0.08;
+  cell.moisture = Math.max(0, Math.min(1, cell.moisture + moistureNoise));
+
+  return cell;
+}
+
+function computeRegionalCell(rx, ry, centerCX, centerCY) {
+  const offsetX = (rx - REGIONAL_SIZE / 2) / CELLS_PER_PLANETARY;
+  const offsetY = (ry - REGIONAL_SIZE / 2) / CELLS_PER_PLANETARY;
+  const px = centerCX + offsetX;
+  const py = centerCY + offsetY;
+
+  const wpx = ((px % W) + W) % W;
+  const wpy = Math.max(0, Math.min(H - 0.01, py));
+
+  const interp = bilinearInterpolate(wpx, wpy);
+  return addRegionalDetail(interp, rx, ry, wpx, wpy);
+}
+
+function computeRegionalFlora(rcells) {
+  for (let rx = 0; rx < REGIONAL_SIZE; rx++) {
+    for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
+      const cell = rcells[rx][ry];
+      if (!cell.isLand || cell.isFreezing) {
+        cell.floraType = cell.isFreezing ? 'frozen' : 'none';
+        cell.floraDensity = 0;
+        continue;
+      }
+
+      const light = 1.0;
+      const photoFitness = light * cell.moisture * 0.8;
+      const chemoFitness = cell.mineralTotal * cell.moisture * 1.2;
+      const mixoFitness  = (0.6 + 0.5 * cell.mineralTotal) * cell.moisture;
+      const maxFitness = Math.max(photoFitness, chemoFitness, mixoFitness);
+
+      if (maxFitness < 0.1) {
+        cell.floraType = 'barren';
+      } else if (photoFitness >= chemoFitness && photoFitness >= mixoFitness) {
+        cell.floraType = 'photosynthetic';
+      } else if (chemoFitness >= photoFitness && chemoFitness >= mixoFitness) {
+        cell.floraType = 'chemotrophic';
+      } else {
+        cell.floraType = 'mixotrophic';
+      }
+      cell.floraDensity = Math.min(1, maxFitness);
+    }
+  }
+}
+
+// ── 2b. Radial drainage erosion ──
+function carveRadialDrainage(rcells, seed) {
+  // Find local high points (elevation peaks)
+  const peaks = [];
+  for (let rx = 4; rx < REGIONAL_SIZE - 4; rx += 8) {
+    for (let ry = 4; ry < REGIONAL_SIZE - 4; ry += 8) {
+      if (rcells[rx][ry].isLand && rcells[rx][ry].elevation > 0.08) {
+        // Check if local maximum in 4-cell radius
+        let isMax = true;
+        for (let dx = -4; dx <= 4; dx += 4) {
+          for (let dy = -4; dy <= 4; dy += 4) {
+            const nx = rx + dx, ny = ry + dy;
+            if (nx >= 0 && nx < REGIONAL_SIZE && ny >= 0 && ny < REGIONAL_SIZE) {
+              if (rcells[nx][ny].elevation > rcells[rx][ry].elevation) isMax = false;
+            }
+          }
+        }
+        if (isMax) peaks.push({ x: rx, y: ry, elev: rcells[rx][ry].elevation });
+      }
+    }
+  }
+
+  const rng = seededRNG(seed + 9999);
+
+  // From each peak, send 6-12 drainage paths downhill
+  for (const peak of peaks) {
+    const numPaths = params.drainagePathsMin + Math.floor(rng() * (params.drainagePathsMax - params.drainagePathsMin + 1));
+
+    for (let p = 0; p < numPaths; p++) {
+      // Start direction: roughly evenly spaced around the peak + some randomness
+      const baseAngle = (p / numPaths) * Math.PI * 2;
+      const angle = baseAngle + (rng() - 0.5) * 0.6;  // ±17° wobble
+
+      let cx = peak.x, cy = peak.y;
+      let dirX = Math.cos(angle), dirY = Math.sin(angle);
+
+      // Trace downhill, carving a valley
+      for (let step = 0; step < 200; step++) {
+        cx += dirX;
+        cy += dirY;
+
+        const ix = Math.round(cx), iy = Math.round(cy);
+        if (ix < 1 || ix >= REGIONAL_SIZE - 1 || iy < 1 || iy >= REGIONAL_SIZE - 1) break;
+        if (rcells[ix][iy].elevation <= 0.0) break;  // reached the coast
+
+        // Carve: lower elevation along the path
+        // Valley depth proportional to distance from peak (deeper further down)
+        const distFromPeak = Math.sqrt((ix - peak.x) ** 2 + (iy - peak.y) ** 2);
+        const carveDepth = params.drainageDepth * Math.min(1, distFromPeak / 60);
+
+        // Carve the center of the valley and its immediate neighbors
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const nx = ix + dx, ny = iy + dy;
+            if (nx >= 0 && nx < REGIONAL_SIZE && ny >= 0 && ny < REGIONAL_SIZE) {
+              const falloff = (dx === 0 && dy === 0) ? 1.0 : 0.4;  // center deeper than edges
+              rcells[nx][ny].elevation -= carveDepth * falloff;
+            }
+          }
+        }
+
+        // Slight direction wobble (streams meander)
+        dirX += (rng() - 0.5) * 0.15;
+        dirY += (rng() - 0.5) * 0.15;
+        // Renormalize direction
+        let len = Math.sqrt(dirX * dirX + dirY * dirY);
+        dirX /= len; dirY /= len;
+
+        // Bias direction downhill
+        if (ix > 0 && ix < REGIONAL_SIZE - 1 && iy > 0 && iy < REGIONAL_SIZE - 1) {
+          const gradX = rcells[ix - 1][iy].elevation - rcells[ix + 1][iy].elevation;
+          const gradY = rcells[ix][iy - 1].elevation - rcells[ix][iy + 1].elevation;
+          dirX += gradX * 0.3;
+          dirY += gradY * 0.3;
+          const len2 = Math.sqrt(dirX * dirX + dirY * dirY);
+          if (len2 > 0) { dirX /= len2; dirY /= len2; }
+        }
+      }
+    }
+  }
+
+  // Recompute land/water after carving (some valleys may reach sea level)
+  for (let rx = 0; rx < REGIONAL_SIZE; rx++) {
+    for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
+      const c = rcells[rx][ry];
+      c.isLand = c.elevation > 0.0;
+      c.isShallowWater = c.elevation > -0.04 && c.elevation <= 0.0;
+      c.isDeepWater = c.elevation <= -0.04;
+    }
+  }
+}
+
+function generateRegionalDetail(centerCX, centerCY) {
+  if (!cells) return;
+
+  // 1. Precompute sub-peaks for nearby hotspots
+  const seed = parseInt(document.getElementById('seedInput').value, 10) || 0;
+  regionalSubPeaks = generateSubPeaks(centerCX, centerCY, seed);
+
+  // 2-4. For each cell: bilinear interpolation + sub-peaks + detail noise + asymmetry
+  regionalCells = new Array(REGIONAL_SIZE);
+  for (let rx = 0; rx < REGIONAL_SIZE; rx++) {
+    regionalCells[rx] = new Array(REGIONAL_SIZE);
+    for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
+      regionalCells[rx][ry] = computeRegionalCell(rx, ry, centerCX, centerCY);
+    }
+  }
+
+  // 5. Carve radial drainage from peaks
+  carveRadialDrainage(regionalCells, seed);
+
+  // 6. Land/water already recomputed in carveRadialDrainage
+
+  // 7. Compute regional flora
+  computeRegionalFlora(regionalCells);
+
+  // 8. Render
+  renderRegionalMap();
+}
+
+function renderRegionalMap() {
+  if (!regionalCells) return;
+
+  const scale = 2;
+  regionalCanvas.width = REGIONAL_SIZE * scale;
+  regionalCanvas.height = REGIONAL_SIZE * scale;
+
+  const colorFn = getColorFn(regionalOverlaySelect.value);
+  const imgData = regionalCtx.createImageData(REGIONAL_SIZE * scale, REGIONAL_SIZE * scale);
+  const data = imgData.data;
+
+  for (let rx = 0; rx < REGIONAL_SIZE; rx++) {
+    for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
+      const color = colorFn(regionalCells[rx][ry]);
+      for (let dy = 0; dy < scale; dy++) {
+        for (let dx = 0; dx < scale; dx++) {
+          const off = ((ry * scale + dy) * REGIONAL_SIZE * scale + (rx * scale + dx)) * 4;
+          data[off] = color.r;
+          data[off + 1] = color.g;
+          data[off + 2] = color.b;
+          data[off + 3] = 255;
+        }
+      }
+    }
+  }
+
+  regionalCtx.putImageData(imgData, 0, 0);
+}
+
+function showRegionalView(cx, cy) {
+  selectedRegion = { cx, cy };
+
+  // Determine latitude band for label
+  const band = getLatitudeBand(Math.round(cy));
+  const plateCell = getPlanetaryCell(Math.round(cx), Math.round(cy));
+  const plateType = plateCell.plateType;
+  regionLabel.textContent = `REGION: (${Math.round(cx)}, ${Math.round(cy)}) — ${band}, ${plateType}`;
+
+  regionalPlaceholder.style.display = 'none';
+  regionalActiveEl.style.display = '';
+
+  // Set active control to regional
+  setActiveControl('regional');
+
+  const t0 = performance.now();
+  generateRegionalDetail(cx, cy);
+  const t1 = performance.now();
+  statusText.textContent = `Regional detail generated in ${(t1 - t0).toFixed(0)} ms (${REGIONAL_SIZE}×${REGIONAL_SIZE} cells)`;
+
+  // Re-render the planetary flat map to show selection marker
+  render(overlaySelect.value);
+  if (currentView === 'globe') renderGlobe();
+  if (currentView === 'mollweide') renderMollweide();
+}
+
+function closeRegionalView() {
+  selectedRegion = null;
+  regionalCells = null;
+  regionalPlaceholder.style.display = '';
+  regionalActiveEl.style.display = 'none';
+  setActiveControl('planetary');
+
+  // Re-render to remove selection marker
+  render(overlaySelect.value);
+  if (currentView === 'globe') renderGlobe();
+  if (currentView === 'mollweide') renderMollweide();
+}
+
+closeRegionalBtn.addEventListener('click', closeRegionalView);
+
+regionalOverlaySelect.addEventListener('change', () => {
+  if (regionalCells) renderRegionalMap();
+});
+
+// Active control management
+function setActiveControl(which) {
+  activeControl = which;
+  // Visual indicator
+  regionalHeader.classList.toggle('active-panel', which === 'regional');
+  regionalCanvasWrap.classList.toggle('active-panel', which === 'regional');
+}
+
+// Click on regional canvas to set focus (and inspect with tooltip)
+regionalCanvas.addEventListener('click', (e) => {
+  setActiveControl('regional');
+  if (!regionalCells) return;
+  const rect = regionalCanvas.getBoundingClientRect();
+  const scaleX = regionalCanvas.width / rect.width;
+  const scaleY = regionalCanvas.height / rect.height;
+  const px = (e.clientX - rect.left) * scaleX;
+  const py = (e.clientY - rect.top) * scaleY;
+  // Regional canvas is rendered at 2x scale
+  const rx = Math.floor(px / 2);
+  const ry = Math.floor(py / 2);
+  if (rx >= 0 && rx < REGIONAL_SIZE && ry >= 0 && ry < REGIONAL_SIZE) {
+    showRegionalCellTooltip(rx, ry, e);
+  }
+});
+
+// Click on planetary canvases to set focus back
+canvas.addEventListener('mousedown', () => setActiveControl('planetary'));
+globeCanvas.addEventListener('mousedown', () => setActiveControl('planetary'));
+mollweideCanvas.addEventListener('mousedown', () => setActiveControl('planetary'));
+
+// Draw selection marker on flat map after rendering
+function drawSelectionMarker() {
+  if (!selectedRegion) return;
+
+  const cx = selectedRegion.cx;
+  const cy = selectedRegion.cy;
+
+  // Compute the rectangular extent of the region on the planetary map
+  const halfSpan = (REGIONAL_SIZE / 2) / CELLS_PER_PLANETARY;
+  const x0 = (cx - halfSpan) * 2;
+  const y0 = (cy - halfSpan) * 2;
+  const regionW = (REGIONAL_SIZE / CELLS_PER_PLANETARY) * 2;
+  const regionH = regionW;
+
+  const pctx = ctx;
+  pctx.strokeStyle = '#fff';
+  pctx.lineWidth = 1.5;
+  pctx.setLineDash([4, 3]);
+  pctx.strokeRect(x0, y0, regionW, regionH);
+  pctx.setLineDash([]);
+
+  // Small crosshair at center
+  const px = cx * 2, py = cy * 2;
+  pctx.strokeStyle = '#fff';
+  pctx.lineWidth = 1;
+  pctx.beginPath();
+  pctx.moveTo(px - 4, py); pctx.lineTo(px + 4, py);
+  pctx.moveTo(px, py - 4); pctx.lineTo(px, py + 4);
+  pctx.stroke();
+}
+
+// ── Tuning Panel ──
+const presets = {
+  'Default': { ...defaultParams },
+
+  'Archipelago': {
+    continentalBase: -0.08,
+    continentalNoise: 0.18,
+    fractalAmp: 0.18,
+    fractalOctaves: 5,
+    collisionHeight: 0.55,
+    arcHeight: 0.35,
+    subPeakMax: 6,
+    subPeakSpread: 120,
+    coastAmplitude: 0.14,
+    coastWidth: 0.09,
+    shapeNoiseAmp: 0.08,
+    erosionPasses: 5,
+    erosionRate: 0.22,
+  },
+
+  'Island Chains': {
+    continentalRatio: 0.25,
+    continentalBase: -0.10,
+    continentalNoise: 0.12,
+    fractalAmp: 0.20,
+    fractalOctaves: 5,
+    collisionHeight: 0.45,
+    arcHeight: 0.50,
+    arcNoiseScale: 0.06,
+    hotspotCountBase: 5,
+    subPeakMax: 4,
+    subPeakSpread: 60,
+    coastAmplitude: 0.12,
+    shapeNoiseAmp: 0.10,
+  },
+
+  'Continental': {
+    continentalRatio: 0.50,
+    continentalBase: 0.05,
+    continentalNoise: 0.10,
+    fractalAmp: 0.10,
+    collisionHeight: 0.70,
+    coastAmplitude: 0.06,
+    shapeNoiseAmp: 0.03,
+  },
+
+  'Waterworld': {
+    continentalRatio: 0.20,
+    continentalBase: -0.15,
+    continentalNoise: 0.20,
+    fractalAmp: 0.22,
+    collisionHeight: 0.40,
+    arcHeight: 0.30,
+    hotspotCountBase: 6,
+    hotspotCountRange: 6,
+    subPeakMax: 3,
+    coastAmplitude: 0.16,
+  },
+};
+
+let activePreset = null;
+let regenTimer = null;
+
+function showTuneToast(msg) {
+  const toast = document.getElementById('tuneToast');
+  toast.textContent = msg;
+  toast.classList.add('visible');
+  setTimeout(() => toast.classList.remove('visible'), 1800);
+}
+
+function updateSliderValues() {
+  const panel = document.getElementById('tuningPanel');
+  panel.querySelectorAll('input[type="range"]').forEach(slider => {
+    const key = slider.dataset.param;
+    if (key && params[key] !== undefined) {
+      slider.value = params[key];
+      slider.nextElementSibling.textContent = formatParamValue(params[key], paramConfig[key]);
+    }
+  });
+}
+
+function formatParamValue(val, config) {
+  if (!config) return val;
+  if (config.step >= 1) return Math.round(val);
+  if (config.step >= 0.01) return val.toFixed(2);
+  return val.toFixed(3);
+}
+
+function highlightActivePreset(name) {
+  activePreset = name;
+  document.querySelectorAll('.tune-presets button').forEach(btn => {
+    btn.classList.toggle('preset-active', btn.dataset.preset === name);
+  });
+}
+
+function applyPreset(name) {
+  const preset = presets[name];
+  if (!preset) return;
+  // Reset to defaults first
+  Object.assign(params, defaultParams);
+  // Apply preset overrides
+  Object.assign(params, preset);
+  updateSliderValues();
+  highlightActivePreset(name);
+  scheduleRegen();
+}
+
+function scheduleRegen() {
+  if (regenTimer) clearTimeout(regenTimer);
+  regenTimer = setTimeout(() => {
+    runGeneration(true);  // preserve regional view on slider changes
+    regenTimer = null;
+  }, 150);
+}
+
+function saveConfig() {
+  const config = {
+    seed: parseInt(document.getElementById('seedInput').value, 10) || 0,
+    params: { ...params },
+    version: 1,
+  };
+  const json = JSON.stringify(config, null, 2);
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(json).then(() => {
+      showTuneToast('Config copied to clipboard');
+    }).catch(() => {
+      prompt('Copy this config:', json);
+    });
+  } else {
+    prompt('Copy this config:', json);
+  }
+}
+
+function loadConfig() {
+  const json = prompt('Paste config JSON:');
+  if (!json) return;
+  try {
+    const config = JSON.parse(json);
+    if (config.params) Object.assign(params, config.params);
+    if (config.seed !== undefined) {
+      document.getElementById('seedInput').value = config.seed;
+    }
+    updateSliderValues();
+    highlightActivePreset(null);
+    runGeneration();
+    showTuneToast('Config loaded');
+  } catch (e) {
+    alert('Invalid config JSON');
+  }
+}
+
+function buildTuningPanel() {
+  const panel = document.getElementById('tuningPanel');
+  const groups = {};
+
+  for (const [key, config] of Object.entries(paramConfig)) {
+    if (!groups[config.group]) groups[config.group] = [];
+    groups[config.group].push({ key, config });
+  }
+
+  // Presets row
+  const presetDiv = document.createElement('div');
+  presetDiv.className = 'tune-presets';
+  for (const name of Object.keys(presets)) {
+    const btn = document.createElement('button');
+    btn.textContent = name;
+    btn.dataset.preset = name;
+    btn.addEventListener('click', () => applyPreset(name));
+    presetDiv.appendChild(btn);
+  }
+  panel.appendChild(presetDiv);
+
+  // Slider groups
+  for (const [groupName, items] of Object.entries(groups)) {
+    const section = document.createElement('div');
+    const label = document.createElement('div');
+    label.className = 'tune-group-label';
+    label.textContent = '── ' + groupName + ' ──';
+    section.appendChild(label);
+
+    for (const { key, config } of items) {
+      const row = document.createElement('div');
+      row.className = 'tune-row';
+
+      const lbl = document.createElement('label');
+      lbl.textContent = config.label;
+
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = config.min;
+      slider.max = config.max;
+      slider.step = config.step;
+      slider.value = params[key];
+      slider.dataset.param = key;
+
+      const valSpan = document.createElement('span');
+      valSpan.className = 'tune-value';
+      valSpan.textContent = formatParamValue(params[key], config);
+
+      row.appendChild(lbl);
+      row.appendChild(slider);
+      row.appendChild(valSpan);
+      section.appendChild(row);
+    }
+
+    panel.appendChild(section);
+  }
+
+  // Actions row
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'tune-actions';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = '💾 Save Config';
+  saveBtn.addEventListener('click', saveConfig);
+
+  const loadBtn = document.createElement('button');
+  loadBtn.textContent = '📂 Load Config';
+  loadBtn.addEventListener('click', loadConfig);
+
+  const resetBtn = document.createElement('button');
+  resetBtn.textContent = '↺ Reset';
+  resetBtn.addEventListener('click', () => applyPreset('Default'));
+
+  actionsDiv.appendChild(saveBtn);
+  actionsDiv.appendChild(loadBtn);
+  actionsDiv.appendChild(resetBtn);
+  panel.appendChild(actionsDiv);
+
+  // Slider input handler
+  panel.addEventListener('input', e => {
+    if (e.target.dataset.param) {
+      const key = e.target.dataset.param;
+      const val = parseFloat(e.target.value);
+      params[key] = val;
+      e.target.nextElementSibling.textContent = formatParamValue(val, paramConfig[key]);
+      highlightActivePreset(null);
+      scheduleRegen();
+    }
+  });
+}
+
+// Toggle
+const tuningToggle = document.getElementById('tuningToggle');
+const tuningPanel = document.getElementById('tuningPanel');
+let tuningOpen = false;
+
+tuningToggle.addEventListener('click', () => {
+  tuningOpen = !tuningOpen;
+  tuningPanel.style.display = tuningOpen ? 'block' : 'none';
+  tuningToggle.textContent = tuningOpen ? '⚙ Tuning ▲' : '⚙ Tuning ▼';
+});
+
+buildTuningPanel();
+
+// ── UI wiring ──
+const seedInput = document.getElementById('seedInput');
+const genBtn = document.getElementById('genBtn');
+const overlaySelect = document.getElementById('overlaySelect');
+const statusText = document.getElementById('statusText');
+
+function runGeneration(preserveRegion) {
+  const seed = parseInt(seedInput.value, 10) || 0;
+  statusText.textContent = 'Generating…';
+  const savedRegion = preserveRegion && selectedRegion ? { ...selectedRegion } : null;
+
+  // Use setTimeout to allow status text to paint before the blocking generation
+  setTimeout(() => {
+    const t0 = performance.now();
+    generatePlanet(seed);
+    const t1 = performance.now();
+    render(overlaySelect.value);
+    const t2 = performance.now();
+
+    if (currentView === 'globe') {
+      renderGlobe();
+      const t3 = performance.now();
+      statusText.textContent = `Generated in ${(t1 - t0).toFixed(0)} ms · Rendered in ${(t2 - t1).toFixed(0)} ms · Globe in ${(t3 - t2).toFixed(0)} ms`;
+    } else if (currentView === 'mollweide') {
+      renderMollweide();
+      const t3 = performance.now();
+      statusText.textContent = `Generated in ${(t1 - t0).toFixed(0)} ms · Rendered in ${(t2 - t1).toFixed(0)} ms · Mollweide in ${(t3 - t2).toFixed(0)} ms`;
+    } else {
+      statusText.textContent = `Generated in ${(t1 - t0).toFixed(0)} ms · Rendered in ${(t2 - t1).toFixed(0)} ms`;
+    }
+    hideTooltip();
+
+    if (savedRegion) {
+      // Regenerate regional view with new params
+      showRegionalView(savedRegion.cx, savedRegion.cy);
+    } else {
+      closeRegionalView();
+    }
+  }, 10);
+}
+
+genBtn.addEventListener('click', () => runGeneration());
+
+seedInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') runGeneration();
+});
+
+overlaySelect.addEventListener('change', () => {
+  render(overlaySelect.value);
+  if (currentView === 'globe') renderGlobe();
+  if (currentView === 'mollweide') renderMollweide();
+});
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const px = (e.clientX - rect.left) * scaleX;
+  const py = (e.clientY - rect.top) * scaleY;
+  const cellX = Math.floor(px / 2);
+  const cellY = Math.floor(py / 2);
+  if (cellX >= 0 && cellX < W && cellY >= 0 && cellY < H) {
+    showCellInfo(cellX, cellY, e);
+    showRegionalView(cellX, cellY);
+  }
+});
+
+// Generate on load
+runGeneration();
+</script>
+
+</body>
+</html>
