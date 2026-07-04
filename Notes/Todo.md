@@ -57,27 +57,58 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Creature density scaled down for testing (~30-50 total, proportions preserved, original values commented out)
 - [x] Speed system overhaul (fiber data on all species, player sprint/walk, mass-dependent acceleration, mass-dependent turning cost, legacy turn probability removed)
 - [x] Hare freeze behavior — first pass (ganglion freeze state between alert and flee)
-- [x] Cleanup batch (blood cyan not red, Alt+dir turn-in-place, Shift+V air smell, V ground smell, inventory commented out, 8-directional ground scent)\ 
-- [x] Hare freeze behavior rewrite — physical two-threshold architecture (remove _shouldBreakFreeze, replace with two-ganglion signal-vs-threshold system, decouple confidence normalization). Prompt ready: prompt-hare-freeze-physical.md
-- [x] Hare freeze behavior rewrite — physical two-threshold architecture (remove _shouldBreakFreeze, replace with two-ganglion signal-vs-threshold system, decouple confidence normalization). Prompt ready: prompt-hare-freeze-physical.md
-- [x] Ecological palette and tile texture update (red-violet grass, amber water, new dirt/sand/stone/water textures, creature tints, meso/apex profile sprites). Prompt ready: prompt-ecological-palette.md. Revert reference: old-palette-revert.md
-- [x] Ambient brightness dip rendering (subtle terrain darkening near creatures for visibility). Prompt ready: prompt-ambient-dip.md
-- [x] Canvas-rendered title screen (terrain background, keyboard menu, death screen, species selection restyle). Prompt ready: prompt-canvas-title-screen.md 
+- [x] Cleanup batch (blood cyan not red, Alt+dir turn-in-place, Shift+V air smell, V ground smell, inventory commented out, 8-directional ground scent)
+- [x] Hare freeze behavior rewrite — physical two-threshold architecture (remove _shouldBreakFreeze, replace with two-ganglion signal-vs-threshold system, decouple confidence normalization)
+- [x] Ecological palette and tile texture update (red-violet grass, amber water, new dirt/sand/stone/water textures, creature tints, meso/apex profile sprites)
+- [x] Ambient brightness dip rendering (subtle terrain darkening near creatures for visibility)
+- [x] Canvas-rendered title screen (terrain background, keyboard menu, death screen, species selection restyle)
 - [x] Detection performance optimization (BLOCKING for full density — profile the hot path, reduce spatial query radius per species, cache LOS per tile-pair, cache best transducer per channel)
+- [x] Palette revert to pre-overhaul working values (terrain palettes, chargen COLOR_PALETTES, T.SAND palette mapping)
+- [x] Three-layer color pipeline designed (material table, star modification transforms, chromatic adaptation, derived tile palettes — documented in three-layer-color-system.md)
+- [x] Pipeline palette applied to game (11 BIOME entries in ecology-data.js updated to pipeline-derived values)
+- [x] Chemotrophic sprite redesign (MUSHFOREST → colony mound, FUNGAL_GRASS → mineral crust texture)
+- [x] Water tile texture redesign (added '#' pixels for amber wave crests on blue water)
+- [x] Sprite variant library (GRASS V2-V4, WATER V2-V5, DEEP_WATER V2-V3 added to sprites.js)
+- [x] Standalone planet generator/viewer (planet-viewer.html — plates, elevation, minerals, atmosphere, flora, globe/flat/Mollweide views, regional 1km detail zoom, tuning panel with save/load)
+- [x] Weather/wind system for planet (atmospheric circulation cells, topographic deflection, trade winds/westerlies/ITCZ — full wind vector field)
+- [x] Ocean current system (wind-driven surface currents, Coriolis deflection, SST advection, western boundary warm/eastern cold, upwelling)
+- [x] Precipitation model (moisture advection, orographic precipitation, convergence precipitation, background convective rain, iterative solver to steady state)
+- [x] Humid planet corrections (atmospheric pressure 1.2 atm, SST floor 0.50, increased evaporation, softer rain shadows, moisture diffusion scaling)
+- [x] Groundwater model (coastal proximity, precipitation recharge, geothermal upwelling, elevation penalty)
+- [x] Drainage accumulation (flow accumulation algorithm, log-scaled drainage bonus)
+- [x] Water availability metric (precipitation × 0.7 + groundwater × 0.3 + drainage — replaces distance-from-ocean moisture)
+- [x] Substrate grain size system (slope, elevation, drainage position, coastal type, volcanism → grain size 0-1)
+- [x] Water table depth model (elevation, precip recharge, geothermal, drainage, coastal pull, basin check for ponding)
+- [x] Saturation from water table (capillary fringe, grain size interaction)
+- [x] Physical terrain derivation (substrate × saturation × flora → terrain type, groundCover determines GRASS not saturation)
+- [x] Regional drainage network (Phase A — structured anisotropic noise, flow accumulation, zone classification, drainage-derived physical state at 1km resolution)
+- [x] Tile detail view (Phase B — chunk generator prototype at 2m resolution, same drainage approach with tighter channel spacing)
+- [x] Per-tile palette computation (computeTilePalette — material colors through three-layer pipeline, chemistry-sensitive mineral tinting, continuous variation within terrain types)
+- [x] High-resolution planetary surface (configurable 1×-8× multiplier, atmospheric sim at 512×256, surface detail at full resolution, progress bar)
+- [x] Planet viewer pipeline rewrite (unified typed array data structure, one deriveTerrainAndCover, one computeTilePalette, inheritance-based view hierarchy, consistent views)
+- [x] Flora type palette differentiation (livingCoverColor selected by floraType — photo=crimson, chemo=mineral-tinted, mixo=blend)
+- [x] MUD palette flora blending (MUD branch uses livingCoverColor × groundCover, same pattern as GRASS)
+- [x] Tile body map spec designed (physical state per tile, rendering philosophy: ~30 sprites × continuous palette, gameplay-readable properties, integration plan)
+- [x] Drainage chunk generator designed (drainage as organizing skeleton, zone classification, structured noise, flow accumulation, cross-chunk continuity, implementation phases)
+- [x] palette-compute.js standalone module (zero-dependency game-ready palette computation)
 
 ## Up Next
-- [ ] Visual revert (revert poor visual overhaul changes to older, more visually appealing form)
-- [ ] Visual discussion (determine 3-layer color system in detail, create visual pallette and textures that are accurate at layers 1 and 2 but appealing at 3)
-- [ ] Visual planning for future (down the line, the creature's body map will inform what visuals you see on screen, aka, layer 3 is eventually going to be animal based, but currently is just an average "what animals generally can see on this planet" with a decent degree of )
-- [ ] Visual rethinking (use the new 16x16 pallettes and textures as a exact color reference but not an exact visual reference for 32x32 sprites that will become the norm)
-- [ ] Visual customization (first pass settings menu with texture/resource pack/tileset option- switch between 32x32, 16x16, ASCII, "simple", and a 64x64 upscaled version of the 32x32, etc, plus ability to upload your own with a coherent spritesheet for others to manipulate easily)
+- [ ] Sprite variants and selector (Piece 2 from tile body map spec — ~30 sprite patterns, variant selection from physical state, hand-tuning)
+- [ ] Rendering integration (Piece 3 — wire per-tile palette and variant selector into game renderer, replace biome-lookup palettes)
+- [ ] Chunk loading system (Phase C — generate chunks on demand as player moves, cache in IndexedDB, predictive loading)
+- [ ] Full game integration (Phase D — replace BIOME_TARGET with planetary chunk generator, creature spawning, save migration)
+- [ ] Planet viewer tuning — find ideal archipelago parameters using tuning panel (island shapes still blobby)
+- [ ] Visual revert verification (confirm old visual overhaul changes fully reverted)
+- [ ] Visual planning for future (creature body map → visual representation on screen)
+- [ ] Visual rethinking (use 16x16 palettes as color reference for 32x32 sprites)
+- [ ] Visual customization (settings menu with texture/resource pack option — texture picker prompt written)
 
 ## Near-Term Plans (no particular order at the moment)
 - [ ] 32×32 directional sprites (8 facings per creature, mass-proportional tile footprints, designed at 32×32, downscaled to 16×16). Reference: sprite-lineup-reference.md
 - [ ] Second-pass over bleed/metabolism/healing mechanic
 - [ ] Fourth-pass over cognition/ganglia system (actual pattern libraries/memory system)
 - [ ] NPC scent tracking AI (plume following, trail following, search patterns)
-- [ ] Vibration ambient grounding (substrate-aware propagation)
+- [ ] Vibration ambient grounding (substrate-aware propagation — now informed by tile body map saturation/grainSize)
 - [ ] NPC vision update (per-eye body map computation, replace VISION_PROFILES)
 - [ ] Creature 5 (colonial chemotroph) redesign in doc and legacy content removal from game
 - [ ] Legacy creature name cleanup (wolf→prowler, dire_wolf→ravager, cave_crab→shaleBack, etc.)
@@ -92,11 +123,10 @@ Prompt queue and task tracker. Check things off as they're done.
 - [ ] Aquatic Ecosystems
 - [ ] Sub-terranian ecosystem
 - [ ] AI overhaul (complex creature behavior based on instincts, body plan and evolutionary principles)
-- [ ] Chunk-based loading (allows for vastly larger world sizes)
 - [ ] Energy-budget ecosystem (photosynthetic productivity → herbivore carrying capacity → predator carrying capacity, reproduction, sustainability test)
-- [ ] Regional mineral zones on surface (trunk color variation by local soil chemistry)
+- [ ] Regional mineral zones on surface (trunk color variation by local soil chemistry — now derivable from planetary geology system and tile body map)
 - [ ] Visual detection pass 2 (per-zone integument, countershading, disruptive coloration)
-- [ ] Visual detection pass 3 (atmospheric modifiers — moisture, rain, fog)
+- [ ] Visual detection pass 3 (atmospheric modifiers — moisture, rain, fog — now informed by precipitation/saturation data)
 - [ ] Visual detection pass 4 (spectral sensitivity, polarization for Clade B, bioluminescence, aposematic display)
 
 ## Very Long-Term Plans
@@ -112,154 +142,51 @@ For new chats, include:
 - Only the files that touch the system being changed
 - The Project Handoff document (always)
 - Design-Principles.md (always — describes HOW systems must be built)
+- Session-Handoff-Weather-Drainage.md (for any planetary, weather, drainage, terrain generation, palette, or tile body map work)
+- Session-Handoff-Visual-Planet.md (for sprite work, older visual/palette context)
 - Session-Handoff-Sensory-UI.md (for any sensory, vision, scent, or UI work)
 - Session-Handoff-Prompts-UI-Visual.md (for visual detection, occlusion, spawning, log system, or sprite work)
 - Relevant design documents:
+  - drainage-chunk-generator-design.md — drainage as landscape skeleton, zone classification, structured noise, chunk generation pipeline, cross-chunk continuity
+  - tile-body-map-spec.md — what a tile IS (physical state), how it looks (~30 sprites × computed palette), how it plays (movement/vibration/scent/visibility from physics), rendering philosophy, game integration plan
+  - three-layer-color-system.md — material table, transform parameters, derived palettes, texture profiles, mixotrophic concept
+  - planetary-geology-design.md — bottom-up world generation architecture, plate tectonics, mineral chemistry, flora emergence
+  - palette-compute.js — standalone game-ready palette module (computeTilePalette, MAT table, mineralColor, toScreen)
   - Body-Sim-Design — body map architecture, zone composition, tissue types
   - Surface-Creatures — all five creature body maps with exact transducer values, mass breakdowns, neural allocations
-  - Stat-System-Design — legacy stat derivations, bridge values
   - Ecology-Foundations — biome logic, ecological niches, food web, THREE-LAYER COLOR MODEL, Color Interpretation Guide with hex values, regional mineral chemistry
-  - Mutation-Design — mutation mechanics, consumption tracking, tissue deposition
-  - Lore — demigod phases, planet history, central narrative
+  - Underground-Chemotrophic-Ecology — mineral chemistry, chemotrophic ecosystem, energy sources
   - Cognition-Design — reactive-deliberative architecture, integration capacity, memory design, hormonal system
   - Sensory-Design — per-zone detection, SNR-based information quality, continuous uncertainty ranges
-  - Circulatory-Immune-Design — circulatory diversity, immune architecture, infection mechanics
   - Muscle-Fiber-Design — per-zone fiber composition, substrate system, regeneration formula
   - Motor-System-Design — motor pathway activation, force computation
-  - Ambient-Terrain-Sensing-Design — per-channel ambient terrain awareness (visual peripheral + vibration ground)
-  - Per-Eye-Visual-Field-Design — per-eye visual field computation, binocular/monocular zones, three-tier rendering
-  - Chemical-Scent-System-Design — two-layer scent model, wind-driven transport, 8 molecular classes, sniff action
-  - Visual-Occlusion-Design — sightline opacity, local concealment, occlusion budgets, cover type properties
-  - Visual-Detection-Design — motion factor, background contrast, integument properties, signal modifiers
-  - Spawning-Design — first pass density spawning (placeholder), long-term energy-budget vision
   - Endocrine-Design — hormonal broadcasting, alarm/mobilization, clade-specific chemistry
-  - Hare-Turn-Walkthrough — step-by-step ganglion behavior reference
-  - Underground-Chemotrophic-Ecology — mineral chemistry, chemotrophic ecosystem, energy sources
-- Key utility signatures (worldDims returns array, getFeature returns by reference, etc.)
-- Known bugs and what causes them
-- What NOT to change
+  - (other design docs unchanged from previous handoffs)
 
 ### Known Gotchas
 
-- **Save system is async IndexedDB:** saveGame() and loadGame() are async. Auto-save is fire-and-forget. Load on startup must be awaited. Old localStorage saves auto-migrate.
+- **One terrain function, one palette function.** `deriveTerrainAndCover` and `computeTilePalette` are the ONLY functions that assign terrain types or compute colors. Never write a second version. Call the existing ones.
 
-- **Save bloat — TRANSIENT_FIELDS:** New per-turn transient fields on creatures must be added to TRANSIENT_FIELDS in save-load.js. Entity reference fields explicitly deleted in serializers.
+- **Inheritance, not recomputation.** Each zoom level reads from the level above. Regional inherits from planetary. Tile inherits from regional. Local drainage only ADDS wetness (Math.max). Never recompute saturation, groundCover, or waterTableDepth from scratch at a lower level.
 
-- **Save bloat — reconstructable constants:** pathways and clade stripped before save, reconstructed from templates on load.
+- **livingCoverColor depends on floraType.** Photosynthetic → crimson. Chemotrophic → mineral-tinted. Mixotrophic → blend. Computed at top of computeTilePalette, used in every terrain type branch.
 
-- **Visual transducers are structured objects:** { acuity, placement, fieldAngle }. Use getVisualAcuity() and getVisualConfig() helpers.
+- **MUD is the dominant terrain.** ~80% of lowland tiles. MUD palette blends livingCoverColor by groundCover × 0.7. Dark wet substrate shows through even at max coverage.
 
-- **Chemical transducers are objects:** { contact, airborne, dissolved }.
+- **GRASS threshold is groundCover > 0.25, not saturation.** This planet's flora grows on any stable surface.
 
-- **Vibration transducers are objects:** { ground, air, water }.
+- **Three-layer color pipeline is locked.** Net: R×0.790, G×0.806, B×0.728. Adjust Layer 1 material values if output looks wrong, never the transforms.
 
-- **Chemical detection removed from player perception:** Only vibration and visual channels contribute to sensed-creature rendering.
+- **Atmospheric simulation always at 512×256.** Surface detail at configurable resolution (default 2048×1024). Wind/currents/precipitation don't benefit from higher resolution.
 
-- **VISION_PROFILES deprecated for player, active for NPCs:** Player uses per-eye body map. NPC vision update deferred.
+- **Planet viewer is the data source, not just a design tool.** The game's chunk generator reads from the planetary grid. If the viewer's physics is wrong, the game world is wrong.
 
-- **display.js owns viewport state:** TILE, VIEW_W, VIEW_H are computed functions, not constants. Three zoom levels.
+- **palette-compute.js is game-ready.** Zero dependencies. Exports computeTilePalette, MAT, mineralColor, toScreen. Import directly.
 
-- **Three-tier visual rendering:** fovSet (binocular, bright) → monocularSet (18% overlay) → explored (42% overlay). Entities in binocular and monocular only.
+- **Chemotrophic organisms are geological.** Mounds, brackets, crusts, spires — not trees or mushrooms. Colony mound sprite, mineral crust texture.
 
-- **drawEntityAtTile gates on _visuallyDetected.** Three rendering states: full sprite (high SNR), blob (moderate SNR, _visualFOV: true), invisible (below threshold). Creatures on FOV tiles are NOT rendered unconditionally.
+- **Mixo fitness is additive.** (0.6 + 0.5 × mineralTotal) × water. The 0.6 is baked-in photosynthetic energy.
 
-- **VIS_MOVEMENT_MULT removed from signals.js.** Motion handled entirely by MOTION_SIGNAL_MOVING/STILL in detection.js. Do not re-add motion multiplier to signal emission.
+- **GRASS tiles don't have noRotate:true.** Directional variants look chaotic with random rotation.
 
-- **Contrast formula recentered.** Range ~0.08 to ~1.8. Below 1.0 = blending in. Above 1.0 = standing out.
-
-- **Scent maps are transient (not saved).** Ground and airborne scent maps rebuild naturally on load.
-
-- **Scent system uses 8 molecular classes.** Per-species emission profiles in SCENT_PROFILES.
-
-- **Wind state is in state.js:** windDirection (0-7) and windSpeed (0-3).
-
-- **Creature UIDs for debug tracking:** _uid at spawn. syncCreatureUIDs() after save-load.
-
-- **Substrate regeneration uses enzymatic upregulation:** Front-loaded recovery curve.
-
-- **Detection is per-zone, not per-creature.** No creature-level aggregated sensitivity.
-
-- **Detection info uses uncertainty ranges:** sizeEstimate {lower, upper, estimated}, continuous confidence values.
-
-- **Spatial grid rebuilt each turn.** Use getNearbyCreatures(), never iterate state.creatures for detection.
-
-- **Active radius / dormancy:** ACTIVE_RADIUS 40, DORMANT_RADIUS 45. Creatures beyond dormant, wake with catch-up.
-
-- **Player must inherit template fields:** New fields on creature templates must be copied in chargen.js.
-
-- **Integration capacity recomputed each turn.** Don't persist.
-
-- **Species confidence gates rendering.** Blobs below SPECIES_DISPLAY_CONFIDENCE.
-
-- **SNR = zoneRange / distance.** Per zone per channel.
-
-- **Reactive layer never reads target internals.** Uses signal magnitude, distance, flags on self.
-
-- **No species-specific code in AI.** Universal rules with body-map-derived queries.
-
-- **File split re-export bridges in place.** constants.js and enemy-ai.js re-export from child modules. Migrate to direct imports incrementally.
-
-- **Log entries are objects.** { text, category, turn }. Renderer handles both formats for old saves.
-
-- **Sightline opacity accumulates per-ray.** Trees are partial occluders. Budget = acuity × OCCLUSION_BUDGET_COEFF.
-
-- **Integument is species-level.** brightness + hue on SPECIES_TEMPLATES. Per-zone is future.
-
-- **All first-pass spawning tagged.** Grep `FIRST PASS SPAWNING`. Density temporarily reduced — grep `density reduced for testing` to restore.
-
-- **Creature 5 (colonial chemotroph / "mushroom") is dead concept.** Do not implement new features.
-
-- **Ecology doc three-layer color model.** Material × starlight × creature perception. Screen shows layer 3. Color Interpretation Guide has hex values.
-
-- **Internal creature names:** wolf=meso-predator, dire_wolf=apex predator, hare=small herbivore, cave_crab=large wading grazer, mushroom=colonial chemotroph (dead), ambush_pred=ambush predator.
-
-- **Speed system uses fiber-aware PTW.** getBodyPTW accepts optional intensity parameter. Walking = slow-twitch only. Sprint = full substrate-dependent. All species now have fiber data.
-
-- **Player sprint is Shift+direction.** Alt+direction = turn in place. State tracked via state.player.sprintMode and _lastMovementIntensity.
-
-- **Mass-dependent acceleration.** _consecutiveMoveTurns tracks ramp-up. turnsToFullSpeed(mass) = log4(mass/3). Turning costs momentum proportional to mass.
-
-- **Legacy turn probability removed.** TURN_AGILITY_COEFF deprecated. Turning is deterministic — always succeeds, momentum cost via applyTurningCost.
-
-- **Smell split into ground/air.** V = ground smell, Shift+V = air smell. performSniff accepts 'ground'/'air' mode parameter.
-
-- **Inventory UI severed.** I key commented out. Data structures intact. Legacy popup annotation blocks in main.js.
-
-- **Ground scent is 8-directional + own tile.** DIRS_9 in scent.js covers all 8 neighbors plus center.
-
-- **_visuallyDetected is a Set on state.player**, not a boolean on the creature. Check with state.player._visuallyDetected.has(creature).
-
-- **Confidence normalization in threat templates** uses thresholds.flee in denominator — couples transducer output to ganglion threshold. Flagged for decoupling in the two-threshold freeze rewrite.
-
-- **Palette values are Layer 3 (creature perception).** Not material color or physical appearance. See ecology doc three-layer model.
-
-### Typical File Sets
-- **Biome/terrain work:** surface-gen.js, constants.js, terrain.js
-- **Enemy AI / drives / behavior:** enemy-ai.js, cognition.js, detection.js, behaviors.js, ai-utils.js, monsters.js, combat.js, terrain.js, signals.js
-- **Perception / detection:** detection.js, signals.js, constants.js, fov.js, time-cycle.js, terrain.js
-- **Movement/combat:** player-actions.js, combat.js, behaviors.js, enemy-ai.js, state.js
-- **Transitions:** world-gen.js, interactions.js, state.js, world-state.js
-- **Rendering:** rendering.js, sprites.js, terrain.js, constants.js, display.js
-- **Spawning:** world-logic.js, monsters.js, surface-gen.js, constants.js, terrain.js
-- **FOV / vision / visual field:** fov.js, player.js, rendering.js, terrain.js, time-cycle.js, state.js, display.js, constants.js
-- **Visual occlusion:** fov.js, terrain.js, body-maps.js, sensory-constants.js
-- **Visual detection:** detection.js, signals.js, sensory-constants.js, body-maps.js, terrain.js
-- **Scent system:** scent.js, constants.js (SCENT_PROFILES), state.js (wind), enemy-ai.js (call site), rendering.js (ground trail overlay)
-- **Ambient terrain sensing:** fov.js, constants.js, terrain.js
-- **Facing/turning:** player-actions.js, enemy-ai.js, fov.js, main.js, state.js
-- **Underground:** underground-gen.js, world-gen.js, constants.js, terrain.js
-- **Shops/economy:** interactions.js, items.js, player.js, ui.js, modal.js, constants.js
-- **NPCs/structures:** world-logic.js, surface-gen.js, constants.js, interactions.js, terrain.js, sprites.js
-- **Chargen/attributes:** chargen.js, player.js, constants.js, main.js, index.html, state.js
-- **UI/layout:** index.html, ui.js, main.js, rendering.js, display.js, constants.js
-- **Log system:** ui.js, main.js, index.html, state.js
-- **Viewport / zoom / sprites:** display.js, rendering.js, sprites.js, sprites-32.js, main.js, index.html
-- **Save/load:** save-load.js, state.js, chargen.js, interactions.js, main.js
-- **Input/controls:** main.js, player-actions.js, constants.js
-- **Body map / creatures:** constants.js, body-maps.js, monsters.js, combat.js
-- **Muscle fiber / substrate:** physiology.js, constants.js, body-maps.js
-- **Signals / emission:** signals.js, detection.js, constants.js, terrain.js
-- **Spatial grid / optimization:** ai-utils.js, constants.js, state.js
-- **Sensory / detection:** detection.js, signals.js, sensory-constants.js, constants.js, rendering.js
-- **Cognition / AI behavior:** cognition.js, enemy-ai.js, ai.js, monsters.js, constants.js
-- **File splitting:** constants.js and enemy-ai.js are re-export bridges → body-maps.js, combat-constants.js, sensory-constants.js, ecology-data.js, physiology.js, ai.js, turn-loop.js, debug.js
+- **Sprite variants exist but picker may not.** GRASS V2-V4, WATER V2-V5, DEEP_WATER V2-V3 defined in sprites.js. Picker UI unverified.
