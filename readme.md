@@ -4,7 +4,7 @@ A tile-based browser game about survival on a believably simulated alien world.
 
 ---------
 
-The environments, flora and fauna of this planet are millions of years old. The dense atmosphere, dim sunlight and high moisture content have created a wet and rich surface habitat- swampy marshlands covered in mahogany-red flora. Metals like iron, copper and manganese are abundant in both terrestrial and subterranean environments, providing an inexhaustible supply of energy for chemotrophic life. 
+The environments, flora and fauna of this planet are millions of years old. The dense atmosphere, dim sunlight and high moisture content have created a wet and rich surface habitat- swampy marshlands covered in crimson flora. Metals like iron, copper and manganese are abundant in both terrestrial and subterranean environments, providing an inexhaustible supply of energy for chemotrophic life. 
 
 All alien fauna originates from two ancient genetic lineages. One clade has a centralized brain, a closed circulatory system and an emphasis on smell as a primary sense. Another clade has a decentralized brain, an open circulatory system and a strong sense of ground vibration. 
 
