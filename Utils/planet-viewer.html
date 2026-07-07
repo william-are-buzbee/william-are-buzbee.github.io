@@ -567,6 +567,7 @@ canvas.hidden-canvas {
           <option value="substrate">Substrate</option>
           <option value="canopy">Canopy</option>
           <option value="flora">Flora Type</option>
+          <option value="variant">Variant</option>
         </select>
         <button class="close-btn" id="tileCloseBtn" title="Close tile view">✕</button>
       </div>
@@ -3925,9 +3926,34 @@ function refineRegionalFloraFromHiRes(cell) {
     return;
   }
   if (cell.hasWater) {
-    cell.floraType = 'none'; cell.floraDensity = 0;
-    cell.canopy = 0; cell.groundCover = 0;
-    cell.chemoCrust = 0; cell.organicContent = 0;
+    // Water prevents rooted canopy but NOT ground-level biology.
+    // Flora type is inherited from the high-res grid — water doesn't
+    // change what KIND of organisms live here, just their structure.
+    // Ground cover: shallow water supports floating mat; deep water
+    // submerges it. Canopy: always zero (can't root in standing water).
+    cell.floraType = cell._hrFloraType || 'barren';
+    cell.canopy = 0;
+
+    const wd = cell.waterDepth || 0;
+    if (wd > 0.3) {
+        // Deep water: fully submerged, no surface flora
+        cell.groundCover = 0;
+        cell.chemoCrust = 0;
+    } else if (wd > 0.1) {
+        // Moderate water: sparse floating mat
+        cell.groundCover = cell._hrGroundCover * 0.3;
+        cell.chemoCrust = cell._hrChemoCrust * 0.2;
+    } else {
+        // Shallow water or wet surface: substantial floating mat
+        cell.groundCover = cell._hrGroundCover * 0.6;
+        cell.chemoCrust = cell._hrChemoCrust * 0.5;
+    }
+
+    // Organic content: waterlogged decomposition is slow → organic accumulates
+    const prod = cell.groundCover * 0.5;
+    cell.organicContent = prod * 0.7;  // wet = slow decomposition
+
+    cell.floraDensity = clamp(Math.max(cell.groundCover, cell.chemoCrust), 0, 1);
     return;
   }
 
@@ -3939,11 +3965,14 @@ function refineRegionalFloraFromHiRes(cell) {
   const mineralTotal = cell.mineralTotal;
   const hasWaterLocal = cell.waterTableDepth < -0.01;
 
-  // Ground cover (mirrors stepHR6)
+  // Ground cover (mirrors stepHR6) — scaled by water availability
   let gc;
   if (hasWaterLocal) gc = 0.3;
   else if (grain > 0.8) gc = 0.08;
-  else gc = 0.5 + (1.0 - grain) * 0.4;
+  else {
+    const waterFactor = clamp(precip * 3.0 + gw * 2.0, 0, 1);
+    gc = (0.5 + (1.0 - grain) * 0.4) * waterFactor;
+  }
   cell.groundCover = gc;
 
   // Canopy (mirrors stepHR6)
@@ -4076,42 +4105,192 @@ function computeRegionalSubstrate(cell, seed) {
 
 // ── Standing water: fill local basins along major streams ──
 function computeStandingWater(elevGrid) {
-  for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
-    for (let rx = 0; rx < REGIONAL_SIZE; rx++) {
+  const S = REGIONAL_SIZE;
+  const N = S * S;
+  const dx8 = [-1, 0, 1, -1, 1, -1, 0, 1];
+  const dy8 = [-1, -1, -1, 0, 0, 1, 1, 1];
+
+  // Minimum feature sizes (regional cells are ~1km each, so smaller thresholds)
+  const REG_MIN_BASIN_AREA  = 4;
+  const REG_MIN_BASIN_DEPTH = 0.005;
+  const REG_MIN_WATER_FEAT  = 4;
+  const REG_POUR_TOLERANCE  = 0.012;
+  const REG_SHORE_DIST      = 3;
+
+  // Reset all cells
+  for (let ry = 0; ry < S; ry++) {
+    for (let rx = 0; rx < S; rx++) {
       const cell = regionalCells[rx][ry];
       cell.hasWater = false;
       cell.waterDepth = 0;
+    }
+  }
 
+  // Flat arrays for BFS processing (indexed ry * S + rx)
+  const hasWater   = new Uint8Array(N);
+  const wDepth     = new Float32Array(N);
+
+  // ── Ocean tiles ──
+  for (let ry = 0; ry < S; ry++) {
+    for (let rx = 0; rx < S; rx++) {
+      const cell = regionalCells[rx][ry];
       if (!cell.isLand) {
-        cell.hasWater = true;
-        cell.waterDepth = -cell.baseElevation;
-        continue;
+        hasWater[ry * S + rx] = 1;
+        wDepth[ry * S + rx] = -cell.baseElevation;
       }
+    }
+  }
 
-      // Major streams carry water
-      if (cell.streamOrder >= 2 && cell.saturation > 0.5) {
-        cell.hasWater = true;
-        cell.waterDepth = 0.02 + cell.drainageDensity * 0.05;
-        continue;
+  // ── Channel water: stream order >= 2 at regional scale (each cell ~1km) ──
+  for (let ry = 0; ry < S; ry++) {
+    for (let rx = 0; rx < S; rx++) {
+      const cell = regionalCells[rx][ry];
+      if (cell.isLand && cell.streamOrder >= 2 && cell.saturation > 0.5) {
+        hasWater[ry * S + rx] = 1;
+        wDepth[ry * S + rx] = 0.02 + cell.drainageDensity * 0.05;
       }
+    }
+  }
 
-      // Local basin detection (8-neighbor)
-      const i = ry * REGIONAL_SIZE + rx;
+  // ── Basin detection and filling ──
+  const visited = new Uint8Array(N);
+  for (let ry = 0; ry < S; ry++) {
+    for (let rx = 0; rx < S; rx++) {
+      const i = ry * S + rx;
+      if (elevGrid[i] <= 0 || hasWater[i] || visited[i]) continue;
+
+      // Check local minimum
       const e = elevGrid[i];
-      const dx8 = [-1, 0, 1, -1, 1, -1, 0, 1];
-      const dy8 = [-1, -1, -1, 0, 0, 1, 1, 1];
-      let isBasin = true;
-      let minNeighbor = Infinity;
+      let isMin = true;
       for (let d = 0; d < 8; d++) {
         const nx = rx + dx8[d], ny = ry + dy8[d];
-        if (nx < 0 || nx >= REGIONAL_SIZE || ny < 0 || ny >= REGIONAL_SIZE) continue;
-        const ne = elevGrid[ny * REGIONAL_SIZE + nx];
-        if (ne < e) { isBasin = false; break; }
-        if (ne < minNeighbor) minNeighbor = ne;
+        if (nx < 0 || nx >= S || ny < 0 || ny >= S) continue;
+        if (elevGrid[ny * S + nx] <= e) { isMin = false; break; }
       }
-      if (isBasin && cell.saturation > 0.55 && cell.baseElevation < 0.15) {
-        cell.hasWater = true;
-        cell.waterDepth = clamp((minNeighbor - e) + 0.01, 0.005, 0.08);
+      if (!isMin) continue;
+
+      // BFS flood-fill basin
+      const fillLevel = e + REG_POUR_TOLERANCE;
+      const queue = [i];
+      const basin = [i];
+      visited[i] = 1;
+      let maxDepth = 0;
+      let head = 0;
+      while (head < queue.length) {
+        const ci = queue[head++];
+        const cx = ci % S, cy = (ci / S) | 0;
+        const depth = fillLevel - elevGrid[ci];
+        if (depth > maxDepth) maxDepth = depth;
+        for (let d = 0; d < 8; d++) {
+          const nx = cx + dx8[d], ny = cy + dy8[d];
+          if (nx < 0 || nx >= S || ny < 0 || ny >= S) continue;
+          const ni = ny * S + nx;
+          if (visited[ni] || elevGrid[ni] <= 0 || hasWater[ni]) continue;
+          if (elevGrid[ni] < fillLevel) {
+            visited[ni] = 1;
+            queue.push(ni);
+            basin.push(ni);
+          }
+        }
+      }
+
+      // Filter
+      if (basin.length < REG_MIN_BASIN_AREA) continue;
+      if (maxDepth < REG_MIN_BASIN_DEPTH) continue;
+      // Check center cell has reasonable saturation
+      const centerCell = regionalCells[rx][ry];
+      if (centerCell.saturation < 0.4) continue;
+
+      for (let b = 0; b < basin.length; b++) {
+        const bi = basin[b];
+        hasWater[bi] = 1;
+        wDepth[bi] = Math.max(0.005, fillLevel - elevGrid[bi]);
+      }
+    }
+  }
+
+  // ── Connected component filtering ──
+  const ccLabel = new Int32Array(N);
+  ccLabel.fill(-1);
+  let nextCC = 0;
+  const ccSizes = [];
+
+  for (let i = 0; i < N; i++) {
+    if (!hasWater[i] || ccLabel[i] >= 0) continue;
+    const label = nextCC++;
+    const ccQueue = [i];
+    ccLabel[i] = label;
+    let size = 0;
+    let hasOcean = false;
+    let ch = 0;
+    while (ch < ccQueue.length) {
+      const ci = ccQueue[ch++];
+      size++;
+      if (elevGrid[ci] <= 0) hasOcean = true;
+      const cx = ci % S, cy = (ci / S) | 0;
+      for (let d = 0; d < 8; d++) {
+        const nx = cx + dx8[d], ny = cy + dy8[d];
+        if (nx < 0 || nx >= S || ny < 0 || ny >= S) continue;
+        const ni = ny * S + nx;
+        if (hasWater[ni] && ccLabel[ni] < 0) {
+          ccLabel[ni] = label;
+          ccQueue.push(ni);
+        }
+      }
+    }
+    ccSizes[label] = { size, hasOcean };
+  }
+
+  // Demote small land-only components
+  for (let i = 0; i < N; i++) {
+    if (!hasWater[i]) continue;
+    const lab = ccLabel[i];
+    if (lab >= 0 && !ccSizes[lab].hasOcean && ccSizes[lab].size < REG_MIN_WATER_FEAT) {
+      hasWater[i] = 0;
+      wDepth[i] = 0;
+    }
+  }
+
+  // ── Shoreline saturation boost ──
+  const dist = new Uint8Array(N);
+  dist.fill(255);
+  const shoreQueue = [];
+  for (let i = 0; i < N; i++) {
+    if (hasWater[i] && elevGrid[i] > 0) {
+      dist[i] = 0;
+      shoreQueue.push(i);
+    }
+  }
+  let sHead = 0;
+  while (sHead < shoreQueue.length) {
+    const ci = shoreQueue[sHead++];
+    const cd = dist[ci];
+    if (cd >= REG_SHORE_DIST) continue;
+    const cx = ci % S, cy = (ci / S) | 0;
+    for (let d = 0; d < 8; d++) {
+      const nx = cx + dx8[d], ny = cy + dy8[d];
+      if (nx < 0 || nx >= S || ny < 0 || ny >= S) continue;
+      const ni = ny * S + nx;
+      const nd = cd + 1;
+      if (nd < dist[ni] && !hasWater[ni] && elevGrid[ni] > 0) {
+        dist[ni] = nd;
+        shoreQueue.push(ni);
+      }
+    }
+  }
+
+  // ── Write back to regionalCells ──
+  for (let ry = 0; ry < S; ry++) {
+    for (let rx = 0; rx < S; rx++) {
+      const i = ry * S + rx;
+      const cell = regionalCells[rx][ry];
+      cell.hasWater = !!hasWater[i];
+      cell.waterDepth = wDepth[i];
+
+      // Shoreline saturation boost for nearby land cells
+      if (!hasWater[i] && dist[i] < 255 && dist[i] > 0) {
+        const boost = Math.max(0, 0.20 - dist[i] * 0.06);
+        cell.saturation = clamp((cell.saturation || 0) + boost, 0, 1);
       }
     }
   }
@@ -4121,7 +4300,37 @@ function computeStandingWater(elevGrid) {
 function computeRegionalFloraCell(cell) {
   if (!cell.isLand) { cell.floraType = 'none'; cell.floraDensity = 0; return; }
   if (cell.isFreezing) { cell.floraType = 'frozen'; cell.floraDensity = 0; return; }
-  if (cell.hasWater) { cell.floraType = 'none'; cell.floraDensity = 0; return; }
+  if (cell.hasWater) {
+    // Same graduated response as refineRegionalFloraFromHiRes:
+    // water prevents rooted canopy, but floating mat persists in shallows.
+    cell.canopy = 0;
+    const wd = cell.waterDepth || 0;
+    if (wd > 0.3) {
+        cell.groundCover = 0;
+        cell.chemoCrust = 0;
+        cell.floraDensity = 0;
+    } else if (wd > 0.1) {
+        cell.groundCover = 0.2;
+        cell.chemoCrust = 0;
+        cell.floraDensity = 0.2;
+    } else {
+        cell.groundCover = 0.4;
+        cell.chemoCrust = 0;
+        cell.floraDensity = 0.4;
+    }
+    // Flora type: compute from fitness as normal (don't skip to 'none')
+    const water = Math.max(cell.saturation, cell.waterAvailability);
+    const photoFitness = water * 0.85 * (0.5 + 0.5 * (1 - cell.baseElevation));
+    const chemoFitness = cell.mineralTotal * Math.max(water, cell.groundwater * 1.4) * 1.2;
+    if (chemoFitness > photoFitness && chemoFitness > 0.05) {
+        cell.floraType = 'chemotrophic';
+    } else if (photoFitness > 0.05) {
+        cell.floraType = 'photosynthetic';
+    } else {
+        cell.floraType = 'barren';
+    }
+    return;
+  }
 
   const water = Math.max(cell.saturation, cell.waterAvailability);
   const photoFitness = water * 0.85 * (0.5 + 0.5 * (1 - cell.baseElevation));
@@ -4410,8 +4619,18 @@ function computeTilePalette(p) {
       g: Math.min(255, chemoColor.g + 20),
       b: Math.min(255, chemoColor.b + 25)
     }, 0.6, 0.4);
+  } else if (ft === 'barren' || ft === 0) {
+    // Barren: ground cover is dead organic + sparse mineral surface biology
+    // Not crimson — use dead organic color tinted by local minerals
+    const substrate = mineralColor(iron, copper, mn, MAT.substrate);
+    livingCoverColor = blend(MAT.deadFresh, substrate, 0.6, 0.4);
+    livingCoverBright = {
+      r: Math.min(255, livingCoverColor.r + 20),
+      g: Math.min(255, livingCoverColor.g + 15),
+      b: Math.min(255, livingCoverColor.b + 10)
+    };
   } else {
-    // Photosynthetic or barren — default crimson
+    // Photosynthetic — crimson mat
     livingCoverColor = MAT.photoLiving;
     livingCoverBright = MAT.photoBright;
   }
@@ -5427,11 +5646,14 @@ function stepHR6_floraRow(hy) {
     const depth = hiResData.waterTableDepth[hi];
     const hasWater = depth < -0.01;
 
-    // Ground cover
+    // Ground cover — scaled by water availability so barren/dry zones get low coverage
     let gc;
     if (hasWater) gc = 0.3;
     else if (grain > 0.8) gc = 0.08;
-    else gc = 0.5 + (1.0 - grain) * 0.4;
+    else {
+      const waterFactor = clamp(precip * 3.0 + gw * 2.0, 0, 1);
+      gc = (0.5 + (1.0 - grain) * 0.4) * waterFactor;
+    }
     hiResData.groundCover[hi] = gc;
 
     // Canopy
@@ -5876,6 +6098,83 @@ function coverTypeToInt(name) {
 }
 function intToCoverType(i) { return _ctNames[i] || 'none'; }
 
+// ── Sprite Variant Selection (physical state → texture index) ──
+
+function positionHash(x, y) {
+    let h = (x * 374761393 + y * 668265263) | 0;
+    h = (h ^ (h >> 13)) * 1274126177;
+    h = h ^ (h >> 16);
+    return (h & 0x7FFFFFFF) / 0x7FFFFFFF;
+}
+
+function selectSpriteVariant(terrainType, coverType, physical, wx, wy) {
+    const ph = positionHash(wx, wy);
+    let ground = 0;
+    let cover = 0;
+
+    switch (terrainType) {
+        case 'grass':
+            if (physical.groundCover > 0.75) {
+                ground = 1;
+            } else if (physical.groundCover < 0.35) {
+                ground = ph < 0.6 ? 2 : 3;
+            } else {
+                ground = ph < 0.5 ? 0 : 1;
+            }
+            break;
+        case 'mud':
+            ground = 0;
+            break;
+        case 'water':
+            if (physical.waterDepth < 0.05) {
+                ground = 2;
+            } else if (physical.streamOrder >= 3) {
+                ground = ph < 0.5 ? 1 : 3;
+            } else if (physical.waterDepth > 0.2) {
+                ground = ph < 0.5 ? 2 : 4;
+            } else {
+                ground = ph < 0.5 ? 0 : 1;
+            }
+            break;
+        case 'deep_water':
+            ground = Math.floor(ph * 3);
+            break;
+        case 'rock':
+            ground = Math.floor(ph * 3);
+            break;
+        case 'dirt':
+            ground = 0;
+            break;
+        case 'sand':
+            ground = 0;
+            break;
+        case 'beach':
+            ground = 0;
+            break;
+        default:
+            ground = 0;
+    }
+
+    switch (coverType) {
+        case 'forest':
+            cover = 0;
+            break;
+        case 'sparse_forest':
+            cover = 0;
+            break;
+        case 'mushforest':
+            cover = 0;
+            break;
+        case 'sparse_mushforest':
+            cover = 0;
+            break;
+        default:
+            cover = 0;
+    }
+
+    return { ground, cover };
+}
+
 // Per-zone tile topography parameters
 const tileZoneParams = {
   summit:      { channelSpacing: 25,  channelDepth: 0.006, anisotropy: 0.30, ridgeAmp: 0.050 },
@@ -6111,8 +6410,215 @@ function computeTileDrainage(tileElevation, tilePrecip, Wt, Ht) {
   return { streamOrder, flowAccum: flow };
 }
 
-// ── T4: Physical state (substrate, water table, saturation, standing water) ──
-function computeTilePhysicalState(ti, tileElevation, streamOrderVal, context, zone) {
+// ── Water coherence constants ──
+const MIN_BASIN_AREA      = 8;    // tiles — minimum pond size
+const MAX_BASIN_AREA      = Math.floor(CHUNK_TOTAL * 0.02);  // tiles — max 2% of chunk per basin
+const MIN_BASIN_DEPTH     = 0.0015;// elevation units — minimum depression depth for ponding
+const MIN_WATER_FEATURE   = 8;    // tiles — connected component size threshold
+const SHORELINE_DISTANCE  = 4;    // tiles — how far the wet-bank transition extends
+const CHANNEL_WATER_ORDER = 3;    // minimum stream order for visible channel water
+
+// ── T3.5: Water body detection (coherent spatial features, not per-tile noise) ──
+// Runs ONCE over the entire chunk and returns typed arrays for hasWater, waterDepth,
+// and saturationBoost.  Replaces per-tile standing-water logic with basin-filling
+// and connected-component filtering to produce physically coherent water features.
+function computeTileWaterBodies(tileElevation, streamOrder, context, zone) {
+  const W = CHUNK_W, H = CHUNK_H, N = CHUNK_TOTAL;
+  const hasWater   = new Uint8Array(N);
+  const waterDepth = new Float32Array(N);
+  const satBoost   = new Float32Array(N);
+
+  const dx8 = [-1, 0, 1, -1, 1, -1, 0, 1];
+  const dy8 = [-1, -1, -1, 0, 0, 1, 1, 1];
+
+  // ── Ocean tiles ──
+  for (let i = 0; i < N; i++) {
+    if (tileElevation[i] <= 0) {
+      hasWater[i] = 1;
+      waterDepth[i] = -tileElevation[i];
+    }
+  }
+
+  // ── Channel water: stream order >= CHANNEL_WATER_ORDER only ──
+  for (let i = 0; i < N; i++) {
+    if (tileElevation[i] > 0 && streamOrder[i] >= CHANNEL_WATER_ORDER) {
+      hasWater[i] = 1;
+      waterDepth[i] = 0.02 + (streamOrder[i] - CHANNEL_WATER_ORDER) * 0.01;
+    }
+  }
+
+  // ── Basin detection and filling ──
+  // Find local minima (seeds) among land tiles not already water
+  const visited = new Uint8Array(N);
+  const basinId = new Int32Array(N);
+  basinId.fill(-1);
+  let nextBasin = 0;
+
+  // Pour-depth tolerance varies by zone (flatter terrain → shallower basins hold water).
+  // Must be a SMALL FRACTION of the zone's tile-level relief (ridgeAmp + channelDepth)
+  // so that basins only fill genuine depressions, not entire valleys.
+  // Target: ~15-25% of total relief for each zone.
+  let pourTolerance;
+  switch (zone) {
+    case 'lowland':     pourTolerance = 0.004;  break;  // relief ~0.026
+    case 'coastal':     pourTolerance = 0.003;  break;  // relief ~0.017
+    case 'tidal':       pourTolerance = 0.002;  break;  // relief ~0.011
+    case 'mid_slope':   pourTolerance = 0.007;  break;  // relief ~0.041
+    case 'upper_slope': pourTolerance = 0.010;  break;  // relief ~0.049
+    case 'summit':      pourTolerance = 0.012;  break;  // relief ~0.056
+    default:            pourTolerance = 0.005;  break;
+  }
+
+  // Regional saturation at the chunk center (used to filter dry-zone basins)
+  const centerSat = (context.satRegional && context.satRegional[((H >> 1) * W + (W >> 1))]) || 0;
+
+  for (let i = 0; i < N; i++) {
+    if (tileElevation[i] <= 0 || hasWater[i] || visited[i]) continue;
+
+    // Check if this tile is a local minimum (lower than all 8 neighbors)
+    const tx = i % W, ty = (i / W) | 0;
+    const e = tileElevation[i];
+    let isMin = true;
+    for (let d = 0; d < 8; d++) {
+      const nx = tx + dx8[d], ny = ty + dy8[d];
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+      if (tileElevation[ny * W + nx] <= e) { isMin = false; break; }
+    }
+    if (!isMin) continue;
+
+    // BFS flood-fill from this minimum to find the basin
+    // A tile joins the basin if its elevation is below (min_elevation + pourTolerance)
+    const fillLevel = e + pourTolerance;
+    const queue = [i];
+    const basin = [i];
+    visited[i] = 1;
+    let maxDepth = 0;
+
+    let head = 0;
+    let overflowed = false;
+    while (head < queue.length) {
+      if (basin.length >= MAX_BASIN_AREA) { overflowed = true; break; }
+      const ci = queue[head++];
+      const cx = ci % W, cy = (ci / W) | 0;
+      const ce = tileElevation[ci];
+      const depth = fillLevel - ce;
+      if (depth > maxDepth) maxDepth = depth;
+
+      for (let d = 0; d < 8; d++) {
+        const nx = cx + dx8[d], ny = cy + dy8[d];
+        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+        const ni = ny * W + nx;
+        if (visited[ni] || tileElevation[ni] <= 0 || hasWater[ni]) continue;
+        if (tileElevation[ni] < fillLevel) {
+          visited[ni] = 1;
+          queue.push(ni);
+          basin.push(ni);
+        }
+      }
+    }
+
+    // Filter by physical criteria
+    if (overflowed) continue;  // basin exceeded max area — not a realistic pond
+    if (basin.length < MIN_BASIN_AREA) continue;
+    if (maxDepth < MIN_BASIN_DEPTH) continue;
+    // Dry-zone check: basins on arid upper slopes with deep water tables stay empty
+    if (centerSat < 0.4 && (zone === 'upper_slope' || zone === 'summit')) continue;
+
+    // Mark basin tiles as water
+    const bid = nextBasin++;
+    for (let b = 0; b < basin.length; b++) {
+      const bi = basin[b];
+      hasWater[bi] = 1;
+      waterDepth[bi] = Math.max(0.005, fillLevel - tileElevation[bi]);
+      basinId[bi] = bid;
+    }
+  }
+
+  // ── Connected component filtering ──
+  // Label ALL hasWater tiles (ocean + channels + basins) into connected components.
+  // Discard land components smaller than MIN_WATER_FEATURE.
+  const ccLabel = new Int32Array(N);
+  ccLabel.fill(-1);
+  let nextCC = 0;
+  const ccSizes = [];
+
+  for (let i = 0; i < N; i++) {
+    if (!hasWater[i] || ccLabel[i] >= 0) continue;
+    const label = nextCC++;
+    const ccQueue = [i];
+    ccLabel[i] = label;
+    let size = 0;
+    let hasOcean = false;
+    let ch = 0;
+    while (ch < ccQueue.length) {
+      const ci = ccQueue[ch++];
+      size++;
+      if (tileElevation[ci] <= 0) hasOcean = true;
+      const cx = ci % W, cy = (ci / W) | 0;
+      for (let d = 0; d < 8; d++) {
+        const nx = cx + dx8[d], ny = cy + dy8[d];
+        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+        const ni = ny * W + nx;
+        if (hasWater[ni] && ccLabel[ni] < 0) {
+          ccLabel[ni] = label;
+          ccQueue.push(ni);
+        }
+      }
+    }
+    ccSizes[label] = { size, hasOcean };
+  }
+
+  // Demote small land-only components
+  for (let i = 0; i < N; i++) {
+    if (!hasWater[i]) continue;
+    const lab = ccLabel[i];
+    if (lab >= 0 && !ccSizes[lab].hasOcean && ccSizes[lab].size < MIN_WATER_FEATURE) {
+      hasWater[i] = 0;
+      waterDepth[i] = 0;
+      satBoost[i] = 0.15; // demoted tiles are still very wet mud
+    }
+  }
+
+  // ── Shoreline saturation boost ──
+  // BFS outward from all remaining water tiles, up to SHORELINE_DISTANCE tiles.
+  const dist = new Uint8Array(N);
+  dist.fill(255);
+  const shoreQueue = [];
+  for (let i = 0; i < N; i++) {
+    if (hasWater[i] && tileElevation[i] > 0) { // land-water tiles seed the shore
+      dist[i] = 0;
+      shoreQueue.push(i);
+    }
+  }
+  let sHead = 0;
+  while (sHead < shoreQueue.length) {
+    const ci = shoreQueue[sHead++];
+    const cd = dist[ci];
+    if (cd >= SHORELINE_DISTANCE) continue;
+    const cx = ci % W, cy = (ci / W) | 0;
+    for (let d = 0; d < 8; d++) {
+      const nx = cx + dx8[d], ny = cy + dy8[d];
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue;
+      const ni = ny * W + nx;
+      const nd = cd + 1;
+      if (nd < dist[ni] && !hasWater[ni] && tileElevation[ni] > 0) {
+        dist[ni] = nd;
+        shoreQueue.push(ni);
+        // Falloff: adjacent = 0.20, 2 tiles = 0.15, 3 tiles = 0.10, 4 tiles = 0.05
+        const boost = Math.max(0, 0.25 - nd * 0.05);
+        satBoost[ni] = Math.max(satBoost[ni], boost);
+      }
+    }
+  }
+
+  return { hasWater, waterDepth, satBoost };
+}
+
+// ── T4: Physical state (substrate, water table, saturation) ──
+// NOTE: Standing water is no longer computed here — it is determined by
+// computeTileWaterBodies at the chunk level (step T3.5). This function
+// receives tileHasWater, tileWaterDepth, and saturationBoost as inputs.
+function computeTilePhysicalState(ti, tileElevation, streamOrderVal, context, zone, tileHasWater, tileWaterDepth, tileSatBoost) {
   const seed = context.seed;
   const tx = ti % CHUNK_W, ty = (ti / CHUNK_W) | 0;
   const wx = context.worldX + tx, wy = context.worldY + ty;
@@ -6143,34 +6649,10 @@ function computeTilePhysicalState(ti, tileElevation, streamOrderVal, context, zo
   else if (streamOrderVal >= 1) { sat = Math.min(1, sat + 0.10); waterTableDepth = Math.min(waterTableDepth, 0.01); }
   sat = clamp(sat, 0, 1);
 
-  // Standing water: ocean, inherited marsh (water table above surface), or major
-  // streams; otherwise local basin detection.
-  let hasWater = false, waterDepth = 0;
-  if (elev <= 0) {
-    hasWater = true; waterDepth = -elev;
-  } else if (waterTableDepth < -0.02) {
-    hasWater = true; waterDepth = -waterTableDepth;
-  } else if (streamOrderVal >= 2 && sat > 0.5) {
-    hasWater = true; waterDepth = 0.01 + streamOrderVal * 0.006;
-  } else {
-    // Local basin detection (8-neighbor)
-    let isBasin = true, minNeighbor = Infinity;
-    const dx8 = [-1, 0, 1, -1, 1, -1, 0, 1];
-    const dy8 = [-1, -1, -1, 0, 0, 1, 1, 1];
-    for (let d = 0; d < 8; d++) {
-      const nx = tx + dx8[d], ny = ty + dy8[d];
-      if (nx < 0 || nx >= CHUNK_W || ny < 0 || ny >= CHUNK_H) continue;
-      const ne = tileElevation[ny * CHUNK_W + nx];
-      if (ne < elev) { isBasin = false; break; }
-      if (ne < minNeighbor) minNeighbor = ne;
-    }
-    if (isBasin && sat > 0.6 && elev < 0.06) {
-      hasWater = true;
-      waterDepth = clamp((minNeighbor - elev) + 0.008, 0.004, 0.06);
-    }
-  }
+  // Apply shoreline saturation boost from water body proximity (T3.5)
+  sat = clamp(sat + (tileSatBoost || 0), 0, 1);
 
-  return { grainSize: grain, waterTableDepth, saturation: sat, hasWater, waterDepth };
+  return { grainSize: grain, waterTableDepth, saturation: sat, hasWater: !!tileHasWater, waterDepth: tileWaterDepth || 0 };
 }
 
 // ── T5: Tile flora ──
@@ -6180,7 +6662,34 @@ function computeTilePhysicalState(ti, tileElevation, streamOrderVal, context, zo
 function computeTileFlora(ti, physical, context) {
   const temp = context.temperature[ti];
   if (physical.hasWater) {
-    return { floraType: 'none', floraDensity: 0, groundCover: 0, canopy: 0, chemoCrust: 0 };
+    // Standing water: no rooted canopy, but floating mat persists in shallows.
+    // Flora type inherited from regional parent (not reset to 'none').
+    const ftNames = ['barren', 'photosynthetic', 'chemotrophic', 'mixotrophic'];
+    const floraType = ftNames[context.floraTypeInt] || 'barren';
+    const wd = physical.waterDepth || 0;
+
+    let groundCover, chemoCrust;
+    const regGC = (context.gcRegional && context.gcRegional[ti]) || 0;
+    const regChemo = (context.chemoRegional && context.chemoRegional[ti]) || 0;
+
+    if (wd > 0.3) {
+        groundCover = 0;
+        chemoCrust = 0;
+    } else if (wd > 0.1) {
+        groundCover = regGC * 0.3;
+        chemoCrust = regChemo * 0.2;
+    } else {
+        groundCover = regGC * 0.6;
+        chemoCrust = regChemo * 0.5;
+    }
+
+    return {
+        floraType,
+        floraDensity: Math.max(groundCover, chemoCrust),
+        groundCover,
+        canopy: 0,
+        chemoCrust
+    };
   }
   if (temp < 0.5) {
     return { floraType: 'frozen', floraDensity: 0, groundCover: 0, canopy: 0, chemoCrust: 0 };
@@ -6197,8 +6706,12 @@ function computeTileFlora(ti, physical, context) {
   // Local nudge from wetness relative to a neutral mid-saturation.
   const localBoost = clamp((physical.saturation - 0.4) * 0.3, -0.15, 0.20);
 
+  // Canopy comes directly from the discrete tree placement — no local boost.
+  // The regional value was the density TARGET; the tree placement is the RESULT.
+  // Ground cover (mat) still grows between trees, on trunks, everywhere there's
+  // stable substrate — trees don't suppress mat.
   let groundCover = clamp(regGC + localBoost, 0, 1);
-  let canopy      = clamp(regCanopy + localBoost * 0.8, 0, 1);
+  let canopy      = regCanopy;  // already 0.7 (tree), 0.25 (fringe), or 0.0 (gap)
   let chemoCrust  = regChemo;
   let density     = clamp(regDens + localBoost, 0, 1);
 
@@ -6232,6 +6745,120 @@ function deriveTileTerrainType(physical, flora, zone, elev) {
   );
 }
 
+// ── T4: Discrete tree placement (Poisson disk) ──
+// Tuning constants
+const TREE_MIN_DIST_PHOTO = 5;    // min tiles between photosynthetic fern-trees
+const TREE_MIN_DIST_CHEMO = 3;    // min tiles between chemotrophic colony mounds
+const TREE_MIN_DIST_MIXO = 4;     // min tiles between mixotrophic growth
+const TREE_CANOPY_VALUE = 0.7;    // canopy density assigned to tree tiles
+const TREE_FRINGE_VALUE = 0.25;   // canopy density for tiles adjacent to trees
+const TREE_MAX_PER_CHUNK = 12000; // safety cap
+const TREE_MAX_GRAIN = 0.7;       // no trees on substrate coarser than this
+const TREE_MAX_SAT = 0.95;        // no trees in fully waterlogged ground
+
+function placeTreeCover(context, tileElevation, waterBodies, seed) {
+    const canopyOut = new Float32Array(CHUNK_TOTAL);
+
+    // ── Density target from regional inheritance ──
+    let totalCanopy = 0;
+    for (let i = 0; i < CHUNK_TOTAL; i++) {
+        totalCanopy += (context.canopyRegional[i] || 0);
+    }
+    const avgCanopy = totalCanopy / CHUNK_TOTAL;
+
+    // No trees needed if canopy target is negligible
+    if (avgCanopy < 0.02) return canopyOut;
+
+    // ── Placement parameters ──
+    const floraTypeInt = context.floraTypeInt || 0;
+    let minDist;
+    if (floraTypeInt === 2) {
+        minDist = TREE_MIN_DIST_CHEMO;
+    } else if (floraTypeInt === 3) {
+        minDist = TREE_MIN_DIST_MIXO;
+    } else {
+        minDist = TREE_MIN_DIST_PHOTO;
+    }
+
+    // How many trees to reach the target canopy fraction?
+    const numTrees = Math.round(avgCanopy * CHUNK_TOTAL);
+    const maxPossible = Math.floor(CHUNK_TOTAL / (minDist * minDist * 0.8));
+    const targetTrees = Math.min(numTrees, maxPossible, TREE_MAX_PER_CHUNK);
+
+    // ── Poisson disk placement (rejection sampling with grid acceleration) ──
+    const cellSize = minDist;
+    const gridW = Math.ceil(CHUNK_W / cellSize);
+    const gridH = Math.ceil(CHUNK_H / cellSize);
+    const grid = new Int32Array(gridW * gridH).fill(-1);
+    const treeX = [];
+    const treeY = [];
+
+    // Deterministic RNG from world coordinates
+    const treeRng = mulberry32(seed ^ hashInt(context.worldX || 0, context.worldY || 0, 0x54524545));
+
+    const maxAttempts = targetTrees * 25;
+    let attempts = 0;
+
+    while (treeX.length < targetTrees && attempts < maxAttempts) {
+        attempts++;
+        const tx = Math.floor(treeRng() * CHUNK_W);
+        const ty = Math.floor(treeRng() * CHUNK_H);
+        const ti = ty * CHUNK_W + tx;
+
+        // ── Physical placement constraints ──
+        if (waterBodies.hasWater[ti]) continue;
+        if (tileElevation[ti] <= 0) continue;
+        if ((context.grainSizeRegional[ti] || 0.3) > TREE_MAX_GRAIN) continue;
+        if ((context.satRegional[ti] || 0) > TREE_MAX_SAT) continue;
+
+        // ── Spacing check (grid-accelerated) ──
+        const gx = Math.floor(tx / cellSize);
+        const gy = Math.floor(ty / cellSize);
+        let tooClose = false;
+
+        for (let dy = -2; dy <= 2 && !tooClose; dy++) {
+            for (let dx = -2; dx <= 2 && !tooClose; dx++) {
+                const ngx = gx + dx, ngy = gy + dy;
+                if (ngx < 0 || ngx >= gridW || ngy < 0 || ngy >= gridH) continue;
+                const ni = ngy * gridW + ngx;
+                if (grid[ni] >= 0) {
+                    const ox = treeX[grid[ni]], oy = treeY[grid[ni]];
+                    if ((tx - ox) * (tx - ox) + (ty - oy) * (ty - oy) < minDist * minDist) {
+                        tooClose = true;
+                    }
+                }
+            }
+        }
+        if (tooClose) continue;
+
+        // ── Place tree ──
+        const treeIdx = treeX.length;
+        treeX.push(tx);
+        treeY.push(ty);
+        grid[gy * gridW + gx] = treeIdx;
+
+        canopyOut[ti] = TREE_CANOPY_VALUE;
+    }
+
+    // ── Fringe pass: tiles adjacent to trees get sparse canopy ──
+    const dx8 = [-1, 0, 1, -1, 1, -1, 0, 1];
+    const dy8 = [-1, -1, -1, 0, 0, 1, 1, 1];
+
+    for (let t = 0; t < treeX.length; t++) {
+        const cx = treeX[t], cy = treeY[t];
+        for (let d = 0; d < 8; d++) {
+            const nx = cx + dx8[d], ny = cy + dy8[d];
+            if (nx < 0 || nx >= CHUNK_W || ny < 0 || ny >= CHUNK_H) continue;
+            const ni = ny * CHUNK_W + nx;
+            if (canopyOut[ni] < 0.1) {
+                canopyOut[ni] = TREE_FRINGE_VALUE;
+            }
+        }
+    }
+
+    return canopyOut;
+}
+
 // ── T7: Tie it together ──
 function generateTileDetail(rx, ry) {
   if (!regionalCells || !regionalCells[rx] || !regionalCells[rx][ry]) return;
@@ -6251,6 +6878,16 @@ function generateTileDetail(rx, ry) {
   const drainage = computeTileDrainage(tileElevation, context.precipitation, CHUNK_W, CHUNK_H);
   const streamOrder = drainage.streamOrder;
 
+  // T3.5: Water body detection (coherent spatial features, not per-tile noise)
+  const waterBodies = computeTileWaterBodies(tileElevation, streamOrder, context, context.zone);
+
+  // T4: Discrete tree placement — replaces uniform canopy with positioned trees
+  const treeCanopy = placeTreeCover(context, tileElevation, waterBodies, seed);
+  // Overwrite regional canopy with discrete placement results (Option B)
+  for (let i = 0; i < CHUNK_TOTAL; i++) {
+    context.canopyRegional[i] = treeCanopy[i];
+  }
+
   // Typed-array store
   const tiles = {
     elevation:      tileElevation,
@@ -6267,6 +6904,8 @@ function generateTileDetail(rx, ry) {
     groundCover:    new Float32Array(CHUNK_TOTAL),
     canopy:         new Float32Array(CHUNK_TOTAL),
     chemoCrust:     new Float32Array(CHUNK_TOTAL),
+    groundVariant:  new Uint8Array(CHUNK_TOTAL),
+    coverVariant:   new Uint8Array(CHUNK_TOTAL),
     iron:           context.iron,
     copper:         context.copper,
     manganese:      context.manganese,
@@ -6291,10 +6930,16 @@ function generateTileDetail(rx, ry) {
       tiles.waterDepth[ti] = -elev;
       tiles.grainSize[ti] = 0.2;
       tiles.floraType[ti] = 0;
+      // Variant selection for ocean
+      const oceanVariants = selectSpriteVariant('deep_water', 'none',
+        { saturation: 1, groundCover: 0, grainSize: 0.2, waterDepth: -elev, canopyDensity: 0, streamOrder: 0, organicContent: 0 },
+        context.worldX + (ti % CHUNK_W), context.worldY + Math.floor(ti / CHUNK_W));
+      tiles.groundVariant[ti] = oceanVariants.ground;
+      tiles.coverVariant[ti] = oceanVariants.cover;
       continue;
     }
 
-    const physical = computeTilePhysicalState(ti, tileElevation, streamOrder[ti], context, zone);
+    const physical = computeTilePhysicalState(ti, tileElevation, streamOrder[ti], context, zone, waterBodies.hasWater[ti], waterBodies.waterDepth[ti], waterBodies.satBoost[ti]);
     const flora = computeTileFlora(ti, physical, context);
     const derived = deriveTileTerrainType(physical, flora, zone, elev);
 
@@ -6313,6 +6958,27 @@ function generateTileDetail(rx, ry) {
     if (physical.hasWater) ttInt = TT_WATER;
     tiles.terrainType[ti] = ttInt;
     tiles.coverType[ti]   = coverTypeToInt(derived.coverType);
+
+    // Variant selection from physical state
+    const variantTerrainName = physical.hasWater ? 'water' : derived.terrainType;
+    const variantPhysical = {
+        saturation: physical.saturation,
+        groundCover: flora.groundCover,
+        grainSize: physical.grainSize,
+        waterDepth: physical.waterDepth,
+        canopyDensity: flora.canopy,
+        streamOrder: streamOrder[ti],
+        organicContent: context.organicRegional ? (context.organicRegional[ti] || 0) : 0,
+    };
+    const variants = selectSpriteVariant(
+        variantTerrainName,
+        derived.coverType,
+        variantPhysical,
+        context.worldX + (ti % CHUNK_W),
+        context.worldY + Math.floor(ti / CHUNK_W)
+    );
+    tiles.groundVariant[ti] = variants.ground;
+    tiles.coverVariant[ti] = variants.cover;
   }
 
   currentTileData = { tiles, rx, ry, zone, context };
@@ -6369,6 +7035,33 @@ const tileOverlays = {
     const c = clamp(t.canopy[i], 0, 1);
     return { r: Math.floor(40 - c * 20), g: Math.floor(45 + c * 90), b: Math.floor(35 - c * 15) };
   },
+  'variant': function(t, i) {
+    if (t.elevation[i] <= 0) return { r: 15, g: 25, b: 40 };
+    const gv = t.groundVariant[i];
+    const tt = t.terrainType[i];
+    const hues = {
+        3: [90, 70, 45],    // MUD: brown
+        4: [60, 120, 50],   // GRASS: green
+        5: [110, 85, 55],   // DIRT: tan
+        6: [180, 170, 130], // SAND: light
+        7: [120, 115, 110], // ROCK: grey
+        2: [40, 70, 130],   // WATER: blue
+        1: [20, 40, 90],    // DEEP_WATER: dark blue
+        8: [190, 175, 140], // BEACH: light
+    };
+    const base = hues[tt] || [80, 80, 80];
+    const shift = 1.0 - gv * 0.2;
+    let r = Math.floor(base[0] * shift);
+    let g = Math.floor(base[1] * shift);
+    let b = Math.floor(base[2] * shift);
+    const cv = t.coverVariant[i];
+    if (cv > 0 || (t.coverType[i] > 0)) {
+        r = Math.floor(r * 0.6);
+        g = Math.floor(g * 0.7);
+        b = Math.min(255, b + 60);
+    }
+    return { r, g, b };
+  },
   'flora': function(t, i) {
     if (t.elevation[i] <= 0) return { r: 16, g: 32, b: 48 };
     const ft = t.floraType[i];
@@ -6423,20 +7116,35 @@ function hideTileView() {
 
 // ── Tile diagnostic ──
 function printTileDiagnostic(tiles) {
-  const counts = {};
+  const terrainCounts = {};
+  const coverCounts = {};
+  const variantCounts = {};  // keyed by "terrainName:variantIndex"
   let land = 0, water = 0, forested = 0;
   for (let i = 0; i < CHUNK_TOTAL; i++) {
-    const name = intToTerrainType(tiles.terrainType[i]);
-    counts[name] = (counts[name] || 0) + 1;
+    const tName = intToTerrainType(tiles.terrainType[i]);
+    terrainCounts[tName] = (terrainCounts[tName] || 0) + 1;
+    const cName = intToCoverType(tiles.coverType[i]);
+    coverCounts[cName] = (coverCounts[cName] || 0) + 1;
     if (tiles.elevation[i] > 0) land++; else water++;
     if (tiles.coverType[i] !== CT_NONE) forested++;
+    const vKey = `${tName}:v${tiles.groundVariant[i]}`;
+    variantCounts[vKey] = (variantCounts[vKey] || 0) + 1;
   }
   console.log('=== TILE DIAGNOSTIC ===');
-  console.log('Land:', land, 'Water:', water, 'Forested:', forested);
-  const summary = Object.keys(counts)
-    .map(k => `${k}=${(counts[k] / CHUNK_TOTAL * 100).toFixed(1)}%`)
+  console.log('Land:', land, 'Water:', water, 'Forested:', forested,
+    `(${(forested / CHUNK_TOTAL * 100).toFixed(1)}%)`);
+  const tSummary = Object.keys(terrainCounts)
+    .map(k => `${k}=${(terrainCounts[k] / CHUNK_TOTAL * 100).toFixed(1)}%`)
     .join('  ');
-  console.log('Terrain types: ' + summary);
+  console.log('Terrain types: ' + tSummary);
+  const cSummary = Object.keys(coverCounts)
+    .map(k => `${k}=${(coverCounts[k] / CHUNK_TOTAL * 100).toFixed(1)}%`)
+    .join('  ');
+  console.log('Cover types: ' + cSummary);
+  const vSummary = Object.keys(variantCounts).sort()
+    .map(k => `${k}=${variantCounts[k]}`)
+    .join('  ');
+  console.log('Ground variants: ' + vSummary);
   console.log('=== END TILE DIAGNOSTIC ===');
 }
 
@@ -6480,6 +7188,7 @@ function printTileDiagnostic(tiles) {
       <div class="tip-row"><b>Stream:</b> ${streamNames[t.streamOrder[i]]}  <b>Grain:</b> ${t.grainSize[i].toFixed(2)}  <b>Sat:</b> ${t.saturation[i].toFixed(2)}</div>
       <div class="tip-row"><b>Flora:</b> ${floraNames[t.floraType[i]]} (${t.floraDensity[i].toFixed(2)})  <b>GC:</b> ${t.groundCover[i].toFixed(2)}  <b>CD:</b> ${t.canopy[i].toFixed(2)}</div>
       ${isWater ? `<div class="tip-row"><b>Water:</b> ${t.waterDepth[i].toFixed(3)}</div>` : ''}
+      <div class="tip-row"><b>Variant:</b> ground=${t.groundVariant[i]} cover=${t.coverVariant[i]}</div>
       <div class="tip-row"><b>Palette:</b> ${sw(bgHex)} bg=${bgHex} ${sw(fgHex)} fg=${fgHex} ${sw(midHex)} mid=${midHex}</div>
     `;
 
