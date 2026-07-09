@@ -1,6 +1,6 @@
 # Overworld - Alien Ecology Simulation
 
-A tile-based browser game about survival on a believably simulated alien world. 
+A game about survival on a believably simulated alien world. 
 
 ---------
 
