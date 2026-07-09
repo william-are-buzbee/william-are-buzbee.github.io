@@ -12,9 +12,7 @@ Over millions of years, these two lineages evolved and radiated into every niche
 
 Their descendants colonized sub-terranian forests fueled by chemical energy. They claimed the abyssal depths of the deep sea and the vast expanse of the open oceans. They spread across intricate archipelagos, speciating into diverse forms. 
 
-This is where the game begins. You play as any animal on this planet, occupying its role within the ecology. 
-
-Use the tools of your selected species in order to survive in this simulated game of life.
+This is where the game begins. You play as an alien creature trying to survive with the tools available to you. Survive, fight, hide, reproduce and explore this vast alien world. 
 
 ---------
 
