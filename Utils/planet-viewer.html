@@ -2912,20 +2912,31 @@ function showTooltip(cell, mouseX, mouseY) {
   let tx = mouseX + 15;
   let ty = mouseY - 10;
   cellTooltip.innerHTML = `
-    <div class="tip-row"><b>Elev:</b> ${cell.elevation.toFixed(3)} — ${cell.isLand ? 'land' : cell.isShallowWater ? 'shallow' : 'deep'}</div>
-    <div class="tip-row"><b>Flora:</b> ${cell.floraType} (${(cell.floraDensity || 0).toFixed(2)})</div>
-    <div class="tip-row"><b>Minerals:</b> Fe ${cell.minerals.iron.toFixed(2)}  Cu ${cell.minerals.copper.toFixed(2)}  Mn ${cell.minerals.manganese.toFixed(2)}</div>
+    <div class="tip-row"><b>Elev:</b> ${cell.elevation.toFixed(3)} — ${
+        cell.isLand ? 'land' : cell.isShallowWater ? 'shallow water' : 'deep water'
+    }</div>
+    <div class="tip-row"><b>Zone:</b> ${cell.zone || '—'}  <b>Terrain:</b> ${
+        cell.terrainType || '—'}${cell.coverType && cell.coverType !== 'none' ? ' / ' + cell.coverType : ''}</div>
+    <div class="tip-row"><b>Temp:</b> ${cell.temperature.toFixed(2)}  <b>Wind:</b> ${
+        (cell.windSpeed || 0).toFixed(2)} (${Math.round(Math.atan2(cell.windV || 0, cell.windU || 0) * 180 / Math.PI)}°)</div>
+    <div class="tip-row"><b>Minerals:</b> Fe ${cell.minerals.iron.toFixed(2)}  Cu ${
+        cell.minerals.copper.toFixed(2)}  Mn ${cell.minerals.manganese.toFixed(2)}</div>
     ${cell.isLand ? `
-    <div class="tip-row"><b>Precip:</b> ${cell.precipitation.toFixed(2)}  <b>Moisture:</b> ${(cell.atmosphericMoisture || 0).toFixed(2)}</div>
-    <div class="tip-row"><b>Groundwater:</b> ${(cell.groundwater || 0).toFixed(2)}  <b>Drainage:</b> ${(cell.drainage || 0).toFixed(2)}  <b>Water Avail:</b> ${(cell.waterAvailability || 0).toFixed(2)}</div>
+    <div class="tip-row"><b>Substrate:</b> grain ${(cell.grainSize || 0).toFixed(2)}  sat ${
+        (cell.saturation || 0).toFixed(2)}${cell.hasWater ? '  depth ' + ((cell.waterDepth || 0) * 100).toFixed(0) + ' cm' : ''}</div>
+    <div class="tip-row"><b>Water:</b> precip ${cell.precipitation.toFixed(2)}  gw ${
+        (cell.groundwater || 0).toFixed(2)}  avail ${(cell.waterAvailability || 0).toFixed(2)}  drain ${
+        (cell.drainage || 0).toFixed(2)}</div>
+    ${cell.floraDensity > 0 ? `
+    <div class="tip-row"><b>Flora:</b> ${cell.floraType} (${(cell.floraDensity || 0).toFixed(2)})  gc ${
+        ((cell.groundCover || 0) * 100).toFixed(0)}%${(cell.canopy || 0) > 0 ? '  canopy ' + ((cell.canopy || 0) * 100).toFixed(0) + '%' : ''}${
+        (cell.chemoCrust || 0) > 0 ? '  crust ' + (cell.chemoCrust || 0).toFixed(2) : ''}</div>
+    ` : `<div class="tip-row"><b>Flora:</b> barren</div>`}
+    <div class="tip-row"><b>Stream:</b> ${['ridge','tributary','secondary','major'][cell.streamOrder || 0]}</div>
     ` : `
-    <div class="tip-row"><b>SST:</b> ${(cell.sst || 0).toFixed(2)}  <b>Moisture:</b> ${(cell.atmosphericMoisture || 0).toFixed(2)}  <b>Current:</b> ${(cell.currentSpeed || 0).toFixed(2)} (${Math.round(Math.atan2(cell.currentV || 0, cell.currentU || 0) * 180 / Math.PI)}°)</div>
+    <div class="tip-row"><b>SST:</b> ${(cell.sst || 0).toFixed(2)}  <b>Current:</b> ${
+        (cell.currentSpeed || 0).toFixed(2)} (${Math.round(Math.atan2(cell.currentV || 0, cell.currentU || 0) * 180 / Math.PI)}°)</div>
     `}
-    <div class="tip-row"><b>Wind:</b> ${(cell.windSpeed || 0).toFixed(2)} (${Math.round(Math.atan2(cell.windV || 0, cell.windU || 0) * 180 / Math.PI)}°)  <b>Temp:</b> ${cell.temperature.toFixed(2)}</div>
-    ${cell.zone !== undefined ? `
-    <div class="tip-row"><b>Zone:</b> ${cell.zone}  <b>Terrain:</b> ${cell.terrainType || '—'}${cell.coverType && cell.coverType !== 'none' ? ' / ' + cell.coverType : ''}</div>
-    <div class="tip-row"><b>Stream:</b> ${['ridge','tributary','secondary','major'][cell.streamOrder || 0]}  <b>Sat:</b> ${(cell.saturation || 0).toFixed(2)}  <b>Grain:</b> ${(cell.grainSize || 0).toFixed(2)}${cell.hasWater ? '  <b>Water:</b> ' + (cell.waterDepth || 0).toFixed(2) : ''}</div>
-    ` : ''}
   `;
 
   const rect = cellTooltip.getBoundingClientRect();
@@ -3247,13 +3258,26 @@ document.addEventListener('keydown', e => {
       trx  = Math.max(0, Math.min(REGIONAL_SIZE - 1, trx));
       tryy = Math.max(0, Math.min(REGIONAL_SIZE - 1, tryy));
       if (trx !== currentTileData.rx || tryy !== currentTileData.ry) {
-        const tt0 = performance.now();
-        generateTileDetail(trx, tryy);
-        const tt1 = performance.now();
-        const rc = regionalCells[trx][tryy];
-        document.getElementById('tileDetailTitle').textContent =
-          `TILES: (${trx}, ${tryy}) — ${rc.zone} ${rc.terrainType || ''}`;
-        statusText.textContent = `Tile panned in ${(tt1 - tt0).toFixed(0)} ms`;
+        const cacheKey = `${trx},${tryy}`;
+        const cached = tileChunkCache.get(cacheKey);
+        if (cached) {
+          currentTileData = cached;
+          renderTileDetail(document.getElementById('tileOverlaySelect').value);
+          const rc = regionalCells[trx][tryy];
+          document.getElementById('tileDetailTitle').textContent =
+            `TILES: (${trx}, ${tryy}) — ${rc.zone} ${rc.terrainType || ''}`;
+          statusText.textContent = 'Tile loaded from cache';
+        } else {
+          const tt0 = performance.now();
+          generateTileDetail(trx, tryy);
+          const tt1 = performance.now();
+          const rc = regionalCells[trx][tryy];
+          document.getElementById('tileDetailTitle').textContent =
+            `TILES: (${trx}, ${tryy}) — ${rc.zone} ${rc.terrainType || ''}`;
+          statusText.textContent = `Tile panned in ${(tt1 - tt0).toFixed(0)} ms`;
+        }
+        // Redraw the regional map to update the position marker
+        renderRegionalMap(regionalOverlaySelect.value);
       }
       return;
     }
@@ -3261,6 +3285,9 @@ document.addEventListener('keydown', e => {
     // Arrows → pan the regional map
     if (activeControl === 'regional' && selectedRegion) {
       e.preventDefault();
+      // Close tile view and clear chunk cache — old positions are meaningless
+      hideTileView();
+      tileChunkCache.clear();
       // Shift by exactly one regional-map width so consecutive views are
       // perfectly adjacent: no skipped tiles, no repeated tiles.
       const panStep = REGIONAL_SIZE / CELLS_PER_PLANETARY;
@@ -4447,11 +4474,13 @@ function deriveRegionalTerrainType(cell) {
     cell.coverType = 'none';
     return;
   }
-  if (cell.hasWater) {
+  if (cell.hasWater && (cell.waterDepth || 0) >= SHALLOW_WATER_TERRAIN_THRESHOLD) {
     cell.terrainType = 'water';
     cell.coverType = 'none';
     return;
   }
+  // Shallow water (< threshold) falls through to normal terrain derivation.
+  // The cell still has hasWater=true — it just doesn't RENDER as water terrain.
   if (cell.isFreezing) {
     cell.terrainType = 'rock';
     cell.coverType = 'none';
@@ -4639,9 +4668,19 @@ function computeTilePalette(p) {
 
   // ── BACKGROUND (Layer 1) ──
   if (tt === 'water' || tt === 2) {
+    // What's visible at the bottom: living mat (if present) over mineral substrate.
+    // The mat doesn't vanish when submerged — it's still there under the water.
     const substrate = mineralColor(iron, copper, mn, MAT.substrate);
+    let bottomColor;
+    if (gc > 0.05) {
+      // Living cover visible through the water, darkened by wet film
+      const wetMat = darken(livingCoverColor, 0.82);
+      bottomColor = blend(wetMat, substrate, gc, 1 - gc);
+    } else {
+      bottomColor = substrate;
+    }
     const bottomVisibility = Math.max(0, 1 - depth * 4);  // fades by 0.25m
-    bgL1 = blend(MAT.waterSurface, substrate, 1 - bottomVisibility, bottomVisibility);
+    bgL1 = blend(MAT.waterSurface, bottomColor, 1 - bottomVisibility, bottomVisibility);
 
   } else if (tt === 'deep_water' || tt === 1) {
     bgL1 = { r: 40, g: 58, b: 95 };  // deep blue, no bottom visible
@@ -4728,8 +4767,30 @@ function computeTilePalette(p) {
     bgL1 = { r: 100, g: 90, b: 75 };  // Fallback
   }
 
+  // ── Wet film modifier for shallow standing water ──
+  // Tiles with very shallow water (< 5cm) keep their ground terrain type
+  // but get darkened with a slight blue shift — the water film effect.
+  if (depth > 0 && depth < SHALLOW_WATER_TERRAIN_THRESHOLD && tt !== 'water' && tt !== 2 && tt !== 'deep_water' && tt !== 1) {
+    const wetIntensity = depth / SHALLOW_WATER_TERRAIN_THRESHOLD; // 0 at no water, 1 at threshold
+    const wetDarken = 1.0 - wetIntensity * 0.18; // up to 18% darker
+    bgL1 = {
+      r: Math.round(bgL1.r * wetDarken),
+      g: Math.round(bgL1.g * wetDarken),
+      b: Math.round(Math.min(255, bgL1.b * wetDarken + wetIntensity * 6)) // slight blue shift
+    };
+  }
+
   // ── FOREGROUND (Layer 1) ──
-  if (tt === 'water' || tt === 2 || tt === 'deep_water' || tt === 1) {
+  if (tt === 'water' || tt === 2) {
+    // Shallow water: mat highlights show through alongside sky reflection
+    const bottomVis = Math.max(0, 1 - depth * 4);
+    if (bottomVis > 0.1 && gc > 0.1) {
+      const wetBright = darken(livingCoverBright, 0.85);
+      fgL1 = blend(wetBright, MAT.skyReflection, bottomVis * 0.4, 1 - bottomVis * 0.4);
+    } else {
+      fgL1 = MAT.skyReflection;
+    }
+  } else if (tt === 'deep_water' || tt === 1) {
     fgL1 = MAT.skyReflection;
 
   } else if (tt === 'mud' || tt === 3) {
@@ -4860,6 +4921,31 @@ function regionalPhysical(cell) {
 // ── Regional overlay color functions ──
 const regionalOverlayFunctions = {
   'surface': function(cell) {
+    // When the hi-res grid exists, interpolate its pre-computed colors.
+    // The hi-res grid's colors were computed by stepHR8_colorRow using
+    // computeTilePalette on the full physical state.  Reading them directly
+    // ensures the regional Surface overlay matches the planetary map.
+    if (hiResData) {
+      // Regional-only water features: drainage channels and ponds that
+      // the hi-res grid couldn't resolve.  These ARE new detail.
+      if (cell.isLand && cell.hasWater && (cell.waterDepth || 0) >= SHALLOW_WATER_TERRAIN_THRESHOLD) {
+        const m = cell.minerals || {};
+        return computeTilePalette({
+          terrainType: 'water', waterDepth: cell.waterDepth || 0,
+          iron: m.iron || 0, copper: m.copper || 0, manganese: m.manganese || 0,
+          groundCover: cell.groundCover || 0,
+          floraType: cell.floraType || 'barren',
+        }).bg;
+      }
+      // Everything else (land AND ocean): sample the hi-res pre-computed color.
+      const hx = (cell.worldX / CELLS_PER_PLANETARY) * hiResMultiplier;
+      const hy = (cell.worldY / CELLS_PER_PLANETARY) * hiResMultiplier;
+      const r = bilinearSampleHR(hiResData.colorR, hx, hy);
+      const g = bilinearSampleHR(hiResData.colorG, hx, hy);
+      const b = bilinearSampleHR(hiResData.colorB, hx, hy);
+      return { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+    }
+    // Fallback for low-res mode: derive from regional physical state
     if (cell.isDeepWater) return computeTilePalette({ terrainType: 'deep_water' }).bg;
     if (cell.isShallowWater) {
       const m = cell.minerals || {};
@@ -4868,12 +4954,13 @@ const regionalOverlayFunctions = {
         iron: m.iron || 0, copper: m.copper || 0, manganese: m.manganese || 0,
       }).bg;
     }
-    // Standing surface water on land → water terrain with the cell's depth
-    if (cell.hasWater) {
+    if (cell.hasWater && (cell.waterDepth || 0) >= SHALLOW_WATER_TERRAIN_THRESHOLD) {
       const m = cell.minerals || {};
       return computeTilePalette({
         terrainType: 'water', waterDepth: cell.waterDepth || 0,
         iron: m.iron || 0, copper: m.copper || 0, manganese: m.manganese || 0,
+        groundCover: cell.groundCover || 0,
+        floraType: cell.floraType || 'barren',
       }).bg;
     }
     if (cell.isFreezing) return { r: 210, g: 215, b: 220 };
@@ -4995,6 +5082,28 @@ function renderRegionalMap(overlay) {
     }
   }
   regionalCtx.putImageData(img, 0, 0);
+  drawTilePositionMarker();
+}
+
+// ── Tile position marker on the regional map ──
+// Draws a small highlighted box on the regional canvas showing which cell
+// the current tile view is displaying.  Called after every regional render
+// and after tile pan operations.
+function drawTilePositionMarker() {
+  if (!currentTileData || !regionalCells) return;
+  const rx = currentTileData.rx;
+  const ry = currentTileData.ry;
+  regionalCtx.save();
+  const size = 5;
+  // Dark outline for contrast on any terrain
+  regionalCtx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+  regionalCtx.lineWidth = 3;
+  regionalCtx.strokeRect(rx - size / 2 - 1, ry - size / 2 - 1, size + 2, size + 2);
+  // White inner box
+  regionalCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+  regionalCtx.lineWidth = 1;
+  regionalCtx.strokeRect(rx - size / 2, ry - size / 2, size, size);
+  regionalCtx.restore();
 }
 
 // ── Show / hide regional view ──
@@ -5002,6 +5111,8 @@ function showRegionalView(planetX, planetY) {
   const seed = parseInt(document.getElementById('seedInput').value, 10) || 0;
   selectedRegion = { cx: planetX, cy: planetY };
   activeControl = 'regional';
+  hideTileView();
+  tileChunkCache.clear();
 
   document.getElementById('regionalPlaceholder').style.display = 'none';
   document.getElementById('regionalActive').style.display = 'block';
@@ -5030,6 +5141,7 @@ function closeRegionalView() {
   selectedRegion = null;
   regionalCells = null;
   hideTileView();
+  tileChunkCache.clear();
   activeControl = 'planetary';
   document.getElementById('regionalPlaceholder').style.display = 'flex';
   document.getElementById('regionalActive').style.display = 'none';
@@ -6080,6 +6192,8 @@ const CHUNK_W = 512, CHUNK_H = 512;
 const CHUNK_TOTAL = CHUNK_W * CHUNK_H;
 
 // Terrain / cover enums (compact typed-array storage)
+const SHALLOW_WATER_TERRAIN_THRESHOLD = 0.05; // 5cm — below this, water is a film on ground, not a body of water
+
 const TT_NONE = 0, TT_DEEP_WATER = 1, TT_WATER = 2, TT_MUD = 3, TT_GRASS = 4,
       TT_DIRT = 5, TT_SAND = 6, TT_ROCK = 7, TT_BEACH = 8;
 const CT_NONE = 0, CT_FOREST = 1, CT_MUSHFOREST = 2, CT_SPARSE_FOREST = 3, CT_SPARSE_MUSHFOREST = 4;
@@ -6186,6 +6300,7 @@ const tileZoneParams = {
 };
 
 let currentTileData = null;
+const tileChunkCache = new Map();
 
 const tileCanvas = document.getElementById('tileCanvas');
 const tileCtx = tileCanvas.getContext('2d');
@@ -6727,7 +6842,7 @@ function computeTileFlora(ti, physical, context) {
 // ── T6: Terrain type derivation ──
 function deriveTileTerrainType(physical, flora, zone, elev) {
   // Water / ice guards; everything else routes through deriveTerrainAndCover.
-  if (physical.hasWater) return { terrainType: 'water', coverType: 'none' };
+  if (physical.hasWater && physical.waterDepth >= SHALLOW_WATER_TERRAIN_THRESHOLD) return { terrainType: 'water', coverType: 'none' };
   if (flora.floraType === 'frozen') return { terrainType: 'rock', coverType: 'none' };
 
   const isCoastal = elev > 0 && elev < 0.03;
@@ -6922,17 +7037,25 @@ function generateTileDetail(rx, ry) {
     const elev = tileElevation[ti];
 
     if (elev <= 0) {
-      // Ocean tile
-      tiles.terrainType[ti] = TT_DEEP_WATER;
+      // Ocean tile — classify shallow vs deep based on actual water depth
+      const waterDepth = -elev;
+      const isDeep = waterDepth > 0.25;  // bottom not visible past 25cm
+
+      tiles.terrainType[ti] = isDeep ? TT_DEEP_WATER : TT_WATER;
       tiles.coverType[ti] = CT_NONE;
       tiles.hasWater[ti] = 1;
       tiles.saturation[ti] = 1;
-      tiles.waterDepth[ti] = -elev;
-      tiles.grainSize[ti] = 0.2;
+      tiles.waterDepth[ti] = waterDepth;
+      tiles.grainSize[ti] = context.grainSizeRegional ? (context.grainSizeRegional[ti] || 0.2) : 0.2;
       tiles.floraType[ti] = 0;
-      // Variant selection for ocean
-      const oceanVariants = selectSpriteVariant('deep_water', 'none',
-        { saturation: 1, groundCover: 0, grainSize: 0.2, waterDepth: -elev, canopyDensity: 0, streamOrder: 0, organicContent: 0 },
+      tiles.groundCover[ti] = 0;
+      tiles.canopy[ti] = 0;
+      tiles.floraDensity[ti] = 0;
+
+      const terrainName = isDeep ? 'deep_water' : 'water';
+      const oceanVariants = selectSpriteVariant(terrainName, 'none',
+        { saturation: 1, groundCover: 0, grainSize: tiles.grainSize[ti],
+          waterDepth: waterDepth, canopyDensity: 0, streamOrder: 0, organicContent: 0 },
         context.worldX + (ti % CHUNK_W), context.worldY + Math.floor(ti / CHUNK_W));
       tiles.groundVariant[ti] = oceanVariants.ground;
       tiles.coverVariant[ti] = oceanVariants.cover;
@@ -6954,13 +7077,15 @@ function generateTileDetail(rx, ry) {
     tiles.chemoCrust[ti]      = flora.chemoCrust;
     tiles.floraType[ti]       = floraTypeInt[flora.floraType] || 0;
 
+    // The derived terrain type already handles the water depth threshold.
+    // No per-tile override needed — deriveTileTerrainType returns 'water' only
+    // when waterDepth >= SHALLOW_WATER_TERRAIN_THRESHOLD.
     let ttInt = terrainTypeToInt(derived.terrainType);
-    if (physical.hasWater) ttInt = TT_WATER;
     tiles.terrainType[ti] = ttInt;
     tiles.coverType[ti]   = coverTypeToInt(derived.coverType);
 
     // Variant selection from physical state
-    const variantTerrainName = physical.hasWater ? 'water' : derived.terrainType;
+    const variantTerrainName = (physical.hasWater && physical.waterDepth >= SHALLOW_WATER_TERRAIN_THRESHOLD) ? 'water' : derived.terrainType;
     const variantPhysical = {
         saturation: physical.saturation,
         groundCover: flora.groundCover,
@@ -6982,6 +7107,7 @@ function generateTileDetail(rx, ry) {
   }
 
   currentTileData = { tiles, rx, ry, zone, context };
+  tileChunkCache.set(`${rx},${ry}`, currentTileData);
 
   renderTileDetail(document.getElementById('tileOverlaySelect').value);
   printTileDiagnostic(tiles);
@@ -7100,10 +7226,20 @@ function openTileView(rx, ry) {
     `TILES: (${rx}, ${ry}) — ${rc.zone} ${rc.terrainType || ''}`;
   statusText.textContent = 'Generating tile chunk…';
   setTimeout(() => {
-    const t0 = performance.now();
-    generateTileDetail(rx, ry);
-    const t1 = performance.now();
-    statusText.textContent = `Tile chunk generated in ${(t1 - t0).toFixed(0)} ms`;
+    const cacheKey = `${rx},${ry}`;
+    const cached = tileChunkCache.get(cacheKey);
+    if (cached) {
+      currentTileData = cached;
+      renderTileDetail(document.getElementById('tileOverlaySelect').value);
+      statusText.textContent = 'Tile loaded from cache';
+    } else {
+      const t0 = performance.now();
+      generateTileDetail(rx, ry);
+      const t1 = performance.now();
+      statusText.textContent = `Tile chunk generated in ${(t1 - t0).toFixed(0)} ms`;
+    }
+    // Draw the position marker on the regional map
+    renderRegionalMap(regionalOverlaySelect.value);
   }, 10);
 }
 
@@ -7112,6 +7248,8 @@ function hideTileView() {
   if (container) container.style.display = 'none';
   currentTileData = null;
   if (tileTooltip) tileTooltip.style.display = 'none';
+  // Redraw regional map to remove the position marker
+  if (regionalCells) renderRegionalMap(regionalOverlaySelect.value);
 }
 
 // ── Tile diagnostic ──
@@ -7157,7 +7295,7 @@ function printTileDiagnostic(tiles) {
   });
 
   const streamNames = ['ridge', 'tributary', 'secondary', 'major'];
-  const floraNames = ['barren', 'photo', 'chemo', 'mixo'];
+  const floraNames = ['barren', 'photosynthetic', 'chemotrophic', 'mixotrophic'];
 
   tileCanvas.addEventListener('mousemove', (e) => {
     if (!currentTileData) { tileTooltip.style.display = 'none'; return; }
@@ -7172,24 +7310,33 @@ function printTileDiagnostic(tiles) {
     const t = currentTileData.tiles;
     const terrain = intToTerrainType(t.terrainType[i]);
     const cover = intToCoverType(t.coverType[i]);
-    const isWater = t.elevation[i] <= 0 || t.hasWater[i];
+    const isLand = t.elevation[i] > 0;
 
-    // Computed three-layer palette for this tile
     const palette = computeTilePalette(tilePhysical(t, i));
     const toHex = (c) => '#' + ((1 << 24) + (c.r << 16) + (c.g << 8) + c.b).toString(16).slice(1);
     const bgHex = toHex(palette.bg), fgHex = toHex(palette.fg), midHex = toHex(palette.mid);
     const sw = (hex) => `<span style="display:inline-block;width:9px;height:9px;border:1px solid #000;vertical-align:middle;background:${hex}"></span>`;
 
+    const floraType = floraNames[t.floraType[i]] || 'barren';
+    const hasFlora = t.floraType[i] > 0;
+    const depthCm = (t.waterDepth[i] * 100);
+
     tileTooltip.style.display = 'block';
     tileTooltip.innerHTML = `
-      <div class="tip-row"><b>Tile:</b> (${tx}, ${ty})</div>
-      <div class="tip-row"><b>Elev:</b> ${t.elevation[i].toFixed(4)}</div>
-      <div class="tip-row"><b>Terrain:</b> ${terrain}${cover !== 'none' ? ' / ' + cover : ''}</div>
-      <div class="tip-row"><b>Stream:</b> ${streamNames[t.streamOrder[i]]}  <b>Grain:</b> ${t.grainSize[i].toFixed(2)}  <b>Sat:</b> ${t.saturation[i].toFixed(2)}</div>
-      <div class="tip-row"><b>Flora:</b> ${floraNames[t.floraType[i]]} (${t.floraDensity[i].toFixed(2)})  <b>GC:</b> ${t.groundCover[i].toFixed(2)}  <b>CD:</b> ${t.canopy[i].toFixed(2)}</div>
-      ${isWater ? `<div class="tip-row"><b>Water:</b> ${t.waterDepth[i].toFixed(3)}</div>` : ''}
-      <div class="tip-row"><b>Variant:</b> ground=${t.groundVariant[i]} cover=${t.coverVariant[i]}</div>
-      <div class="tip-row"><b>Palette:</b> ${sw(bgHex)} bg=${bgHex} ${sw(fgHex)} fg=${fgHex} ${sw(midHex)} mid=${midHex}</div>
+      <div class="tip-row"><b>Tile:</b> (${tx}, ${ty})  <b>Elev:</b> ${t.elevation[i].toFixed(3)}${
+          !isLand ? ' (ocean)' : ''}</div>
+      <div class="tip-row"><b>Terrain:</b> ${terrain}${
+          cover !== 'none' ? ' / ' + cover : ''}  <b>Stream:</b> ${streamNames[t.streamOrder[i]]}</div>
+      <div class="tip-row"><b>Substrate:</b> grain ${t.grainSize[i].toFixed(2)}  sat ${t.saturation[i].toFixed(2)}${
+          t.waterDepth[i] > 0 ? '  water ' + (depthCm < 10 ? depthCm.toFixed(1) + ' cm' : (t.waterDepth[i]).toFixed(2) + ' m') : ''}</div>
+      ${hasFlora ? `
+      <div class="tip-row"><b>Flora:</b> ${floraType} (${t.floraDensity[i].toFixed(2)})  gc ${
+          (t.groundCover[i] * 100).toFixed(0)}%${t.canopy[i] > 0.01 ? '  canopy ' + (t.canopy[i] * 100).toFixed(0) + '%' : ''}${
+          t.chemoCrust && (t.chemoCrust[i] || 0) > 0.01 ? '  crust ' + t.chemoCrust[i].toFixed(2) : ''}</div>
+      ` : `<div class="tip-row"><b>Flora:</b> barren</div>`}
+      <div class="tip-row"><b>Sprite:</b> ${terrain}${cover !== 'none' ? '+' + cover : ''} v${t.groundVariant[i]}${
+          cover !== 'none' ? '/c' + t.coverVariant[i] : ''}</div>
+      <div class="tip-row"><b>Palette:</b> ${sw(bgHex)}${bgHex} ${sw(fgHex)}${fgHex} ${sw(midHex)}${midHex}</div>
     `;
 
     let px = e.clientX + 15, py = e.clientY - 10;
