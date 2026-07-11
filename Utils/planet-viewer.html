@@ -4229,19 +4229,40 @@ function refineRegionalSubstrateFromHiRes(cell) {
 
   const so = cell.streamOrder;
 
-  // Channels raise saturation and pull the water table toward / above surface,
-  // never below the high-res base (Math.max / Math.min preserve the base).
-  if (so >= 3) {
-    cell.saturation = Math.max(cell.saturation, 0.95);
-    cell.waterTableDepth = Math.min(cell.waterTableDepth, -0.02);
-  } else if (so >= 2) {
-    cell.saturation = Math.max(cell.saturation, 0.85);
-    cell.waterTableDepth = Math.min(cell.waterTableDepth, 0.0);
-  } else if (so >= 1) {
-    cell.saturation = Math.max(cell.saturation, cell.saturation + 0.1);
-    cell.waterTableDepth = Math.min(cell.waterTableDepth, 0.01);
+  // ── Drainage-responsive water table modulation ──
+  // The hi-res base WTD is 0.00 for most lowland continental cells.
+  // Drainage creates differentiation: ridges shed water (WTD pushed positive),
+  // channels collect water (WTD pushed negative/zero).
+  const drainParams = {
+    summit:      { ridge: 0.55, so1: 0.30, so2: 0.10, channel: 0.00 },
+    upper_slope: { ridge: 0.40, so1: 0.18, so2: 0.05, channel: 0.00 },
+    mid_slope:   { ridge: 0.28, so1: 0.10, so2: 0.02, channel: -0.01 },
+    lowland:     { ridge: 0.18, so1: 0.06, so2: 0.00, channel: -0.02 },
+    coastal:     { ridge: 0.06, so1: 0.02, so2: 0.00, channel: -0.02 },
+    tidal:       { ridge: 0.00, so1: 0.00, so2: 0.00, channel: -0.03 },
+  };
+
+  const dp = drainParams[cell.zone] || drainParams.lowland;
+  let wtdAdjust;
+  if (so === 0) {
+    wtdAdjust = dp.ridge;
+  } else if (so === 1) {
+    wtdAdjust = dp.so1;
+  } else if (so === 2) {
+    wtdAdjust = dp.so2;
+  } else {
+    wtdAdjust = dp.channel;  // negative = water table above surface
   }
-  // streamOrder 0 (ridge): high-res base kept unchanged.
+
+  cell.waterTableDepth = cell._hrWaterTableDepth + wtdAdjust;
+
+  // Recompute saturation from the drainage-modulated WTD
+  // (same capillary fringe model as stepHR4_waterTableRow)
+  const capillary = (1.0 - cell.grainSize) * 0.15;
+  const effDepth = cell.waterTableDepth - capillary;
+  cell.saturation = effDepth <= 0
+    ? Math.min(1, Math.max(0.7, 1.0 - effDepth * 0.5))
+    : Math.min(0.7, Math.exp(-effDepth * 8.0));
 
   cell.saturation = clamp(cell.saturation, 0, 1);
 
@@ -4460,11 +4481,11 @@ function computeStandingWater(elevGrid) {
   const dy8 = [-1, -1, -1, 0, 0, 1, 1, 1];
 
   // Minimum feature sizes (regional cells are ~1km each, so smaller thresholds)
-  const REG_MIN_BASIN_AREA  = 4;
-  const REG_MIN_BASIN_DEPTH = 0.005;
-  const REG_MIN_WATER_FEAT  = 4;
-  const REG_POUR_TOLERANCE  = 0.012;
-  const REG_SHORE_DIST      = 3;
+  const REG_MIN_BASIN_AREA  = 12;    // was 4 — lake must span ≥12 km²
+  const REG_MIN_BASIN_DEPTH = 0.02;  // was 0.005 — depression must be ≥2 cm deep
+  const REG_MIN_WATER_FEAT  = 8;     // was 4 — connected water component ≥8 cells
+  const REG_POUR_TOLERANCE  = 0.008; // was 0.012 — shallower fill level
+  const REG_SHORE_DIST      = 2;     // was 3 — tighter saturation halo
 
   // Reset all cells
   for (let ry = 0; ry < S; ry++) {
@@ -4490,11 +4511,13 @@ function computeStandingWater(elevGrid) {
     }
   }
 
-  // ── Channel water: stream order >= 2 at regional scale (each cell ~1km) ──
+  // ── Channel water: stream order >= 3 at regional scale (each cell ~1km) ──
+  // At regional scale, only major rivers (SO 3+) are visible.
+  // SO 2 channels are ~10-50m wide — a small fraction of a 1 km cell.
   for (let ry = 0; ry < S; ry++) {
     for (let rx = 0; rx < S; rx++) {
       const cell = regionalCells[rx][ry];
-      if (cell.isLand && cell.streamOrder >= 2 && cell.saturation > 0.5) {
+      if (cell.isLand && cell.streamOrder >= 3 && cell.saturation > 0.6) {
         hasWater[ry * S + rx] = 1;
         wDepth[ry * S + rx] = 0.02 + cell.drainageDensity * 0.05;
       }
@@ -4638,7 +4661,7 @@ function computeStandingWater(elevGrid) {
 
       // Shoreline saturation boost for nearby land cells
       if (!hasWater[i] && dist[i] < 255 && dist[i] > 0) {
-        const boost = Math.max(0, 0.20 - dist[i] * 0.06);
+        const boost = Math.max(0, 0.12 - dist[i] * 0.05);
         cell.saturation = clamp((cell.saturation || 0) + boost, 0, 1);
       }
     }
