@@ -195,6 +195,77 @@ canvas.hidden-canvas {
   color: #d0d8e0;
 }
 
+/* ── Snapshot Info Panel (bottom-left quadrant) ── */
+.snapshot-panel {
+  background: #1a1b1e;
+  border: 1px solid #2a2b2e;
+  border-radius: 4px;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #c8c8cc;
+  min-height: 180px;
+  max-height: 400px;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 640px;
+  margin-top: 10px;
+}
+
+.snapshot-panel::-webkit-scrollbar { width: 5px; }
+.snapshot-panel::-webkit-scrollbar-track { background: #111214; border-radius: 3px; }
+.snapshot-panel::-webkit-scrollbar-thumb { background: #3a3b3e; border-radius: 3px; }
+
+.snapshot-panel .snap-placeholder {
+  color: #555;
+  font-style: italic;
+  text-align: center;
+  padding: 60px 0;
+}
+
+.snapshot-panel .snap-section {
+  margin-bottom: 6px;
+}
+
+.snapshot-panel .snap-section:last-child {
+  margin-bottom: 0;
+}
+
+.snapshot-panel .snap-header {
+  color: #5a7a9a;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #2a2b2e;
+  padding-bottom: 2px;
+  margin-bottom: 3px;
+}
+
+.snapshot-panel .snap-row {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #b0b0b4;
+}
+
+.snapshot-panel .snap-row b {
+  color: #7a9aba;
+  font-weight: 600;
+}
+
+.snapshot-panel .snap-row .val {
+  color: #d0d0d4;
+}
+
+.snapshot-panel .snap-timestamp {
+  color: #555;
+  font-size: 10px;
+  text-align: right;
+  margin-top: 6px;
+  border-top: 1px solid #2a2b2e;
+  padding-top: 4px;
+}
+
 .info-panel {
   display: none;
 }
@@ -504,6 +575,7 @@ canvas.hidden-canvas {
     <button id="viewMollweide" title="Mollweide equal-area projection">🗂 Mollweide</button>
   </div>
   <button id="homeBtn" title="Return to home orientation (north-up, equator-centered)">⌂ Home</button>
+  <button id="infoSnapBtn" title="Capture snapshot of current cell data (I)">I Info</button>
   <span id="speedControl" style="display:none;">
     <label style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Speed</label>
     <input type="range" id="spinSpeedSlider" min="0" max="100" value="30"
@@ -524,6 +596,9 @@ canvas.hidden-canvas {
     <canvas id="planetCanvas" width="1024" height="512"></canvas>
     <canvas id="globeCanvas" class="globe-canvas hidden-canvas" width="600" height="600"></canvas>
     <canvas id="mollweideCanvas" class="mollweide-canvas hidden-canvas" width="1024" height="512"></canvas>
+    <div class="snapshot-panel" id="snapshotPanel">
+      <div class="snap-placeholder">Press <b>I</b> to capture cell info</div>
+    </div>
   </div>
   <div class="regional-panel" id="regionalPanel">
     <div class="regional-placeholder" id="regionalPlaceholder">Click a cell on any map view to generate a high-resolution regional detail view (~1 km per cell).</div>
@@ -584,15 +659,15 @@ canvas.hidden-canvas {
 // ── Tunable Parameters ──
 const params = {
   // Plates
-  plateCountBase: 10,
+  plateCountBase: 14,
   plateCountRange: 6,
-  continentalRatio: 0.4,
-  minPlateSpacing: 0.4,  // 3D sphere units
+  continentalRatio: 0.30,
+  minPlateSpacing: 0.28,  // 3D sphere units
 
   // Elevation
-  continentalBase: -0.05,
-  continentalNoise: 0.12,
-  oceanicBase: -0.25,
+  continentalBase: -0.08,
+  continentalNoise: 0.18,
+  oceanicBase: -0.30,
   fractalAmp: 0.15,
   fractalOctaves: 4,
   fractalScale: 0.02,
@@ -600,8 +675,21 @@ const params = {
   // Mountains
   collisionHeight: 0.65,
   mountainNoiseScale: 0.05,
-  arcHeight: 0.45,
+  arcHeight: 0.55,
   arcNoiseScale: 0.06,
+
+  // Peak shape
+  peakAspectRatio: 2.5,       // long axis / short axis for boundary-aligned peaks
+  peakAngularNoise: 0.25,     // how much the radius varies with angle (0 = perfect ellipse, 1 = very jagged)
+  peakAngularFreq: 5,         // number of lobes around the peak (higher = more indented coastline)
+
+  // Arc Chains
+  arcChainMinPeaks: 4,
+  arcChainMaxPeaks: 8,
+  arcChainSpacing: 4,
+  arcChainJitter: 1.5,
+  arcSubPeakRadiusMin: 3,
+  arcSubPeakRadiusMax: 6,
 
   // Hotspots
   hotspotCountBase: 3,
@@ -656,7 +744,7 @@ const params = {
   windEvapFactor: 0.10,
   oroFactor: 0.4,
   convFactor: 0.3,
-  bgPrecipRate: 0.02,
+  bgPrecipRate: 0.03,
   moistureDiffusion: 0.03,
 
   // Groundwater
@@ -682,10 +770,10 @@ const paramConfig = {
   plateCountBase:     { label: 'Plate count base',     min: 4,     max: 20,    step: 1,     group: 'Plates' },
   plateCountRange:    { label: 'Plate count range',    min: 1,     max: 10,    step: 1,     group: 'Plates' },
   continentalRatio:   { label: 'Continental %',        min: 0.10,  max: 0.70,  step: 0.05,  group: 'Plates' },
-  minPlateSpacing:    { label: 'Min plate spacing',    min: 0.15,  max: 0.80,  step: 0.05,  group: 'Plates' },
-  continentalBase:    { label: 'Continental base',     min: -0.15, max: 0.10,  step: 0.01,  group: 'Elevation' },
-  continentalNoise:   { label: 'Continental noise',    min: 0.03,  max: 0.30,  step: 0.01,  group: 'Elevation' },
-  oceanicBase:        { label: 'Oceanic base',         min: -0.40, max: -0.10, step: 0.01,  group: 'Elevation' },
+  minPlateSpacing:    { label: 'Min plate spacing',    min: 0.15,  max: 0.60,  step: 0.01,  group: 'Plates' },
+  continentalBase:    { label: 'Continental base',     min: -0.25, max: 0.05,  step: 0.01,  group: 'Elevation' },
+  continentalNoise:   { label: 'Continental noise',    min: 0.05,  max: 0.25,  step: 0.01,  group: 'Elevation' },
+  oceanicBase:        { label: 'Ocean floor',           min: -0.50, max: -0.10, step: 0.01,  group: 'Elevation' },
   fractalAmp:         { label: 'Fractal amplitude',    min: 0.05,  max: 0.30,  step: 0.01,  group: 'Elevation' },
   fractalOctaves:     { label: 'Fractal octaves',      min: 2,     max: 6,     step: 1,     group: 'Elevation' },
   fractalScale:       { label: 'Fractal scale',        min: 0.005, max: 0.05,  step: 0.005, group: 'Elevation' },
@@ -693,6 +781,20 @@ const paramConfig = {
   mountainNoiseScale: { label: 'Mountain noise',       min: 0.01,  max: 0.10,  step: 0.01,  group: 'Mountains' },
   arcHeight:          { label: 'Arc height',           min: 0.10,  max: 0.80,  step: 0.05,  group: 'Mountains' },
   arcNoiseScale:      { label: 'Arc noise',            min: 0.01,  max: 0.10,  step: 0.01,  group: 'Mountains' },
+
+  // Peak shape
+  peakAspectRatio:   { label: 'Peak elongation',    min: 1.0, max: 5.0, step: 0.1, group: 'Mountains' },
+  peakAngularNoise:  { label: 'Coast irregularity',  min: 0.0, max: 0.5, step: 0.01, group: 'Mountains' },
+  peakAngularFreq:   { label: 'Coast complexity',    min: 2,   max: 10,  step: 1,    group: 'Mountains' },
+
+  // Arc Chains
+  arcChainMinPeaks:      { label: 'Chain min peaks',     min: 2,     max: 12,    step: 1,     group: 'Arc Chains' },
+  arcChainMaxPeaks:      { label: 'Chain max peaks',     min: 2,     max: 12,    step: 1,     group: 'Arc Chains' },
+  arcChainSpacing:       { label: 'Chain spacing (cells)', min: 2,   max: 8,     step: 1,     group: 'Arc Chains' },
+  arcChainJitter:        { label: 'Chain jitter (cells)', min: 0,    max: 4,     step: 0.5,   group: 'Arc Chains' },
+  arcSubPeakRadiusMin:   { label: 'Sub-peak radius min', min: 2,     max: 10,    step: 1,     group: 'Arc Chains' },
+  arcSubPeakRadiusMax:   { label: 'Sub-peak radius max', min: 2,     max: 10,    step: 1,     group: 'Arc Chains' },
+
   hotspotCountBase:   { label: 'Hotspot count',        min: 0,     max: 10,    step: 1,     group: 'Hotspots' },
   hotspotCountRange:  { label: 'Hotspot range',        min: 1,     max: 10,    step: 1,     group: 'Hotspots' },
   hotspotIntensityMin:{ label: 'Intensity min',        min: 0.1,   max: 0.9,   step: 0.1,   group: 'Hotspots' },
@@ -1286,35 +1388,184 @@ function step1b_generateGeoSeeds(seed, rng) {
     if (!tooClose) {
       const offsetX = (rng() - 0.5) * 6;
       const offsetY = (rng() - 0.5) * 6;
+      const sx = wrapX(Math.round(c.x + offsetX));
+      const sy = clamp(Math.round(c.y + offsetY), 0, H - 1);
+
+      // Compute local boundary direction from nearby collision cells
+      let boundaryDir = null;
+      const searchRad = 12;
+      const nearbyCells = [];
+      for (const bc of collisionCells) {
+        const dd = wrappedDistSq(sx, sy, bc.x, bc.y);
+        if (dd > 0 && dd < searchRad * searchRad) nearbyCells.push(bc);
+      }
+      if (nearbyCells.length >= 2) {
+        let bestPair = null, bestDist = 0;
+        for (let i = 0; i < nearbyCells.length; i++) {
+          for (let j = i + 1; j < nearbyCells.length; j++) {
+            const d = dist3D(spherePos[nearbyCells[i].x][nearbyCells[i].y],
+                             spherePos[nearbyCells[j].x][nearbyCells[j].y]);
+            if (d > bestDist) {
+              bestDist = d;
+              bestPair = [nearbyCells[i], nearbyCells[j]];
+            }
+          }
+        }
+        const p1 = spherePos[bestPair[0].x][bestPair[0].y];
+        const p2 = spherePos[bestPair[1].x][bestPair[1].y];
+        const bdx = p2.x - p1.x, bdy = p2.y - p1.y, bdz = p2.z - p1.z;
+        const blen = Math.sqrt(bdx*bdx + bdy*bdy + bdz*bdz) || 1;
+        boundaryDir = { x: bdx/blen, y: bdy/blen, z: bdz/blen };
+      }
+
       mountainSeeds.push({
-        x: wrapX(Math.round(c.x + offsetX)),
-        y: clamp(Math.round(c.y + offsetY), 0, H - 1),
+        x: sx,
+        y: sy,
         height: params.collisionHeight * (0.35 + rng() * 0.65),
         radius: (7 + rng() * 7) * CELL_TO_3D,   // 3D radius
         convergence: c.boundaryStrength,
+        boundaryDir: boundaryDir,
       });
     }
   }
 
-  // Place volcanic arc seeds along subduction boundaries
+  // Place volcanic arc chains along subduction boundaries
   shuffleArray(subductionCells, rng);
   const ARC_MIN_SPACING = 0.17; // 3D sphere units (~14 cells at equator)
+  const arcChainParents = []; // track parent positions for spacing check
   for (const c of subductionCells) {
     let tooClose = false;
-    for (const s of arcSeeds) {
+    for (const s of arcChainParents) {
       if (dist3D(spherePos[c.x][c.y], spherePos[s.x][s.y]) < ARC_MIN_SPACING) {
         tooClose = true; break;
       }
     }
-    if (!tooClose) {
-      const offsetX = (rng() - 0.5) * 8;
-      const offsetY = (rng() - 0.5) * 8;
+    if (tooClose) continue;
+
+    // Register this parent position for spacing
+    arcChainParents.push({ x: c.x, y: c.y });
+
+    // Determine boundary type: oceanic-oceanic vs continental-oceanic
+    const plateA = plates[c.plateId];
+    const plateB = plates[c.secondPlateId];
+    const isOceanicArc = plateA.type === 'oceanic' && plateB.type === 'oceanic';
+
+    // Oceanic arcs: longer chains, tighter spacing
+    // Continental arcs: shorter chains, wider spacing
+    const minPeaks = isOceanicArc
+      ? Math.max(params.arcChainMinPeaks, Math.ceil(params.arcChainMinPeaks * 1.25))
+      : Math.max(2, params.arcChainMinPeaks - 1);
+    const maxPeaks = isOceanicArc
+      ? params.arcChainMaxPeaks
+      : Math.max(minPeaks, params.arcChainMaxPeaks - 2);
+    const chainSpacing = isOceanicArc
+      ? Math.max(2, params.arcChainSpacing - 1)
+      : params.arcChainSpacing + 1;
+
+    const numPeaks = minPeaks + Math.floor(rng() * (maxPeaks - minPeaks + 1));
+
+    // Determine local boundary direction from nearby subduction cells
+    const searchRadius = 15;
+    const nearbyBoundary = [];
+    for (const sc of subductionCells) {
+      const dd = wrappedDistSq(c.x, c.y, sc.x, sc.y);
+      if (dd > 0 && dd < searchRadius * searchRadius) {
+        nearbyBoundary.push(sc);
+      }
+    }
+
+    // Fit a direction vector to the nearby boundary cells
+    let dirX = 0, dirY = 0;
+    if (nearbyBoundary.length >= 2) {
+      // Use principal component: accumulate offsets from center
+      for (const nc of nearbyBoundary) {
+        let dx = nc.x - c.x;
+        if (dx > W / 2) dx -= W;
+        if (dx < -W / 2) dx += W;
+        const dy = nc.y - c.y;
+        dirX += dx;
+        dirY += dy;
+      }
+      // Use the dominant direction (first principal component approximation)
+      // Try covariance approach for better fit
+      let cxx = 0, cxy = 0, cyy = 0;
+      for (const nc of nearbyBoundary) {
+        let dx = nc.x - c.x;
+        if (dx > W / 2) dx -= W;
+        if (dx < -W / 2) dx += W;
+        const dy = nc.y - c.y;
+        cxx += dx * dx;
+        cxy += dx * dy;
+        cyy += dy * dy;
+      }
+      // Eigenvector of largest eigenvalue of [[cxx,cxy],[cxy,cyy]]
+      const trace = cxx + cyy;
+      const det = cxx * cyy - cxy * cxy;
+      const eigenval = trace / 2 + Math.sqrt(Math.max(0, trace * trace / 4 - det));
+      dirX = cxy;
+      dirY = eigenval - cxx;
+      if (Math.abs(dirX) < 0.001 && Math.abs(dirY) < 0.001) {
+        dirX = 1; dirY = 0;
+      }
+    } else {
+      // Fallback: random direction
+      const angle = rng() * Math.PI * 2;
+      dirX = Math.cos(angle);
+      dirY = Math.sin(angle);
+    }
+
+    // Normalize direction
+    const dirLen = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
+    dirX /= dirLen;
+    dirY /= dirLen;
+
+    // Compute 3D boundary direction for arc chain from nearby subduction cells
+    let arcBoundaryDir = null;
+    if (nearbyBoundary.length >= 2) {
+      let bestPairA = null, bestDistA = 0;
+      for (let i = 0; i < nearbyBoundary.length; i++) {
+        for (let j = i + 1; j < nearbyBoundary.length; j++) {
+          const d = dist3D(spherePos[nearbyBoundary[i].x][nearbyBoundary[i].y],
+                           spherePos[nearbyBoundary[j].x][nearbyBoundary[j].y]);
+          if (d > bestDistA) {
+            bestDistA = d;
+            bestPairA = [nearbyBoundary[i], nearbyBoundary[j]];
+          }
+        }
+      }
+      const p1a = spherePos[bestPairA[0].x][bestPairA[0].y];
+      const p2a = spherePos[bestPairA[1].x][bestPairA[1].y];
+      const bdxa = p2a.x - p1a.x, bdya = p2a.y - p1a.y, bdza = p2a.z - p1a.z;
+      const blena = Math.sqrt(bdxa*bdxa + bdya*bdya + bdza*bdza) || 1;
+      arcBoundaryDir = { x: bdxa/blena, y: bdya/blena, z: bdza/blena };
+    }
+
+    // Perpendicular direction for jitter
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    // Parent height for this chain
+    const parentHeight = params.arcHeight * (0.5 + rng() * 0.5);
+
+    // Generate sub-peaks centered on this position along the boundary direction
+    const halfChain = (numPeaks - 1) / 2;
+    for (let p = 0; p < numPeaks; p++) {
+      const alongOffset = (p - halfChain) * chainSpacing;
+      const jitter = (rng() - 0.5) * 2 * params.arcChainJitter;
+
+      const peakX = wrapX(Math.round(c.x + dirX * alongOffset + perpX * jitter));
+      const peakY = clamp(Math.round(c.y + dirY * alongOffset + perpY * jitter), 0, H - 1);
+
+      const peakHeight = parentHeight * (0.5 + rng() * 0.5);
+      const peakRadius = (params.arcSubPeakRadiusMin + rng() * (params.arcSubPeakRadiusMax - params.arcSubPeakRadiusMin)) * CELL_TO_3D;
+
       arcSeeds.push({
-        x: wrapX(Math.round(c.x + offsetX)),
-        y: clamp(Math.round(c.y + offsetY), 0, H - 1),
-        height: params.arcHeight * (0.35 + rng() * 0.65),
-        radius: (5 + rng() * 6) * CELL_TO_3D,  // 3D radius
+        x: peakX,
+        y: peakY,
+        height: peakHeight,
+        radius: peakRadius,
         convergence: c.boundaryStrength,
+        boundaryDir: arcBoundaryDir,
       });
     }
   }
@@ -1360,11 +1611,50 @@ function shuffleArray(arr, rng) {
 }
 
 // ── Step 2: Elevation ──
+// Compute effective distance with elliptical + angular noise falloff
+function computeEffectiveDist(pos, seedObj) {
+    const seedPos = spherePos[seedObj.x][seedObj.y];
+    const dx = pos.x - seedPos.x;
+    const dy = pos.y - seedPos.y;
+    const dz = pos.z - seedPos.z;
+    const rawDist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+    if (rawDist < 0.0001 || !seedObj.boundaryDir) {
+        // No boundary direction (hotspot) or at the peak center — use raw distance
+        return rawDist;
+    }
+
+    const bd = seedObj.boundaryDir;
+
+    // Decompose displacement into parallel (along boundary) and perpendicular components
+    const parallel = dx * bd.x + dy * bd.y + dz * bd.z;
+    const perpSq = rawDist * rawDist - parallel * parallel;
+    const perp = Math.sqrt(Math.max(0, perpSq));
+
+    // Elliptical distance: shrink the parallel component by aspect ratio
+    // This makes the peak wider along the boundary direction
+    const aspect = params.peakAspectRatio;
+    const ellipticalDist = Math.sqrt((parallel / aspect) * (parallel / aspect) + perp * perp);
+
+    // Angular noise: modulate the effective radius based on angle around the peak
+    // This creates irregular coastlines where the peak intersects sea level
+    const angle = Math.atan2(parallel, perp);
+    const noiseInput = angle * params.peakAngularFreq + seedObj.x * 7.31 + seedObj.y * 13.17;
+    const angularMod = 1.0 + Math.sin(noiseInput) * params.peakAngularNoise
+                           + Math.sin(noiseInput * 1.7 + 3.0) * params.peakAngularNoise * 0.5;
+
+    // Return modulated elliptical distance
+    // Dividing distance by angularMod means where angularMod > 1, the peak extends further out
+    // and where angularMod < 1, it pulls inward — creating bays and headlands
+    return ellipticalDist / angularMod;
+}
+
 function step2_computeElevation(seed, rng) {
-  const MAX_MTN_RADIUS = 0.25;   // 3D units (~20 cells at equator)
-  const MAX_ARC_RADIUS = 0.18;   // 3D units (~15 cells at equator)
-  const MAX_RIFT_RADIUS = 0.18;  // 3D units (~15 cells at equator)
-  const HOTSPOT_RADIUS = 0.18;   // 3D units (~15 cells at equator)
+  // Expand search radii by aspect ratio so elongated seeds are found
+  const MAX_MTN_RADIUS = 0.25 * params.peakAspectRatio;   // 3D units, expanded for elongation
+  const MAX_ARC_RADIUS = 0.18 * params.peakAspectRatio;   // 3D units, expanded for elongation
+  const MAX_RIFT_RADIUS = 0.18;  // 3D units (~15 cells at equator) — rifts unchanged
+  const HOTSPOT_RADIUS = 0.18;   // 3D units (~15 cells at equator) — hotspots unchanged
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -1404,10 +1694,11 @@ function step2_computeElevation(seed, rng) {
         c.convergence = 0;
       }
 
-      // Mountain seeds (collision zones)
+      // Mountain seeds (collision zones) — elliptical + angular noise falloff
       const nearbyMtns = queryNearbySeeds(geoSeeds.mountainGrid, x, y, MAX_MTN_RADIUS);
-      for (const { seed: mtn, dist } of nearbyMtns) {
+      for (const { seed: mtn } of nearbyMtns) {
         const r = mtn.radius;
+        const dist = computeEffectiveDist(pos, mtn);
         if (dist < r) {
           const falloff = Math.exp(-(dist * dist) / (r * r * 0.4));
           const localNoise = sphereNoise(pos, seed + 999, 2, params.mountainNoiseScale);
@@ -1416,10 +1707,11 @@ function step2_computeElevation(seed, rng) {
         }
       }
 
-      // Volcanic arc seeds (subduction zones)
+      // Volcanic arc seeds (subduction zones) — elliptical + angular noise falloff
       const nearbyArcs = queryNearbySeeds(geoSeeds.arcGrid, x, y, MAX_ARC_RADIUS);
-      for (const { seed: arc, dist } of nearbyArcs) {
+      for (const { seed: arc } of nearbyArcs) {
         const r = arc.radius;
+        const dist = computeEffectiveDist(pos, arc);
         if (dist < r) {
           const falloff = Math.exp(-(dist * dist) / (r * r * 0.4));
           const localNoise = sphereNoise(pos, seed + 777, 2, params.arcNoiseScale);
@@ -1428,7 +1720,7 @@ function step2_computeElevation(seed, rng) {
         }
       }
 
-      // Rift seeds (continental rift zones) — depressions
+      // Rift seeds (continental rift zones) — depressions, unchanged radial falloff
       const nearbyRifts = queryNearbySeeds(geoSeeds.riftGrid, x, y, MAX_RIFT_RADIUS);
       for (const { seed: rift, dist } of nearbyRifts) {
         const r = rift.radius;
@@ -1440,7 +1732,7 @@ function step2_computeElevation(seed, rng) {
         }
       }
 
-      // Hotspot modifier
+      // Hotspot modifier — unchanged radial falloff (hotspots are roughly radial)
       for (const hs of hotspots) {
         const hsDist = dist3D(pos, spherePos[hs.x][hs.y]);
         if (hsDist < HOTSPOT_RADIUS) {
@@ -1967,33 +2259,44 @@ function step4_computeAtmosphere(seed, rng) {
       for (let x = 0; x < W; x++) {
         const ci = y * W + x;
         const c = cells[ci];
-        if (!c.isLand || moisture[ci] <= 0) continue;
+        if (moisture[ci] <= 0) continue;
 
-        const xp = wrapX(x + 1), xm = wrapX(x - 1);
-        const gradX = (cells[y * W + xp].elevation - cells[y * W + xm].elevation) / 2;
-        const gradY = (cells[(y + 1) * W + x].elevation - cells[(y - 1) * W + x].elevation) / 2;
-
-        const uplift = c.windU * gradX + c.windV * gradY;
         let oroPrecip = 0;
-        if (uplift > 0) {
-          const effectiveOroFactor = params.oroFactor / params.atmosphericPressure;
-          oroPrecip = moisture[ci] * uplift * effectiveOroFactor;
-        }
-
-        const divU = (cells[y * W + xp].windU - cells[y * W + xm].windU) / 2;
-        const divV = (cells[(y + 1) * W + x].windV - cells[(y - 1) * W + x].windV) / 2;
-        const div = divU + divV;
         let convPrecip = 0;
-        if (div < 0) {
-          const effectiveConvFactor = params.convFactor / params.atmosphericPressure;
-          convPrecip = moisture[ci] * (-div) * effectiveConvFactor;
+
+        // Orographic and convective precipitation — LAND ONLY
+        if (c.isLand) {
+          const xp = wrapX(x + 1), xm = wrapX(x - 1);
+          const gradX = (cells[y * W + xp].elevation - cells[y * W + xm].elevation) / 2;
+          const gradY = (cells[(y + 1) * W + x].elevation - cells[(y - 1) * W + x].elevation) / 2;
+
+          const uplift = c.windU * gradX + c.windV * gradY;
+          if (uplift > 0) {
+            const effectiveOroFactor = params.oroFactor / params.atmosphericPressure;
+            oroPrecip = moisture[ci] * uplift * effectiveOroFactor;
+          }
+
+          const divU = (cells[y * W + xp].windU - cells[y * W + xm].windU) / 2;
+          const divV = (cells[(y + 1) * W + x].windV - cells[(y - 1) * W + x].windV) / 2;
+          const div = divU + divV;
+          if (div < 0) {
+            const effectiveConvFactor = params.convFactor / params.atmosphericPressure;
+            convPrecip = moisture[ci] * (-div) * effectiveConvFactor;
+          }
         }
 
+        // Background precipitation — EVERYWHERE (land and ocean)
+        // On a humid planet, it rains everywhere. This is the primary
+        // moisture drain that keeps the atmosphere in equilibrium.
         const bgPrecip = moisture[ci] * params.bgPrecipRate;
 
         const totalPrecip = Math.min(oroPrecip + convPrecip + bgPrecip, moisture[ci] * 0.8);
         moisture[ci] -= totalPrecip;
-        precipAccum[ci] += totalPrecip;
+
+        // Only accumulate precipitation stats on land (we care about land rainfall for flora)
+        if (c.isLand) {
+          precipAccum[ci] += totalPrecip;
+        }
       }
     }
 
@@ -2024,13 +2327,32 @@ function step4_computeAtmosphere(seed, rng) {
     }
   }
 
-  let maxPrecip = 0.001;
+  // Collect all nonzero land precipitation values
+  const landPrecipValues = [];
   for (let i = 0; i < TOTAL; i++) {
-    if (cells[i].isLand && precipAccum[i] > maxPrecip) maxPrecip = precipAccum[i];
+    if (cells[i].isLand && precipAccum[i] > 0) {
+      landPrecipValues.push(precipAccum[i]);
+    }
   }
+
+  let precipScale;
+  if (landPrecipValues.length > 0) {
+    // Sort and use 95th percentile as the reference maximum
+    // This prevents a single extreme windward cell from crushing everything
+    landPrecipValues.sort((a, b) => a - b);
+    const p95Index = Math.floor(landPrecipValues.length * 0.95);
+    precipScale = landPrecipValues[p95Index] || 0.001;
+  } else {
+    precipScale = 0.001;
+  }
+
   for (let i = 0; i < TOTAL; i++) {
-    cells[i].precipitation = cells[i].isLand ? clamp(precipAccum[i] / maxPrecip, 0, 1) : 0;
-    cells[i].atmosphericMoisture = clamp(moisture[i] / (maxPrecip * 0.5 + 0.001), 0, 1);
+    cells[i].precipitation = cells[i].isLand
+      ? clamp(precipAccum[i] / precipScale, 0, 1)
+      : 0;
+    cells[i].atmosphericMoisture = clamp(
+      moisture[i] / (precipScale * 0.5 + 0.001), 0, 1
+    );
     cells[i].moisture = cells[i].precipitation;
     cells[i].baseMoisture = cells[i].precipitation;
   }
@@ -5171,6 +5493,10 @@ function setActiveControl(which) {
   }
 }
 
+// ── Last-interacted cell tracking (for info snapshot) ──
+let lastRegionalCoord = null;   // { rx, ry }
+let lastTileCoord = null;       // { tx, ty }
+
 // ── Regional canvas click → tooltip + tile view ──
 regionalCanvas.addEventListener('click', (e) => {
   if (!regionalCells) return;
@@ -5180,6 +5506,7 @@ regionalCanvas.addEventListener('click', (e) => {
   const rx = Math.floor((e.clientX - rect.left) * scaleX);
   const ry = Math.floor((e.clientY - rect.top) * scaleY);
   if (rx >= 0 && rx < REGIONAL_SIZE && ry >= 0 && ry < REGIONAL_SIZE) {
+    lastRegionalCoord = { rx, ry };
     showRegionalCellTooltip(rx, ry, e);
     openTileView(rx, ry);
   }
@@ -5267,9 +5594,10 @@ function drawSelectionMarker() {
 
 const tuningPresets = {
   'Default': {},
-  'Earth-like': { continentalRatio: 0.35, fractalAmp: 0.14, collisionHeight: 0.6, atmosphericPressure: 1.0 },
-  'Waterworld': { continentalRatio: 0.15, oceanicBase: -0.3, continentalBase: -0.08 },
-  'Pangaea': { plateCountBase: 6, continentalRatio: 0.55, minPlateSpacing: 0.6 },
+  'Earth-like': { continentalRatio: 0.35, continentalBase: -0.05, fractalAmp: 0.14, collisionHeight: 0.6, atmosphericPressure: 1.0 },
+  'Waterworld': { continentalRatio: 0.12, oceanicBase: -0.40, continentalBase: -0.18 },
+  'Pangaea': { plateCountBase: 6, continentalRatio: 0.55, minPlateSpacing: 0.6, continentalBase: -0.03 },
+  'Archipelago': { plateCountBase: 16, plateCountRange: 6, continentalRatio: 0.18, minPlateSpacing: 0.22, continentalBase: -0.15, continentalNoise: 0.18, oceanicBase: -0.35 },
   'Mountainous': { collisionHeight: 0.9, arcHeight: 0.7, erosionPasses: 2, mountainDetail: 0.09 },
   'Arid': { atmosphericPressure: 0.85, moistureIterations: 50, bgPrecipRate: 0.01, coastalGroundwater: 0.2 },
   'Humid': { atmosphericPressure: 1.4, moistureIterations: 90, oroFactor: 0.6, convFactor: 0.45 },
@@ -7307,6 +7635,7 @@ function printTileDiagnostic(tiles) {
     if (tx < 0 || tx >= CHUNK_W || ty < 0 || ty >= CHUNK_H) { tileTooltip.style.display = 'none'; return; }
 
     const i = ty * CHUNK_W + tx;
+    lastTileCoord = { tx, ty };
     const t = currentTileData.tiles;
     const terrain = intToTerrainType(t.terrainType[i]);
     const cover = intToCoverType(t.coverType[i]);
@@ -7351,6 +7680,119 @@ function printTileDiagnostic(tiles) {
 
   tileCanvas.addEventListener('mouseleave', () => {
     tileTooltip.style.display = 'none';
+  });
+})();
+
+// ── Snapshot Info Panel ──
+(function () {
+  const snapshotPanel = document.getElementById('snapshotPanel');
+  const infoSnapBtn = document.getElementById('infoSnapBtn');
+
+  const streamNames = ['ridge', 'tributary', 'secondary', 'major'];
+  const floraNames = ['barren', 'photosynthetic', 'chemotrophic', 'mixotrophic'];
+
+  function toHex(c) {
+    return '#' + ((1 << 24) + (c.r << 16) + (c.g << 8) + c.b).toString(16).slice(1);
+  }
+
+  function captureSnapshot() {
+    if (!cells) return;
+
+    let html = '';
+
+    // ── PLANET section ──
+    // Use selectedRegion coords, or fall back to center of the map
+    let px, py;
+    if (selectedRegion) {
+      px = Math.round(selectedRegion.cx);
+      py = Math.round(selectedRegion.cy);
+    } else {
+      px = Math.floor(W / 2);
+      py = Math.floor(H / 2);
+    }
+    px = ((px % W) + W) % W;
+    py = Math.max(0, Math.min(H - 1, py));
+    const pc = cells[py * W + px];
+    const pBand = getLatitudeBand(py);
+    const pPlateType = pc.plateType || '—';
+    const windDir = Math.round(Math.atan2(pc.windV || 0, pc.windU || 0) * 180 / Math.PI);
+    const dominant = (pc.floraType && pc.floraType !== 'barren') ? pc.floraType : 'barren';
+
+    html += `<div class="snap-section">`;
+    html += `<div class="snap-header">PLANET (${px}, ${py}) — ${pBand} ${pPlateType}</div>`;
+    html += `<div class="snap-row"><b>Elev</b> <span class="val">${pc.elevation.toFixed(3)}</span> | <b>Temp</b> <span class="val">${pc.temperature.toFixed(2)}</span> | <b>Wind</b> <span class="val">${(pc.windSpeed || 0).toFixed(2)}</span> (${windDir}°)</div>`;
+    html += `<div class="snap-row"><b>Fe</b> <span class="val">${pc.minerals.iron.toFixed(2)}</span> <b>Cu</b> <span class="val">${pc.minerals.copper.toFixed(2)}</span> <b>Mn</b> <span class="val">${pc.minerals.manganese.toFixed(2)}</span> | ${dominant}</div>`;
+    if (pc.isLand) {
+      html += `<div class="snap-row"><b>Precip</b> <span class="val">${pc.precipitation.toFixed(2)}</span> <b>GW</b> <span class="val">${(pc.groundwater || 0).toFixed(2)}</span> <b>Drain</b> <span class="val">${(pc.drainage || 0).toFixed(2)}</span> <b>Avail</b> <span class="val">${(pc.waterAvailability || 0).toFixed(2)}</span></div>`;
+      html += `<div class="snap-row"><b>Flora:</b> ${pc.floraType || 'barren'} (${(pc.floraDensity || 0).toFixed(2)}) | <b>Terrain:</b> ${pc.terrainType || '—'}</div>`;
+    } else {
+      html += `<div class="snap-row"><b>SST</b> <span class="val">${(pc.sst || 0).toFixed(2)}</span> | <b>Current</b> <span class="val">${(pc.currentSpeed || 0).toFixed(2)}</span> (${Math.round(Math.atan2(pc.currentV || 0, pc.currentU || 0) * 180 / Math.PI)}°)</div>`;
+    }
+    html += `</div>`;
+
+    // ── REGION section ──
+    if (regionalCells && lastRegionalCoord) {
+      const { rx, ry } = lastRegionalCoord;
+      if (regionalCells[rx] && regionalCells[rx][ry]) {
+        const rc = regionalCells[rx][ry];
+        const rZone = rc.zone || '—';
+        const rPlate = rc.plateType || pPlateType;
+        const rMinerals = rc.minerals || {};
+        html += `<div class="snap-section">`;
+        html += `<div class="snap-header">REGION (${rx}, ${ry}) — ${rZone} ${rPlate}</div>`;
+        html += `<div class="snap-row"><b>Elev</b> <span class="val">${rc.baseElevation !== undefined ? rc.baseElevation.toFixed(3) : (rc.elevation || 0).toFixed(3)}</span> | <b>Terrain:</b> ${rc.terrainType || '—'} | <b>Cover:</b> ${rc.coverType || 'none'}</div>`;
+        html += `<div class="snap-row"><b>Grain</b> <span class="val">${(rc.grainSize || 0).toFixed(2)}</span> <b>Sat</b> <span class="val">${(rc.saturation || 0).toFixed(2)}</span> | <b>WTD</b> <span class="val">${(rc.waterTableDepth || 0).toFixed(2)}</span></div>`;
+        html += `<div class="snap-row"><b>GC</b> <span class="val">${((rc.groundCover || 0) * 100).toFixed(0)}%</span> <b>Canopy</b> <span class="val">${((rc.canopy || 0) * 100).toFixed(0)}%</span> | <b>Flora:</b> ${rc.floraType || 'barren'}</div>`;
+        html += `<div class="snap-row"><b>Minerals:</b> Fe <span class="val">${(rMinerals.iron || 0).toFixed(2)}</span> Cu <span class="val">${(rMinerals.copper || 0).toFixed(2)}</span> Mn <span class="val">${(rMinerals.manganese || 0).toFixed(2)}</span></div>`;
+        html += `</div>`;
+      }
+    }
+
+    // ── TILE section ──
+    if (currentTileData && lastTileCoord) {
+      const { tx, ty } = lastTileCoord;
+      if (tx >= 0 && tx < CHUNK_W && ty >= 0 && ty < CHUNK_H) {
+        const ti = ty * CHUNK_W + tx;
+        const t = currentTileData.tiles;
+        const terrain = intToTerrainType(t.terrainType[ti]);
+        const cover = intToCoverType(t.coverType[ti]);
+        const isLand = t.elevation[ti] > 0;
+        const palette = computeTilePalette(tilePhysical(t, ti));
+        const bgHex = toHex(palette.bg), fgHex = toHex(palette.fg), midHex = toHex(palette.mid);
+        const sw = (hex) => `<span style="display:inline-block;width:9px;height:9px;border:1px solid #555;vertical-align:middle;background:${hex};margin:0 1px;"></span>`;
+        const floraType = floraNames[t.floraType[ti]] || 'barren';
+        const depthCm = t.waterDepth[ti] * 100;
+        const spriteName = terrain + (cover !== 'none' ? '+' + cover : '');
+        const spriteVariant = 'v' + t.groundVariant[ti] + (cover !== 'none' ? '/c' + t.coverVariant[ti] : '');
+
+        html += `<div class="snap-section">`;
+        html += `<div class="snap-header">TILE (${tx}, ${ty}) — Elev ${t.elevation[ti].toFixed(3)}${!isLand ? ' (ocean)' : ''}</div>`;
+        html += `<div class="snap-row"><b>Terrain:</b> ${terrain} | <b>Stream:</b> ${streamNames[t.streamOrder[ti]]} | <b>Sprite:</b> ${spriteName} ${spriteVariant}</div>`;
+        html += `<div class="snap-row"><b>Grain</b> <span class="val">${t.grainSize[ti].toFixed(2)}</span> <b>Sat</b> <span class="val">${t.saturation[ti].toFixed(2)}</span> | <b>Water</b> <span class="val">${depthCm < 10 ? depthCm.toFixed(1) : (t.waterDepth[ti]).toFixed(2)} ${depthCm < 10 ? 'cm' : 'm'}</span></div>`;
+        html += `<div class="snap-row"><b>Flora:</b> ${floraType} (${t.floraDensity[ti].toFixed(2)}) <b>GC</b> <span class="val">${(t.groundCover[ti] * 100).toFixed(0)}%</span></div>`;
+        html += `<div class="snap-row"><b>Palette:</b> bg ${sw(bgHex)}${bgHex}  fg ${sw(fgHex)}${fgHex}  mid ${sw(midHex)}${midHex}</div>`;
+        html += `</div>`;
+      }
+    }
+
+    // Timestamp
+    const now = new Date();
+    const ts = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    html += `<div class="snap-timestamp">Captured ${ts}</div>`;
+
+    snapshotPanel.innerHTML = html;
+  }
+
+  // Button click
+  infoSnapBtn.addEventListener('click', captureSnapshot);
+
+  // I key handler (skip if typing in seed input)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'i' && e.key !== 'I') return;
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    e.preventDefault();
+    captureSnapshot();
   });
 })();
 
