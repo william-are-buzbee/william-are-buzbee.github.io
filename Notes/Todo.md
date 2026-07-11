@@ -93,7 +93,7 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] palette-compute.js standalone module
 - [x] sprite-select.js standalone module (physical state → variant indices)
 
-## Completed — Planet Viewer Visual Polish (This Session)
+## Completed — Planet Viewer Visual Polish
 - [x] Shallow water terrain threshold (SHALLOW_WATER_TERRAIN_THRESHOLD = 0.05m — land tiles with < 5cm water keep ground terrain type with wet film, not blue water)
 - [x] Regional surface overlay fix (uses cell.terrainType instead of cell.isLand for ocean detection — fixes coastal cells inside "land" planetary cells)
 - [x] Shallow ocean depth classification (tiles 0-25cm below sea level get TT_WATER with bottom visibility; >25cm get TT_DEEP_WATER — coastal gradient matches regional view)
@@ -105,29 +105,38 @@ Prompt queue and task tracker. Check things off as they're done.
 - [x] Square contour elimination (domain warp on bilinear interpolation — noise2D displaces sampling coordinates 12%, elevation excluded from warp)
 - [x] Tooltip overhaul (water depth in cm/m, ocean label for negative elevation, flora hidden when barren, substrate grouped, sprites condensed)
 
-## Up Next — Planet Geography Realism Pass
+## Completed — Planet Geography Realism Pass (Session 18)
+- [x] Archipelago parameter tuning (continentalRatio 0.40→0.30, plateCountBase 10→14, minPlateSpacing 0.40→0.28, continentalBase -0.05→-0.08, continentalNoise 0.12→0.18, oceanicBase -0.25→-0.30)
+- [x] Volcanic island arc chains along subduction zones (arc seeds generate 4-8 sub-peaks along boundary direction, oceanic-oceanic arcs get longer chains, tuning params for chain spacing/jitter/radius)
+- [x] Elongated peaks and irregular coastlines (elliptical falloff aligned to boundary direction with peakAspectRatio 2.5, angular noise with peakAngularNoise 0.25 and peakAngularFreq 5 for irregular coastlines, hotspots stay radial)
+- [x] Precipitation model fix for ocean-dominated planets (background precipitation now falls over ocean too, 95th-percentile normalization replaces max-based normalization, bgPrecipRate 0.02→0.03)
+- [x] Persistent info panel with snapshot button (press I — captures planet/region/tile data simultaneously, bottom-left panel, persists until next snapshot)
+- [x] Tuning presets updated (Earth-like, Waterworld, Pangaea adjusted for new defaults, new Archipelago preset added)
+- [x] Arc height increased (arcHeight 0.45→0.55 — reliably creates islands from -0.30 ocean floor)
 
-**This is the immediate next session.** Use Seed 5 at Very High (2048×1024) as the canonical planet. The goal is to make the planet's geography ecologically and geologically believable while being as visually compelling as possible.
+## Up Next — Regional Ecology Audit (Phase 2 of Geography Pass)
 
-### Phase 1: Planetary-Scale Audit
-- [ ] Continent/island shapes — do they make sense for this plate tectonics model? This is an archipelago world (Ecology Foundations): lots of shallow seas, many islands, no mega-continents
-- [ ] Mountain ranges — at plate boundaries, subduction zones?
-- [ ] Ocean/land ratio — believable for a humid archipelago?
-- [ ] Climate zones — wind patterns producing rain shadows, wet coasts, dry interiors?
-- [ ] Mineral distributions — geologically plausible? (Fe volcanic, Cu hydrothermal, Mn sedimentary)
+**This is the immediate next session.** Planetary-scale geography now passes the smell test — archipelago world with elongated islands, volcanic arcs, continental fragments, and working precipitation. The next step is inspecting regional and tile scale through the lens of Ecology-Foundations.md.
 
-### Phase 2: Regional-Scale Ecology Audit
-- [ ] Flora distributions — photo/chemo/mixo placement matches water, temperature, minerals?
-- [ ] Coastline complexity — archipelago worlds should have fjords, island chains, lagoons, tidal flats
-- [ ] Drainage patterns — rivers flow ridge to coast, flat lowlands have meandering drainage
-- [ ] Any obviously wrong zones (desert where swamp should be, etc.)
+### Regional Inspections Needed
+- [ ] Continental coastline — navigate to where a large landmass meets ocean. Does the regional view produce complex coastlines (bays, headlands, lagoons, tidal flats)? Or is it a smooth gradient?
+- [ ] Flora distribution at coast — photosynthetic mat should dominate wet lowlands, canopy should thin where substrate is too saturated or sandy for rooting
+- [ ] Volcanic arc island — navigate to an elongated mid-ocean island. Does it have the right character? Rocky ridge center, steep slopes, drainage channels running to coast, mineral-rich zones near peak for chemotrophic flora?
+- [ ] Lowland precipitation variation — is there windward/leeward difference at regional scale? Rain shadows behind mountains?
+- [ ] Drainage patterns — do regional rivers flow ridge to coast? Do flat lowlands show meandering drainage?
+- [ ] Any obviously wrong zones — desert where swamp should be, forest where bare rock should be, etc.
+- [ ] Canopy coverage audit — the last snapshot showed 0% canopy on a well-watered upper slope with mixotrophic flora. Need to check whether canopy establishment is properly gated by physical conditions.
 
-### Phase 3: Tuning Pass
-- [ ] Plate count, boundary types, continental vs oceanic ratios
-- [ ] Precipitation parameters (rain shadow strength, moisture transport)
-- [ ] Flora establishment thresholds
-- [ ] Groundwater parameters
-- [ ] Tuning slider adjustments to make Seed 5 the best version of this world
+### Regional Tuning (based on audit findings)
+- [ ] Regional coastline noise parameters (coastAmplitude, coastWidth) — may need adjustment for more complex coastlines
+- [ ] Flora establishment thresholds — may need tuning now that precipitation is working
+- [ ] Canopy establishment on different flora types — verify mixotrophic and chemotrophic canopy rules
+- [ ] Groundwater parameters — check if regional groundwater distribution makes sense with new precipitation
+
+### Phase 3: Planetary Tuning Refinements
+- [ ] Mineral distributions audit — Fe volcanic, Cu hydrothermal, Mn sedimentary — are they geologically plausible?
+- [ ] Arc island aspect ratio refinement — some mid-ocean islands may be too needle-thin (peakAspectRatio 2.5 → 2.0?)
+- [ ] Continental shelf subduction trench asymmetry (deep trench on subducting side — identified as lower priority, still worth doing)
 
 ### Phase 4: Feature Vocabulary (identify what's missing at tile level)
 - [ ] Rock outcrops on ridges/cliffs
@@ -158,9 +167,9 @@ Prompt queue and task tracker. Check things off as they're done.
 - [ ] Restore ecological creature density after detection optimization
 - [ ] Chemical workspace / scent gradient system
 - [ ] Player movement intensity expansion (creep/stalk mode)
-- [ ] Planet viewer tuning — find ideal archipelago parameters (island shapes still blobby)
 - [ ] Visual rethinking (16x16 palettes as color reference for 32x32 sprites)
 - [ ] Visual customization (settings menu with texture/resource pack option)
+- [ ] Planet viewer UI overhaul (layout cleanup, better screenshot workflow, less awkward tooltip positioning)
 
 ## Long-Term Plans
 - [ ] Immune/infection mechanics (needs metabolism first)
@@ -192,7 +201,7 @@ For new chats, include:
 
 ### Key Documents by Topic
 
-**Planet generation & viewer:** planet-viewer.html, drainage-chunk-generator-design.md, three-layer-color-system.md, session-handoff-viewer-polish.md
+**Planet generation & viewer:** planet-viewer.html, drainage-chunk-generator-design.md, three-layer-color-system.md, session-handoff-geography-realism.md
 **Tile rendering:** tile-body-map-spec.md, palette-compute.js, sprite-select.js, sprites.js
 **Creature systems:** Body-Sim-Design, Surface-Creatures, Cognition-Design, Sensory-Design, Muscle-Fiber-Design, Motor-System-Design, Endocrine-Design
 **Ecology:** Ecology-Foundations, Underground-Chemotrophic-Ecology
@@ -220,3 +229,13 @@ For new chats, include:
 - **Chemotrophic organisms are geological.** Mounds, brackets, crusts, spires — not trees or mushrooms.
 
 - **Planet viewer is the data source.** The game's chunk generator reads from the planetary grid. If the viewer's physics is wrong, the game world is wrong.
+
+- **Precipitation normalization uses 95th percentile.** Not max-based anymore. Top 5% of land cells can clamp to 1.0. This prevents extreme windward cells from crushing all other precipitation to zero.
+
+- **Background precipitation falls over ocean.** This is the atmospheric moisture drain that keeps the precipitation model stable on ocean-dominated planets. Only land precipitation is tracked in precipAccum for downstream systems.
+
+- **Peak falloff is elliptical, not radial.** Mountain and arc seeds use elliptical distance aligned to boundary direction (peakAspectRatio 2.5). Hotspots stay radial (no boundary direction). Angular noise (peakAngularNoise 0.25) adds coastline irregularity. Search radius in spatial grid must account for aspect ratio.
+
+- **Arc chains are sub-peaks, not single seeds.** Each arc seed spawns 4-8 sub-peaks along the boundary. Oceanic-oceanic arcs get longer chains (5-8 peaks). Sub-peaks share the parent's boundaryDir and are processed identically by the elevation computation.
+
+- **New default parameters (Session 18).** continentalRatio 0.30, plateCountBase 14, minPlateSpacing 0.28, continentalBase -0.08, continentalNoise 0.18, oceanicBase -0.30, arcHeight 0.55, bgPrecipRate 0.03. These produce an archipelago planet at ~20-25% land area.
