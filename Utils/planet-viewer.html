@@ -744,8 +744,8 @@ const params = {
   windEvapFactor: 0.10,
   oroFactor: 0.4,
   convFactor: 0.3,
-  bgPrecipRate: 0.03,
-  moistureDiffusion: 0.03,
+  bgPrecipRate: 0.045,
+  moistureDiffusion: 0.08,
 
   // Groundwater
   coastalGroundwater: 0.35,
@@ -841,8 +841,8 @@ const paramConfig = {
   windEvapFactor:      { label: 'Wind evap',            min: 0.02,  max: 0.15,  step: 0.01,  group: 'Precipitation' },
   oroFactor:           { label: 'Orographic factor',   min: 0.1,   max: 0.8,   step: 0.05,  group: 'Precipitation' },
   convFactor:          { label: 'Convergence factor',  min: 0.1,   max: 0.6,   step: 0.05,  group: 'Precipitation' },
-  bgPrecipRate:        { label: 'Background precip',   min: 0.002, max: 0.04,  step: 0.002, group: 'Precipitation' },
-  moistureDiffusion:   { label: 'Diffusion',           min: 0.01,  max: 0.08,  step: 0.005, group: 'Precipitation' },
+  bgPrecipRate:        { label: 'Background precip',   min: 0.002, max: 0.06,  step: 0.002, group: 'Precipitation' },
+  moistureDiffusion:   { label: 'Diffusion',           min: 0.01,  max: 0.12,  step: 0.005, group: 'Precipitation' },
 
   // Groundwater
   coastalGroundwater:     { label: 'Coastal GW',       min: 0.1,   max: 0.7,   step: 0.05,  group: 'Groundwater' },
@@ -2222,7 +2222,7 @@ function step4_computeAtmosphere(seed, rng) {
           const tLen = Math.sqrt(tdx * tdx + tdy * tdy);
           const dot = (nc.windU * tdx + nc.windV * tdy) / tLen;
           if (dot > 0) {
-            const transfer = snap[ni] * dot * nc.windSpeed * 0.06;
+            const transfer = snap[ni] * dot * nc.windSpeed * 0.12;
             incoming += transfer;
           }
         }
@@ -2246,12 +2246,12 @@ function step4_computeAtmosphere(seed, rng) {
           const tLen = Math.sqrt(tdx * tdx + tdy * tdy);
           const dot = (c.windU * tdx + c.windV * tdy) / tLen;
           if (dot > 0) {
-            totalOut += dot * c.windSpeed * 0.06;
+            totalOut += dot * c.windSpeed * 0.12;
           }
         }
-        if (totalOut > 0.9) {
-          moisture[ci] *= (0.9 / totalOut);
-        }
+        const outRate = Math.min(totalOut, 0.9);
+        moisture[ci] -= snap[ci] * outRate;
+        if (moisture[ci] < 0) moisture[ci] = 0;
       }
     }
 
@@ -3922,17 +3922,229 @@ function generateRegionalDetailLowRes(centerX, centerY) {
     regionalCells[rx] = new Array(REGIONAL_SIZE);
   }
 
-  // Pass 1: base elevation + planetary field sampling
-  const elevGrid = new Float32Array(REGIONAL_SIZE * REGIONAL_SIZE);
-  for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
-    for (let rx = 0; rx < REGIONAL_SIZE; rx++) {
+  // Pass 1a: base elevation (no noise yet) + planetary field sampling
+  // Use a padded grid (MARGIN cells on each side) so the local slope and
+  // convergence perturbation stabilize before reaching the interior 512×512 region.
+  const S_LR = REGIONAL_SIZE;
+  const NN_LR = S_LR * S_LR;
+  const MARGIN_LR = 64;
+  const S_PAD_LR = S_LR + 2 * MARGIN_LR;  // 640
+  const NN_PAD_LR = S_PAD_LR * S_PAD_LR;
+  const baseElevGridLR = new Float32Array(NN_LR);
+  const elevGrid = new Float32Array(NN_LR);
+
+  // Padded base elevation grid for drainage direction + convergence perturbation
+  const baseElevPadLR = new Float32Array(NN_PAD_LR);
+
+  for (let ry = -MARGIN_LR; ry < S_LR + MARGIN_LR; ry++) {
+    for (let rx = -MARGIN_LR; rx < S_LR + MARGIN_LR; rx++) {
       const worldX = originWorldX + rx;
       const worldY = originWorldY + ry;
       const px = worldX / CELLS_PER_PLANETARY;
       const py = worldY / CELLS_PER_PLANETARY;
+      const padIdx = (ry + MARGIN_LR) * S_PAD_LR + (rx + MARGIN_LR);
+      baseElevPadLR[padIdx] = bilinearInterpolate(px, py, c => c.elevation);
+      if (rx >= 0 && rx < S_LR && ry >= 0 && ry < S_LR) {
+        baseElevGridLR[ry * S_LR + rx] = baseElevPadLR[padIdx];
+      }
+    }
+  }
 
-      const elev = computeRegionalBaseCell(worldX, worldY, regionSeed);
-      elevGrid[ry * REGIONAL_SIZE + rx] = elev;
+  // Pass 1b: drainage direction from planetary elevation gradient (globally deterministic).
+  // Instead of BFS (which is window-dependent), sample the GLOBAL planetary elevation
+  // via bilinearInterpolate at a wide window around each cell to determine downhill
+  // direction. This gives the same direction regardless of which regional view the
+  // cell appears in.
+  const drainDirXPadLR = new Float32Array(NN_PAD_LR);
+  const drainDirYPadLR = new Float32Array(NN_PAD_LR);
+
+  const GRAD_RADIUS_PLANETARY_LR = 1.5;  // radius in planetary cells (~117 km, same physical scale as HiRes)
+  const GRAD_STEPS_LR = 8;
+  const gradDxLR = [0, 1, 1, 1, 0, -1, -1, -1];
+  const gradDyLR = [-1, -1, 0, 1, 1, 1, 0, -1];
+
+  const slopeMagPadLR = new Float32Array(NN_PAD_LR);
+
+  for (let ry = 0; ry < S_PAD_LR; ry++) {
+    for (let rx = 0; rx < S_PAD_LR; rx++) {
+      const idx = ry * S_PAD_LR + rx;
+      if (baseElevPadLR[idx] <= 0) {
+        drainDirXPadLR[idx] = 0; drainDirYPadLR[idx] = 1; continue;
+      }
+
+      // Compute planetary coordinates for this padded cell
+      const worldX = originWorldX + (rx - MARGIN_LR);
+      const worldY = originWorldY + (ry - MARGIN_LR);
+      const px = worldX / CELLS_PER_PLANETARY;
+      const py = worldY / CELLS_PER_PLANETARY;
+      const centerElev = baseElevPadLR[idx];
+
+      // Wide-window gradient from global planetary elevation
+      let gx = 0, gy = 0;
+      for (let d = 0; d < GRAD_STEPS_LR; d++) {
+        const samplePx = px + gradDxLR[d] * GRAD_RADIUS_PLANETARY_LR;
+        const samplePy = py + gradDyLR[d] * GRAD_RADIUS_PLANETARY_LR;
+        const sampleElev = bilinearInterpolate(samplePx, samplePy, c => c.elevation);
+        const diff = centerElev - sampleElev;  // positive = downhill in that direction
+        gx += gradDxLR[d] * diff;
+        gy += gradDyLR[d] * diff;
+      }
+      const gLen = Math.sqrt(gx * gx + gy * gy) || 1;
+      drainDirXPadLR[idx] = gx / gLen;
+      drainDirYPadLR[idx] = gy / gLen;
+
+      // Local 7×7 slope on the padded base elevation grid
+      let localGx = 0, localGy = 0, localWt = 0;
+      for (let ddy = -3; ddy <= 3; ddy++) {
+        for (let ddx = -3; ddx <= 3; ddx++) {
+          if (ddx === 0 && ddy === 0) continue;
+          const nrx = rx + ddx, nry = ry + ddy;
+          if (nrx < 0 || nrx >= S_PAD_LR || nry < 0 || nry >= S_PAD_LR) continue;
+          const w = 1.0 / Math.sqrt(ddx * ddx + ddy * ddy);
+          const diff = baseElevPadLR[idx] - baseElevPadLR[nry * S_PAD_LR + nrx];
+          localGx += ddx * diff * w;
+          localGy += ddy * diff * w;
+          localWt += w;
+        }
+      }
+      if (localWt > 0) { localGx /= localWt; localGy /= localWt; }
+      const localSlopeMag = Math.sqrt(localGx * localGx + localGy * localGy);
+      slopeMagPadLR[idx] = localSlopeMag;
+
+      // Blend: steep terrain uses local slope, flat terrain uses wide gradient
+      const FLAT_THRESH  = 0.0015;
+      const STEEP_THRESH = 0.005;
+      const t = clamp((localSlopeMag - FLAT_THRESH) / (STEEP_THRESH - FLAT_THRESH), 0, 1);
+
+      if (t > 0.01 && localSlopeMag > 0.0001) {
+        const nlx = localGx / localSlopeMag;
+        const nly = localGy / localSlopeMag;
+
+        let bx = drainDirXPadLR[idx] * (1 - t) + nlx * t;
+        let by = drainDirYPadLR[idx] * (1 - t) + nly * t;
+        const bLen = Math.sqrt(bx * bx + by * by) || 1;
+        drainDirXPadLR[idx] = bx / bLen;
+        drainDirYPadLR[idx] = by / bLen;
+      }
+    }
+  }
+
+  // ── Convergence perturbation (Bug 3 fix) ──
+  const convergeSeed1LR = regionSeed + 5555;
+  const convergeFreqLR = 0.007;
+  const convergeMaxAngleLR = 0.35;
+
+  for (let ry = 0; ry < S_PAD_LR; ry++) {
+    for (let rx = 0; rx < S_PAD_LR; rx++) {
+      const idx = ry * S_PAD_LR + rx;
+      if (baseElevPadLR[idx] <= 0) continue;
+
+      const worldX = originWorldX + (rx - MARGIN_LR);
+      const worldY = originWorldY + (ry - MARGIN_LR);
+
+      const flatness = clamp(1.0 - slopeMagPadLR[idx] / 0.005, 0, 1);
+      if (flatness < 0.05) continue;
+
+      const angle = noise2D(worldX * convergeFreqLR, worldY * convergeFreqLR, convergeSeed1LR)
+                  * convergeMaxAngleLR * flatness;
+
+      const dx = drainDirXPadLR[idx];
+      const dy = drainDirYPadLR[idx];
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      drainDirXPadLR[idx] = dx * cos - dy * sin;
+      drainDirYPadLR[idx] = dx * sin + dy * cos;
+    }
+  }
+
+  // Extract interior 512×512 drainage direction from the padded grid
+  const drainDirXLR = new Float32Array(NN_LR);
+  const drainDirYLR = new Float32Array(NN_LR);
+  for (let ry = 0; ry < S_LR; ry++) {
+    for (let rx = 0; rx < S_LR; rx++) {
+      const srcIdx = (ry + MARGIN_LR) * S_PAD_LR + (rx + MARGIN_LR);
+      const dstIdx = ry * S_LR + rx;
+      drainDirXLR[dstIdx] = drainDirXPadLR[srcIdx];
+      drainDirYLR[dstIdx] = drainDirYPadLR[srcIdx];
+    }
+  }
+
+  // Pass 1c: apply isotropic + anisotropic noise, build cell objects
+  for (let ry = 0; ry < S_LR; ry++) {
+    for (let rx = 0; rx < S_LR; rx++) {
+      const idx = ry * S_LR + rx;
+      const worldX = originWorldX + rx;
+      const worldY = originWorldY + ry;
+      const px = worldX / CELLS_PER_PLANETARY;
+      const py = worldY / CELLS_PER_PLANETARY;
+      const baseElev = baseElevGridLR[idx];
+
+      // Isotropic detail noise (same as computeRegionalBaseCell)
+      let detail = 0, amp = 1, freq = 0.015, totalAmp = 0;
+      for (let o = 0; o < 5; o++) {
+        detail += amp * noise2D(worldX * freq, worldY * freq, regionSeed + o * 1013);
+        totalAmp += amp;
+        amp *= 0.5;
+        freq *= 2;
+      }
+      detail /= totalAmp;
+
+      const elevNorm = clamp(baseElev / maxLand, -1, 1);
+      let detailAmp;
+      if (baseElev <= 0) {
+        detailAmp = params.coastAmplitude * 0.4;
+      } else {
+        detailAmp = params.coastAmplitude + params.mountainDetail * elevNorm;
+      }
+
+      // Anisotropic channel noise
+      let channelOffset = 0;
+      if (baseElev > 0) {
+        const fdx = drainDirXLR[idx];
+        const fdy = drainDirYLR[idx];
+        const alongDrain  =  worldX * fdx + worldY * fdy;
+        const acrossDrainCorr = worldX * (-fdy) + worldY * fdx;
+        const alongFreq  = 0.004;
+        const acrossFreq = 0.07;
+        let channelNoise = 0, cAmp = 1, cTotalAmp = 0;
+        for (let o = 0; o < 3; o++) {
+          const f = (o === 0) ? 1.0 : (o === 1) ? 2.0 : 4.0;
+          channelNoise += cAmp * noise2D(
+            alongDrain * alongFreq * f,
+            acrossDrainCorr * acrossFreq * f,
+            regionSeed + 7000 + o * 337
+          );
+          cTotalAmp += cAmp;
+          cAmp *= 0.45;
+        }
+        channelNoise /= cTotalAmp;
+
+        const slopeMagLocal = Math.sqrt(
+          (rx > 0 && rx < S_LR - 1 ? (baseElevGridLR[idx + 1] - baseElevGridLR[idx - 1]) / 2 : 0) ** 2 +
+          (ry > 0 && ry < S_LR - 1 ? (baseElevGridLR[idx + S_LR] - baseElevGridLR[idx - S_LR]) / 2 : 0) ** 2
+        );
+        const zoneLocal = classifyZone(baseElev, slopeMagLocal, maxLand);
+        let channelAmp;
+        switch (zoneLocal) {
+          case 'lowland':     channelAmp = 0.018; break;
+          case 'coastal':     channelAmp = 0.010; break;
+          case 'tidal':       channelAmp = 0.006; break;
+          case 'mid_slope':   channelAmp = 0.006; break;
+          case 'upper_slope': channelAmp = 0.003; break;
+          case 'summit':      channelAmp = 0.001; break;
+          default:            channelAmp = 0.008; break;
+        }
+        channelOffset = channelNoise * channelAmp;
+        // Reduce isotropic noise on flat terrain so anisotropic channels dominate
+        if (zoneLocal === 'lowland')          detailAmp *= 0.4;
+        else if (zoneLocal === 'coastal')     detailAmp *= 0.5;
+        else if (zoneLocal === 'tidal')       detailAmp *= 0.5;
+        else if (zoneLocal === 'mid_slope')   detailAmp *= 0.7;
+        // upper_slope and summit keep full amplitude
+      }
+
+      const elev = baseElev + detail * detailAmp + channelOffset;
+      elevGrid[idx] = elev;
 
       const cell = {
         rx, ry,
@@ -3987,6 +4199,32 @@ function generateRegionalDetailLowRes(centerX, centerY) {
 
   // Pass 3: drainage (flow accumulation over regional grid)
   computeRegionalDrainage(elevGrid);
+
+  // ── Pass 3b: inherit planetary stream order as floor (LowRes path) ──
+  if (planet && planet.streamOrder) {
+    const MIN_DENSITY = [0, 0.30, 0.55, 0.80];
+
+    for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
+      for (let rx = 0; rx < REGIONAL_SIZE; rx++) {
+        const cell = regionalCells[rx][ry];
+        if (!cell.isLand) continue;
+
+        const px = cell.worldX / CELLS_PER_PLANETARY;
+        const py = cell.worldY / CELLS_PER_PLANETARY;
+        // Nearest-neighbor from the planetary grid
+        const gi = (Math.round(py) % H) * W + ((Math.round(px) % W) + W) % W;
+        const hrSO = planet.streamOrder[gi] || 0;
+
+        if (hrSO > cell.streamOrder) {
+          cell.streamOrder = hrSO;
+        }
+        const minDensity = MIN_DENSITY[Math.min(cell.streamOrder, 3)];
+        if (cell.drainageDensity < minDensity) {
+          cell.drainageDensity = minDensity;
+        }
+      }
+    }
+  }
 
   // Pass 4: substrate, saturation, standing water
   for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
@@ -4061,26 +4299,190 @@ function generateRegionalDetailHiRes(centerX, centerY) {
     regionalCells[rx] = new Array(REGIONAL_SIZE);
   }
 
-  // Pass 1: read base state from the high-res grid, then add regional coastline
-  //         / terrain noise to the interpolated elevation.
-  const elevGrid = new Float32Array(REGIONAL_SIZE * REGIONAL_SIZE);
-  for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
-    for (let rx = 0; rx < REGIONAL_SIZE; rx++) {
+  // Pass 1a: read BASE elevation from hi-res grid (no noise yet).
+  // Use a padded grid (MARGIN cells on each side) so the local slope and
+  // convergence perturbation stabilize before reaching the interior 512×512
+  // region. This ensures continuity when the user pans the regional map.
+  const S = REGIONAL_SIZE;
+  const NN = S * S;
+  const MARGIN = 64;
+  const S_PAD = S + 2 * MARGIN;  // 640
+  const NN_PAD = S_PAD * S_PAD;
+  const baseElevGrid = new Float32Array(NN);
+  const elevGrid = new Float32Array(NN);
+
+  // Temporary arrays for high-res field samples (needed in Pass 1c)
+  const _hx = new Float32Array(NN);
+  const _hy = new Float32Array(NN);
+  const _wx = new Float32Array(NN);
+  const _wy = new Float32Array(NN);
+
+  // Padded base elevation grid for drainage direction + convergence perturbation
+  const baseElevPad = new Float32Array(NN_PAD);
+
+  for (let ry = -MARGIN; ry < S + MARGIN; ry++) {
+    for (let rx = -MARGIN; rx < S + MARGIN; rx++) {
       const worldX = originWorldX + rx;
       const worldY = originWorldY + ry;
-      const px = worldX / CELLS_PER_PLANETARY;   // fractional planetary coord
+      const px = worldX / CELLS_PER_PLANETARY;
       const py = worldY / CELLS_PER_PLANETARY;
-
-      // High-res grid coordinate (fractional). HR_W = W * hiResMultiplier, and
-      // px is measured in planetary cells, so px * hiResMultiplier is in HR cells.
       const hx = px * hiResMultiplier;
       const hy = py * hiResMultiplier;
+      const padIdx = (ry + MARGIN) * S_PAD + (rx + MARGIN);
+      baseElevPad[padIdx] = bilinearSampleHR(hiResData.elevation, hx, hy);
+      // Store interior coordinate arrays
+      if (rx >= 0 && rx < S && ry >= 0 && ry < S) {
+        const idx = ry * S + rx;
+        baseElevGrid[idx] = baseElevPad[padIdx];
+        _hx[idx] = hx;
+        _hy[idx] = hy;
+        _wx[idx] = worldX;
+        _wy[idx] = worldY;
+      }
+    }
+  }
 
-      // ── Base elevation from high-res, plus finer regional detail ──
-      const baseElev = bilinearSampleHR(hiResData.elevation, hx, hy);
+  // Pass 1b: drainage direction from hi-res elevation gradient (globally deterministic).
+  // Instead of BFS (which is window-dependent), sample the GLOBAL hi-res elevation
+  // grid at a wide window around each cell to determine downhill direction. The hi-res
+  // grid was computed once during planet generation and is globally consistent — this
+  // gives the same direction regardless of which regional view the cell appears in.
+  const drainDirXPad = new Float32Array(NN_PAD);
+  const drainDirYPad = new Float32Array(NN_PAD);
 
-      // Regional-scale detail noise (finer than the high-res grid resolves).
-      // Pure function of world coordinates so panned views stay seamless.
+  const GRAD_RADIUS_HR = 3.0;  // radius in hi-res cells (~3 × 39 km = ~117 km at 4×)
+  const GRAD_STEPS = 8;        // sample directions (N, NE, E, SE, S, SW, W, NW)
+  const gradDx = [0, 1, 1, 1, 0, -1, -1, -1];
+  const gradDy = [-1, -1, 0, 1, 1, 1, 0, -1];
+
+  const slopeMagPad = new Float32Array(NN_PAD);
+
+  for (let ry = 0; ry < S_PAD; ry++) {
+    for (let rx = 0; rx < S_PAD; rx++) {
+      const idx = ry * S_PAD + rx;
+      if (baseElevPad[idx] <= 0) {
+        drainDirXPad[idx] = 0;
+        drainDirYPad[idx] = 1;
+        continue;
+      }
+
+      // Compute hi-res coordinates for this padded cell
+      const worldX = originWorldX + (rx - MARGIN);
+      const worldY = originWorldY + (ry - MARGIN);
+      const hx = (worldX / CELLS_PER_PLANETARY) * hiResMultiplier;
+      const hy = (worldY / CELLS_PER_PLANETARY) * hiResMultiplier;
+      const centerElev = baseElevPad[idx];
+
+      // Wide-window gradient from global hi-res elevation
+      let gx = 0, gy = 0;
+      for (let d = 0; d < GRAD_STEPS; d++) {
+        const sampleHx = hx + gradDx[d] * GRAD_RADIUS_HR;
+        const sampleHy = hy + gradDy[d] * GRAD_RADIUS_HR;
+        const sampleElev = bilinearSampleHR(hiResData.elevation, sampleHx, sampleHy);
+        const diff = centerElev - sampleElev;  // positive = downhill in that direction
+        gx += gradDx[d] * diff;
+        gy += gradDy[d] * diff;
+      }
+      const gLen = Math.sqrt(gx * gx + gy * gy) || 1;
+      drainDirXPad[idx] = gx / gLen;
+      drainDirYPad[idx] = gy / gLen;
+
+      // Local 7×7 slope on the padded base elevation grid
+      let localGx = 0, localGy = 0, localWt = 0;
+      for (let ddy = -3; ddy <= 3; ddy++) {
+        for (let ddx = -3; ddx <= 3; ddx++) {
+          if (ddx === 0 && ddy === 0) continue;
+          const nrx = rx + ddx, nry = ry + ddy;
+          if (nrx < 0 || nrx >= S_PAD || nry < 0 || nry >= S_PAD) continue;
+          const w = 1.0 / Math.sqrt(ddx * ddx + ddy * ddy);
+          const diff = baseElevPad[idx] - baseElevPad[nry * S_PAD + nrx];
+          localGx += ddx * diff * w;
+          localGy += ddy * diff * w;
+          localWt += w;
+        }
+      }
+      if (localWt > 0) { localGx /= localWt; localGy /= localWt; }
+      const localSlopeMag = Math.sqrt(localGx * localGx + localGy * localGy);
+      slopeMagPad[idx] = localSlopeMag;
+
+      // Blend: steep terrain uses local slope, flat terrain uses wide gradient
+      const FLAT_THRESH  = 0.0015;
+      const STEEP_THRESH = 0.005;
+      const t = clamp((localSlopeMag - FLAT_THRESH) / (STEEP_THRESH - FLAT_THRESH), 0, 1);
+
+      if (t > 0.01 && localSlopeMag > 0.0001) {
+        const nlx = localGx / localSlopeMag;
+        const nly = localGy / localSlopeMag;
+
+        let bx = drainDirXPad[idx] * (1 - t) + nlx * t;
+        let by = drainDirYPad[idx] * (1 - t) + nly * t;
+        const bLen = Math.sqrt(bx * bx + by * by) || 1;
+        drainDirXPad[idx] = bx / bLen;
+        drainDirYPad[idx] = by / bLen;
+      }
+    }
+  }
+
+  // ── Convergence perturbation (Bug 3 fix) ──
+  // Rotate drainage direction vectors by a low-frequency noise angle on the padded grid.
+  // This creates broad zones (~140-cell wavelength) where channels angle
+  // toward each other (convergence) and zones where they angle apart (divergence).
+  // The result is dendritic drainage instead of parallel ditches.
+  const convergeSeed1 = regionSeed + 5555;
+  const convergeFreq = 0.007;
+  const convergeMaxAngle = 0.35;
+
+  for (let ry = 0; ry < S_PAD; ry++) {
+    for (let rx = 0; rx < S_PAD; rx++) {
+      const idx = ry * S_PAD + rx;
+      if (baseElevPad[idx] <= 0) continue;
+
+      const worldX = originWorldX + (rx - MARGIN);
+      const worldY = originWorldY + (ry - MARGIN);
+
+      // Only perturb on flat terrain — steep slopes have reliable slope direction
+      const flatness = clamp(1.0 - slopeMagPad[idx] / 0.005, 0, 1);
+      if (flatness < 0.05) continue;
+
+      // Low-frequency angular offset
+      const angle = noise2D(worldX * convergeFreq, worldY * convergeFreq, convergeSeed1)
+                  * convergeMaxAngle * flatness;
+
+      // Rotate the drainage direction by this angle
+      const dx = drainDirXPad[idx];
+      const dy = drainDirYPad[idx];
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      drainDirXPad[idx] = dx * cos - dy * sin;
+      drainDirYPad[idx] = dx * sin + dy * cos;
+    }
+  }
+
+  // Extract interior 512×512 drainage direction from the padded grid
+  const drainDirX = new Float32Array(NN);
+  const drainDirY = new Float32Array(NN);
+  for (let ry = 0; ry < S; ry++) {
+    for (let rx = 0; rx < S; rx++) {
+      const srcIdx = (ry + MARGIN) * S_PAD + (rx + MARGIN);
+      const dstIdx = ry * S + rx;
+      drainDirX[dstIdx] = drainDirXPad[srcIdx];
+      drainDirY[dstIdx] = drainDirYPad[srcIdx];
+    }
+  }
+
+  // Pass 1c: add isotropic + anisotropic noise, sample hi-res fields, build cells.
+  for (let ry = 0; ry < S; ry++) {
+    for (let rx = 0; rx < S; rx++) {
+      const idx = ry * S + rx;
+      const worldX = _wx[idx];
+      const worldY = _wy[idx];
+      const hx = _hx[idx];
+      const hy = _hy[idx];
+      const px = worldX / CELLS_PER_PLANETARY;
+      const py = worldY / CELLS_PER_PLANETARY;
+      const baseElev = baseElevGrid[idx];
+
+      // ── Isotropic detail noise (same as before) ──
       let detail = 0, amp = 1, freq = 0.015, totalAmp = 0;
       for (let o = 0; o < 5; o++) {
         detail += amp * noise2D(worldX * freq, worldY * freq, regionSeed + o * 1013);
@@ -4091,16 +4493,73 @@ function generateRegionalDetailHiRes(centerX, centerY) {
       detail /= totalAmp;
 
       const elevNorm = clamp(baseElev / maxLand, -1, 1);
-      // Same detail-amplitude curve as the low-res path (computeRegionalBaseCell);
-      // only the base it is added to differs (high-res base instead of low-res).
       let detailAmp;
       if (baseElev <= 0) {
         detailAmp = params.coastAmplitude * 0.4;
       } else {
         detailAmp = params.coastAmplitude + params.mountainDetail * elevNorm;
       }
-      const elev = baseElev + detail * detailAmp;
-      elevGrid[ry * REGIONAL_SIZE + rx] = elev;
+
+      // ── Anisotropic channel noise (aligned with drainage direction) ──
+      // Creates organized ridge-channel topography for coherent drainage networks.
+      let channelOffset = 0;
+      if (baseElev > 0) {
+        const fdx = drainDirX[idx];
+        const fdy = drainDirY[idx];
+
+        // Project world coords into drain-aligned frame
+        const alongDrain  =  worldX * fdx + worldY * fdy;
+        const acrossDrain = -worldX * fdy + worldX * fdx;
+        // More accurate cross-projection:
+        const acrossDrainCorr = worldX * (-fdy) + worldY * fdx;
+
+        // Anisotropic noise: low freq along drain (continuous channels),
+        // high freq across drain (periodic ridge-channel spacing)
+        const alongFreq  = 0.004;
+        const acrossFreq = 0.07;
+
+        let channelNoise = 0, cAmp = 1, cTotalAmp = 0;
+        for (let o = 0; o < 3; o++) {
+          const f = (o === 0) ? 1.0 : (o === 1) ? 2.0 : 4.0;
+          channelNoise += cAmp * noise2D(
+            alongDrain * alongFreq * f,
+            acrossDrainCorr * acrossFreq * f,
+            regionSeed + 7000 + o * 337
+          );
+          cTotalAmp += cAmp;
+          cAmp *= 0.45;
+        }
+        channelNoise /= cTotalAmp;
+
+        // Zone-dependent amplitude: strongest on flats, weakest on steep slopes
+        const slopeMagLocal = Math.sqrt(
+          (rx > 0 && rx < S - 1 ? (baseElevGrid[idx + 1] - baseElevGrid[idx - 1]) / 2 : 0) ** 2 +
+          (ry > 0 && ry < S - 1 ? (baseElevGrid[idx + S] - baseElevGrid[idx - S]) / 2 : 0) ** 2
+        );
+        const zoneLocal = classifyZone(baseElev, slopeMagLocal, maxLand);
+        let channelAmp;
+        switch (zoneLocal) {
+          case 'lowland':     channelAmp = 0.018; break;
+          case 'coastal':     channelAmp = 0.010; break;
+          case 'tidal':       channelAmp = 0.006; break;
+          case 'mid_slope':   channelAmp = 0.006; break;
+          case 'upper_slope': channelAmp = 0.003; break;
+          case 'summit':      channelAmp = 0.001; break;
+          default:            channelAmp = 0.008; break;
+        }
+
+        channelOffset = channelNoise * channelAmp;
+
+        // Reduce isotropic noise on flat terrain so anisotropic channels dominate
+        if (zoneLocal === 'lowland')          detailAmp *= 0.4;
+        else if (zoneLocal === 'coastal')     detailAmp *= 0.5;
+        else if (zoneLocal === 'tidal')       detailAmp *= 0.5;
+        else if (zoneLocal === 'mid_slope')   detailAmp *= 0.7;
+        // upper_slope and summit keep full amplitude
+      }
+
+      const elev = baseElev + detail * detailAmp + channelOffset;
+      elevGrid[idx] = elev;
 
       // ── Interpolated high-res physical base fields ──
       const hrGrain    = bilinearSampleHR(hiResData.grainSize, hx, hy);
@@ -4189,6 +4648,38 @@ function generateRegionalDetailHiRes(centerX, centerY) {
   // Pass 3: drainage (higher-resolution flow accumulation than the high-res grid)
   computeRegionalDrainage(elevGrid);
 
+  // ── Pass 3b: inherit hi-res stream order as floor ──
+  // The hi-res grid computed flow accumulation globally (stepHR5_drainage).
+  // The regional flow accumulation is window-bounded and misses upstream
+  // contributions from outside the view. Use the hi-res stream order as a
+  // minimum — the regional computation can only increase it, not decrease it.
+  if (hiResData && hiResData.streamOrder) {
+    // Minimum drainageDensity values corresponding to each stream order
+    // threshold, so downstream consumers (saturation, grain) see consistent
+    // values for globally-established channels.
+    const MIN_DENSITY = [0, 0.30, 0.55, 0.80];
+    //                  so=0  so=1   so=2   so=3
+
+    for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
+      for (let rx = 0; rx < REGIONAL_SIZE; rx++) {
+        const cell = regionalCells[rx][ry];
+        if (!cell.isLand) continue;
+
+        const hx = (cell.worldX / CELLS_PER_PLANETARY) * hiResMultiplier;
+        const hy = (cell.worldY / CELLS_PER_PLANETARY) * hiResMultiplier;
+        const hrSO = nearestSampleHR(hiResData.streamOrder, hx, hy);
+
+        if (hrSO > cell.streamOrder) {
+          cell.streamOrder = hrSO;
+        }
+        const minDensity = MIN_DENSITY[Math.min(cell.streamOrder, 3)];
+        if (cell.drainageDensity < minDensity) {
+          cell.drainageDensity = minDensity;
+        }
+      }
+    }
+  }
+
   // Pass 4: refine substrate / saturation / water table from the high-res base.
   //         Ridge cells keep high-res values; channels get wetter and finer.
   for (let ry = 0; ry < REGIONAL_SIZE; ry++) {
@@ -4226,6 +4717,23 @@ function refineRegionalSubstrateFromHiRes(cell) {
     cell.baseGrainSize = cell.grainSize;
     return;
   }
+
+  // ── Break bilinear interpolation contours ──
+  // The hi-res grid provides only ~4 data points across the regional view.
+  // Without noise, threshold crossings (canopy 0.45, cover type transitions)
+  // produce grid-aligned straight-line boundaries. Small world-coordinate
+  // noise makes these boundaries follow organic contours.
+  const precipNoiseSeed = 0xA1B2;
+  const gwNoiseSeed = 0xC3D4;
+  const noiseFreq = 0.015;   // ~65-cell wavelength (~10 km)
+  const precipNoiseAmp = 0.06;
+  const gwNoiseAmp = 0.04;
+
+  cell.precipitation += noise2D(cell.worldX * noiseFreq, cell.worldY * noiseFreq, precipNoiseSeed) * precipNoiseAmp;
+  cell.precipitation = clamp(cell.precipitation, 0, 1);
+
+  cell.groundwater += noise2D(cell.worldX * noiseFreq, cell.worldY * noiseFreq, gwNoiseSeed) * gwNoiseAmp;
+  cell.groundwater = clamp(cell.groundwater, 0, 1);
 
   const so = cell.streamOrder;
 
@@ -4295,13 +4803,82 @@ function refineRegionalFloraFromHiRes(cell) {
     cell.chemoCrust = 0; cell.organicContent = 0;
     return;
   }
+
+  // ── Re-derive flora type from continuous properties ──
+  // Instead of inheriting cell._hrFloraType (a categorical value from the hi-res
+  // grid that's identical across 128×128 regional cells), re-run the flora type
+  // fitness competition using this cell's own mineral and water values.
+  //
+  // Domain warp: displace the mineral sampling coordinates with noise so the
+  // classification boundary follows an organic contour instead of the bilinear
+  // interpolation grid lines.
+
+  if (hiResData) {
+    const hx = (cell.worldX / CELLS_PER_PLANETARY) * hiResMultiplier;
+    const hy = (cell.worldY / CELLS_PER_PLANETARY) * hiResMultiplier;
+
+    // Domain warp (matches stepHR6_floraRow warp seeds and parameters)
+    const warpScale = 0.08;
+    const warpAmp = 1.8;
+    const warpSeed1 = 0x7A3C;
+    const warpSeed2 = 0x9E1F;
+    const wx = hx + noise2D(hx * warpScale, hy * warpScale, warpSeed1) * warpAmp;
+    const wy = hy + noise2D(hx * warpScale, hy * warpScale, warpSeed2) * warpAmp;
+
+    // Sample minerals and water from warped coordinates
+    const ironW = bilinearSampleHR(hiResData.iron, wx, wy);
+    const copperW = bilinearSampleHR(hiResData.copper, wx, wy);
+    const mnW = bilinearSampleHR(hiResData.manganese, wx, wy);
+    const mineralTotalW = ironW + copperW + mnW;
+    const precipW = bilinearSampleHR(hiResData.precipitation, wx, wy);
+    const gwW = bilinearSampleHR(hiResData.groundwater, wx, wy);
+    const volcW = bilinearSampleHR(hiResData.volcanism, wx, wy);
+
+    // Flora type fitness competition (mirrors stepHR6_floraRow logic)
+    const regWaterW = Math.min(1, precipW * 3.0 + gwW * 1.5);
+    const photoFit = regWaterW * 0.8;
+    const chemoFit = mineralTotalW * Math.max(regWaterW, volcW * 1.5) * 1.2;
+    const mixoFit = (0.6 + 0.5 * mineralTotalW) * regWaterW;
+
+    if (chemoFit > photoFit && chemoFit > mixoFit && chemoFit > 0.02) {
+      cell.floraType = 'chemotrophic';
+    } else if (mixoFit > photoFit && mixoFit > chemoFit && mixoFit > 0.02) {
+      cell.floraType = 'mixotrophic';
+    } else if (photoFit > 0.02) {
+      cell.floraType = 'photosynthetic';
+    } else {
+      cell.floraType = 'barren';
+    }
+  } else {
+    // LowRes fallback: use the cell's stored (interpolated) minerals directly
+    const mineralTotal = cell.mineralTotal;
+    const precip = cell.precipitation;
+    const gw = cell.groundwater;
+    const volc = cell.volcanism || 0;
+    const regWater = Math.min(1, precip * 3.0 + gw * 1.5);
+    const photoFit = regWater * 0.8;
+    const chemoFit = mineralTotal * Math.max(regWater, volc * 1.5) * 1.2;
+    const mixoFit = (0.6 + 0.5 * mineralTotal) * regWater;
+
+    if (chemoFit > photoFit && chemoFit > mixoFit && chemoFit > 0.02) {
+      cell.floraType = 'chemotrophic';
+    } else if (mixoFit > photoFit && mixoFit > chemoFit && mixoFit > 0.02) {
+      cell.floraType = 'mixotrophic';
+    } else if (photoFit > 0.02) {
+      cell.floraType = 'photosynthetic';
+    } else {
+      cell.floraType = 'barren';
+    }
+  }
+
+  // ── From here, flora type is already set per cell above ──
+
   if (cell.hasWater) {
     // Water prevents rooted canopy but NOT ground-level biology.
-    // Flora type is inherited from the high-res grid — water doesn't
+    // Flora type was already re-derived above — water doesn't
     // change what KIND of organisms live here, just their structure.
     // Ground cover: shallow water supports floating mat; deep water
     // submerges it. Canopy: always zero (can't root in standing water).
-    cell.floraType = cell._hrFloraType || 'barren';
     cell.canopy = 0;
 
     const wd = cell.waterDepth || 0;
@@ -4361,7 +4938,7 @@ function refineRegionalFloraFromHiRes(cell) {
   }
   cell.canopy = cd;
 
-  // Chemo crust (mirrors stepHR6)
+  // Chemo crust (mirrors stepHR6) — uses unwarped cell.mineralTotal
   let cc = 0;
   if (mineralTotal > 0.4) {
     const cf = mineralTotal * Math.max(sat, volc * 1.5);
@@ -4373,8 +4950,6 @@ function refineRegionalFloraFromHiRes(cell) {
   }
   cell.chemoCrust = cc;
 
-  // Flora type inherited from the high-res grid (character stays consistent).
-  cell.floraType = cell._hrFloraType || 'barren';
   // Density for the flora overlay, from the refined cover values.
   cell.floraDensity = clamp(Math.max(cell.canopy, cell.groundCover), 0, 1);
 
@@ -4461,6 +5036,21 @@ function computeRegionalSubstrate(cell, seed) {
   cell.grainSize = clamp(grain, 0.05, 1.0);
   cell.baseGrainSize = cell.grainSize;
 
+  // ── Break bilinear interpolation contours (same as HiRes path) ──
+  if (cell.isLand) {
+    const precipNoiseSeed = 0xA1B2;
+    const gwNoiseSeed = 0xC3D4;
+    const noiseFreq = 0.015;
+    const precipNoiseAmp = 0.06;
+    const gwNoiseAmp = 0.04;
+
+    cell.precipitation += noise2D(cell.worldX * noiseFreq, cell.worldY * noiseFreq, precipNoiseSeed) * precipNoiseAmp;
+    cell.precipitation = clamp(cell.precipitation, 0, 1);
+
+    cell.groundwater += noise2D(cell.worldX * noiseFreq, cell.worldY * noiseFreq, gwNoiseSeed) * gwNoiseAmp;
+    cell.groundwater = clamp(cell.groundwater, 0, 1);
+  }
+
   // Saturation: combination of precipitation, groundwater, drainage, low slope
   const slopeFactor = clamp(1 - cell.slopeMag * 6, 0, 1);
   const drainageFactor = clamp(cell.drainageDensity * 1.5, 0, 1);
@@ -4480,12 +5070,13 @@ function computeStandingWater(elevGrid) {
   const dx8 = [-1, 0, 1, -1, 1, -1, 0, 1];
   const dy8 = [-1, -1, -1, 0, 0, 1, 1, 1];
 
-  // Minimum feature sizes (regional cells are ~1km each, so smaller thresholds)
-  const REG_MIN_BASIN_AREA  = 12;    // was 4 — lake must span ≥12 km²
-  const REG_MIN_BASIN_DEPTH = 0.02;  // was 0.005 — depression must be ≥2 cm deep
-  const REG_MIN_WATER_FEAT  = 8;     // was 4 — connected water component ≥8 cells
-  const REG_POUR_TOLERANCE  = 0.008; // was 0.012 — shallower fill level
-  const REG_SHORE_DIST      = 2;     // was 3 — tighter saturation halo
+  // Minimum feature sizes — tightened for the wet planet (precip 1.00 everywhere).
+  // Previous values were tuned for a nearly-dry planet and flooded too many cells.
+  const REG_MIN_BASIN_AREA  = 20;    // was 12 — lake must span ≥20 cells
+  const REG_MIN_BASIN_DEPTH = 0.04;  // was 0.02 — depression must be ≥4 cm deep
+  const REG_MIN_WATER_FEAT  = 15;    // was 8  — connected water component ≥15 cells
+  const REG_POUR_TOLERANCE  = 0.005; // was 0.008 — shallower fill level
+  const REG_SHORE_DIST      = 2;     // unchanged
 
   // Reset all cells
   for (let ry = 0; ry < S; ry++) {
@@ -4517,7 +5108,7 @@ function computeStandingWater(elevGrid) {
   for (let ry = 0; ry < S; ry++) {
     for (let rx = 0; rx < S; rx++) {
       const cell = regionalCells[rx][ry];
-      if (cell.isLand && cell.streamOrder >= 3 && cell.saturation > 0.6) {
+      if (cell.isLand && cell.streamOrder >= 3 && cell.saturation > 0.85) {
         hasWater[ry * S + rx] = 1;
         wDepth[ry * S + rx] = 0.02 + cell.drainageDensity * 0.05;
       }
@@ -5266,40 +5857,8 @@ function regionalPhysical(cell) {
 // ── Regional overlay color functions ──
 const regionalOverlayFunctions = {
   'surface': function(cell) {
-    // When the hi-res grid exists, interpolate its pre-computed colors.
-    // The hi-res grid's colors were computed by stepHR8_colorRow using
-    // computeTilePalette on the full physical state.  Reading them directly
-    // ensures the regional Surface overlay matches the planetary map.
-    if (hiResData) {
-      // Regional-only water features: drainage channels and ponds that
-      // the hi-res grid couldn't resolve.  These ARE new detail.
-      if (cell.isLand && cell.hasWater && (cell.waterDepth || 0) >= SHALLOW_WATER_TERRAIN_THRESHOLD) {
-        const m = cell.minerals || {};
-        return computeTilePalette({
-          terrainType: 'water', waterDepth: cell.waterDepth || 0,
-          iron: m.iron || 0, copper: m.copper || 0, manganese: m.manganese || 0,
-          groundCover: cell.groundCover || 0,
-          floraType: cell.floraType || 'barren',
-        }).bg;
-      }
-      // Everything else (land AND ocean): sample the hi-res pre-computed color.
-      const hx = (cell.worldX / CELLS_PER_PLANETARY) * hiResMultiplier;
-      const hy = (cell.worldY / CELLS_PER_PLANETARY) * hiResMultiplier;
-      const r = bilinearSampleHR(hiResData.colorR, hx, hy);
-      const g = bilinearSampleHR(hiResData.colorG, hx, hy);
-      const b = bilinearSampleHR(hiResData.colorB, hx, hy);
-      return { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
-    }
-    // Fallback for low-res mode: derive from regional physical state
-    if (cell.isDeepWater) return computeTilePalette({ terrainType: 'deep_water' }).bg;
-    if (cell.isShallowWater) {
-      const m = cell.minerals || {};
-      return computeTilePalette({
-        terrainType: 'water', waterDepth: 0.15,
-        iron: m.iron || 0, copper: m.copper || 0, manganese: m.manganese || 0,
-      }).bg;
-    }
-    if (cell.hasWater && (cell.waterDepth || 0) >= SHALLOW_WATER_TERRAIN_THRESHOLD) {
+    // Regional-only water features (drainage channels, ponds)
+    if (cell.isLand && cell.hasWater && (cell.waterDepth || 0) >= SHALLOW_WATER_TERRAIN_THRESHOLD) {
       const m = cell.minerals || {};
       return computeTilePalette({
         terrainType: 'water', waterDepth: cell.waterDepth || 0,
@@ -5308,6 +5867,24 @@ const regionalOverlayFunctions = {
         floraType: cell.floraType || 'barren',
       }).bg;
     }
+
+    // Ocean cells: sample hi-res colors (ocean color doesn't need regional detail)
+    if (!cell.isLand) {
+      if (hiResData) {
+        const hx = (cell.worldX / CELLS_PER_PLANETARY) * hiResMultiplier;
+        const hy = (cell.worldY / CELLS_PER_PLANETARY) * hiResMultiplier;
+        const r = bilinearSampleHR(hiResData.colorR, hx, hy);
+        const g = bilinearSampleHR(hiResData.colorG, hx, hy);
+        const b = bilinearSampleHR(hiResData.colorB, hx, hy);
+        return { r: Math.round(r), g: Math.round(g), b: Math.round(b) };
+      }
+      if (cell.isDeepWater) return computeTilePalette({ terrainType: 'deep_water' }).bg;
+      return computeTilePalette({ terrainType: 'water', waterDepth: 0.15 }).bg;
+    }
+
+    // Land cells: compute color from the regional cell's own physical state.
+    // This gives full 512×512 resolution because each regional cell has its
+    // own refined physical properties (saturation, minerals, flora, terrain).
     if (cell.isFreezing) return { r: 210, g: 215, b: 220 };
     return computeTilePalette(regionalPhysical(cell)).bg;
   },
@@ -6085,6 +6662,15 @@ async function stepHR5_drainage() {
 
 // ── Step HR6: flora ──
 function stepHR6_floraRow(hy) {
+  // Domain warp parameters: displace sampling coordinates with noise to break
+  // grid-aligned classification boundaries. Only affects the flora TYPE decision
+  // and chemo crust threshold, not the continuous values (saturation, grain size,
+  // etc.) that feed into terrain.
+  const warpScale = 0.08;   // Noise frequency — one undulation per ~12 hi-res cells
+  const warpAmp = 1.8;      // Displacement in hi-res cells
+  const warpSeed1 = 0x7A3C;
+  const warpSeed2 = 0x9E1F;
+
   for (let hx = 0; hx < HR_W; hx++) {
     const hi = hy * HR_W + hx;
 
@@ -6108,6 +6694,19 @@ function stepHR6_floraRow(hy) {
     const mineralTotal = iron + copper + mn;
     const depth = hiResData.waterTableDepth[hi];
     const hasWater = depth < -0.01;
+
+    // Domain-warped coordinates for flora TYPE classification and chemo crust only.
+    // This displaces the threshold boundary with noise so it follows an organic
+    // contour instead of the planetary grid.
+    const wx = hx + noise2D(hx * warpScale, hy * warpScale, warpSeed1) * warpAmp;
+    const wy = hy + noise2D(hx * warpScale, hy * warpScale, warpSeed2) * warpAmp;
+    const ironW = bilinearSampleHR(hiResData.iron, wx, wy);
+    const copperW = bilinearSampleHR(hiResData.copper, wx, wy);
+    const mnW = bilinearSampleHR(hiResData.manganese, wx, wy);
+    const mineralTotalW = ironW + copperW + mnW;
+    const precipW = bilinearSampleHR(hiResData.precipitation, wx, wy);
+    const gwW = bilinearSampleHR(hiResData.groundwater, wx, wy);
+    const volcW = bilinearSampleHR(hiResData.volcanism, wx, wy);
 
     // Ground cover — scaled by water availability so barren/dry zones get low coverage
     let gc;
@@ -6135,10 +6734,10 @@ function stepHR6_floraRow(hy) {
     }
     hiResData.canopyDensity[hi] = cd;
 
-    // Chemo crust
+    // Chemo crust — uses warped mineralTotal so crust boundary matches flora type boundary
     let cc = 0;
-    if (mineralTotal > 0.4) {
-      const cf = mineralTotal * Math.max(sat, volc * 1.5);
+    if (mineralTotalW > 0.4) {
+      const cf = mineralTotalW * Math.max(sat, volc * 1.5);
       const pf = gc * 0.8;
       if (cf > pf) {
         cc = Math.min(1, (cf - pf) * 2.0);
@@ -6147,11 +6746,11 @@ function stepHR6_floraRow(hy) {
     }
     hiResData.chemoCrust[hi] = cc;
 
-    // Flora type
-    const regWater = Math.min(1, precip * 3.0 + gw * 1.5);
-    const photoFit = regWater * 0.8;
-    const chemoFit = mineralTotal * Math.max(regWater, volc * 1.5) * 1.2;
-    const mixoFit = (0.6 + 0.5 * mineralTotal) * regWater;
+    // Flora type — uses warped mineral/water values for organic boundaries
+    const regWaterW = Math.min(1, precipW * 3.0 + gwW * 1.5);
+    const photoFit = regWaterW * 0.8;
+    const chemoFit = mineralTotalW * Math.max(regWaterW, volcW * 1.5) * 1.2;
+    const mixoFit = (0.6 + 0.5 * mineralTotalW) * regWaterW;
     if (chemoFit > photoFit && chemoFit > mixoFit && chemoFit > 0.02) hiResData.floraType[hi] = 2;
     else if (mixoFit > photoFit && mixoFit > chemoFit && mixoFit > 0.02) hiResData.floraType[hi] = 3;
     else if (photoFit > 0.02) hiResData.floraType[hi] = 1;
